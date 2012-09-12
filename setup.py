@@ -2,12 +2,14 @@
 
 from distutils.core import setup
 
+import re
+main_py = open('morfessor.py').read()
+metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
+
 setup(name='Morfessor',
-      version='1.99',
-      author=','.join(open('AUTHORS').readlines()),
-      author_email='sami.virpioja@aalto.fi',
-      maintainer='Peter Smit',
-      maintainer_email='peter.smit@aalto.fi',
+      version=metadata['version'],
+      author=metadata['author'],
+      author_email=metadata['author_email'],
       url='http://www.cis.hut.fi/projects/morpho/',
       description='Morfessor',
       packages=['morfessor'],

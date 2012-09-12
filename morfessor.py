@@ -1,61 +1,34 @@
 #!/usr/bin/python
 """
 Morfessor Baseline 2.0
-
-Copyright (c) 2012 Sami Virpioja
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions
-are met:
-
-1.  Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
-
-2.  Redistributions in binary form must reproduce the above
-    copyright notice, this list of conditions and the following
-    disclaimer in the documentation and/or other materials provided
-    with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
-
-----------------------------------------------------------------------
-
-Contact: Sami Virpioja <sami.virpioja@aalto.fi>
-
+Corpus contains "compounds" (e.g. words or sentences)
+Smallest pieces are "atoms" (e.g. characters or words)
+Lexicon contains "items" (e.g. morphs or phrases)
 """
-
-# Corpus contains "compounds" (e.g. words or sentences)
-# Smallest pieces are "atoms" (e.g. characters or words)
-# Lexicon contains "items" (e.g. morphs or phrases)
-
-__version__ = '2.0'
+__version__ = '2.0.0pre1'
+__author__ = 'Sami Virpioja, Peter Smit'
+__author_email__ = "sami.virpioja@aalto.fi"
 
 import math
 import random
-import cPickle
-import os
 import time
 import re
 import sys
 import gzip
-#import numpy
-#import scipy
-#import scipy.stats
 import array
 import itertools
 import datetime
+
+try:
+    # In Python2 import cPickle for better performance
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
+try:
+    from functools import reduce
+except ImportError:
+    pass
 
 class Error(Exception):
     """Base class for exceptions in this module."""
@@ -648,7 +621,7 @@ class BaselineModel:
                 if self.analyses.has_key(item) and \
                        self.analyses[item][2] == 0:
                     if self.analyses[item][1] < 1:
-                        raise StandardError("count of %s is %s" % (item, self.analyses[item][1]))
+                        raise Error("count of %s is %s" % (item, self.analyses[item][1]))
                     cost += logtokens - math.log(self.analyses[item][1])
                 elif allow_new_items:
                     cost -= self.types * logtokens
@@ -1220,7 +1193,7 @@ Interactive use (read corpus from user):
     if args.loadfile != None:
         _vprint("Loading model from '%s'..." % args.loadfile, 1)
         with open(args.loadfile, 'rb') as fobj:
-            model = cPickle.load(fobj)
+            model = pickle.load(fobj)
         _vprint(" Done.\n", 1)
         if annotations != None:
             # Add annotated data to model
@@ -1289,7 +1262,7 @@ Interactive use (read corpus from user):
     if args.savefile != None:
         _vprint("Saving model to '%s'..." % args.savefile, 1)
         with open(args.savefile, 'wb') as fobj:
-            cPickle.dump(model, fobj, cPickle.HIGHEST_PROTOCOL)
+            pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
         _vprint(" Done.\n", 1)
 
     if args.savesegfile != None:
