@@ -9,10 +9,10 @@ metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
 setup(name='Morfessor',
       version=metadata['version'],
       author=metadata['author'],
-      author_email=metadata['author_email'],
+      author_email='sami.virpioja@aalto.fi',
       url='http://www.cis.hut.fi/projects/morpho/',
       description='Morfessor',
-      packages=['morfessor'],
+      py_modules=['morfessor'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'Intended Audience :: Science/Research',
