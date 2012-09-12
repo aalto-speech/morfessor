@@ -22,4 +22,5 @@ setup(name='Morfessor',
           'Topic :: Scientific/Engineering',
       ],
       license="BSD",
+      scripts=['scripts/morfessor']
      )
