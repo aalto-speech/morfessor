@@ -1,6 +1,6 @@
 #!/usr/bin/python
 """
-Morfessor Baseline 2.0
+Morfessor Baseline
 Corpus contains "compounds" (e.g. words or sentences)
 Smallest pieces are "atoms" (e.g. characters or words)
 Lexicon contains "items" (e.g. morphs or phrases)
