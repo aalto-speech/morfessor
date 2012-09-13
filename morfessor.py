@@ -4,7 +4,7 @@ Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
 __all__ = ['InputFormatError','batch_train','online_train',
-           'corpus_segmentation_dict', 'Lexicon','BaselineModel', 'Corpus',
+           'Lexicon','BaselineModel', 'Corpus',
            'Annotations']
 
 __version__ = '2.0.0pre1'
@@ -1011,24 +1011,6 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
     newcost = model.get_cost()
     _logger.info("\nTokens processed: %s\tCost: %s\n" % (i, newcost))
     return epochs, newcost
-
-def corpus_segmentation_dict(model, corpus):
-    """Find the most likely segmentations for the compounds in corpus.
-
-    Arguments:
-        model -- model instance to use in Viterbi search
-        corpus -- corpus instance
-
-    Returns a dictionary that maps each compound to its segmentation.
-
-    """
-    d = {}
-    for i in range(corpus.get_type_count()):
-        s = corpus.get_compound_str(i)
-        w = corpus.get_compound_atoms(i)
-        items, logp = model.get_viterbi_segments(w)
-        d[s] = items
-    return d
 
 def main(argv):
     import argparse
