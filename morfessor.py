@@ -602,7 +602,7 @@ class BaselineModel:
                 self.supervisedcorpusweight = self.corpuscostweight * \
                     float(self.boundaries) / self.annotations.get_types()
                 if self.supervisedcorpusweight != old:
-                    _logger.info("Corpus weight of annotated data set to %s\n"
+                    _logger.info("Corpus weight of annotated data set to %s"
                                  % self.supervisedcorpusweight)
 
     def get_viterbi_segments(self, compound, addcount = 1.0):
@@ -986,7 +986,7 @@ def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
 
     """
     pre, rec, f = _bpr_evaluation(map(lambda x: [x], segments), annotations)
-    _logger.info("Boundary evaluation: precision %.4f; recall %.4f\n" % 
+    _logger.info("Boundary evaluation: precision %.4f; recall %.4f" % 
                  (pre, rec))
     if abs(pre - rec) < threshold:
         return 0
@@ -1018,11 +1018,11 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
     newcost = model.get_cost()
     wordstoprocess = len(filter(lambda x: x >= freqthreshold,
                                 corpus.get_counts()))
-    _logger.info("Found %s compounds in training data\n" % wordstoprocess)
+    _logger.info("Found %s compounds in training data" % wordstoprocess)
     dotfreq = int(math.ceil(wordstoprocess / 70.0))
     epochs = 0
-    _logger.info("Starting batch training\n")
-    _logger.info("Epochs: %s\tCost: %s\n" % (epochs, newcost))
+    _logger.info("Starting batch training")
+    _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
     forced_epochs = 1 # force this many epochs before stopping
     while True:
         # One epoch
@@ -1034,13 +1034,14 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
                 continue
             w = corpus.get_compound_atoms(j)
             segments = model.optimize(w)
-            _logger.debug("#%s: %s\n" % (i, segments))
+            _logger.debug("#%s: %s" % (i, segments))
             i += 1
             if i % dotfreq == 0:
-                _logger.info(".")
+                sys.stderr.write(".")
+        sys.stderr.write("\n")
         epochs += 1
 
-        _logger.debug("Cost before epoch update: %s\n" % model.get_cost())
+        _logger.debug("Cost before epoch update: %s" % model.get_cost())
         model.epoch_update(epochs)
         oldcost = newcost
         newcost = model.get_cost()
@@ -1056,7 +1057,7 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
                     model.update_corpus_weight(1+2.0/epochs)
                 else:
                     model.update_corpus_weight(1.0/(1+2.0/epochs))
-                _logger.info("Corpus weight set to %s\n" % 
+                _logger.info("Corpus weight set to %s" % 
                              model.corpuscostweight)
                 model.epoch_update(epochs)
                 newcost = model.get_cost()
@@ -1064,14 +1065,15 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
                 if forced_epochs < 2:
                     forced_epochs = 2
 
-        _logger.info("Epochs: %s\tCost: %s\n" % (epochs, newcost))
+        _logger.info("Epochs: %s" % epochs)
+        _logger.info("Cost: %s" % newcost)
         if forced_epochs == 0 and \
                 newcost >= oldcost - finishthreshold * wordstoprocess:
             # TODO: wordstoprocess should rather be number of word tokens
             break
         if forced_epochs > 0:
             forced_epochs -= 1
-    _logger.info("Done.\n")
+    _logger.info("Done.")
     return epochs, newcost
 
 def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
@@ -1088,7 +1090,7 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
     model.epoch_update(0)
     if dampfunc is not None:
         counts = {}
-    _logger.info("Starting online training\n")
+    _logger.info("Starting online training")
     i = 0
     epochs = 0
     dotfreq = int(math.ceil(epochinterval / 70.0))
@@ -1107,19 +1109,21 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
         else:
             model.add(w, 1)
         segments = model.optimize(w)
-        _logger.debug("#%s: %s\n" % (i, segments))
+        _logger.debug("#%s: %s" % (i, segments))
         i += 1
         if i % dotfreq == 0:
-            _logger.info(".")
+            sys.stderr.write(".")
         if i % epochinterval == 0:
             epochs += 1
             model.epoch_update(epochs)
             newcost = model.get_cost()
-            _logger.info("Tokens processed: %s\tCost: %s\n" % (i, newcost))
+            _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
     epochs += 1
+    sys.stderr.write("\n")
     model.epoch_update(epochs)
     newcost = model.get_cost()
-    _logger.info("\nTokens processed: %s\tCost: %s\n" % (i, newcost))
+    _logger.info("Tokens processed: %s" % i)
+    _logger.info("Cost: %s" % newcost)
     return epochs, newcost
 
 def main(argv):
@@ -1296,7 +1300,7 @@ Interactive use (read corpus from user):
         _logger.info("Loading model from '%s'..." % args.loadfile)
         with open(args.loadfile, 'rb') as fobj:
             model = pickle.load(fobj)
-        _logger.info(" Done.\n")
+        _logger.info("Done.")
         if annotations is not None:
             # Add annotated data to model
             model.set_annotations(annotations, args.scorpusweight)
@@ -1308,7 +1312,7 @@ Interactive use (read corpus from user):
                               supervisedcorpusweight = args.scorpusweight,
                               use_skips = args.skips)
         model.load_segmentations(args.loadsegfile)
-        _logger.info(" Done.")
+        _logger.info("Done.")
     else:
         model = BaselineModel(forcesplit_list = args.forcesplit,
                               corpusweight = args.corpusweight,
@@ -1339,7 +1343,7 @@ Interactive use (read corpus from user):
                     data.load_from_list(f)
                 else:
                     data.load(f, args.cseparator)
-                _logger.info(" Done.\n")
+                _logger.info("Done.")
             model.batch_init(data, args.freqthreshold, dampfunc)
             if args.splitprob is not None:
                 model.random_split_init(data, args.splitprob)
@@ -1357,21 +1361,22 @@ Interactive use (read corpus from user):
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
         te = time.time()
-        _logger.info("Epochs: %s\nFinal cost: %s\nTime: %.3fs\n" %
-                     (e, c, te-ts))
+        _logger.info("Epochs: %s" % e)
+        _logger.info("Final cost: %s" % c)
+        _logger.info("Time: %.3fs" % (te-ts))
 
     # Save model
     if args.savefile is not None:
         _logger.info("Saving model to '%s'..." % args.savefile)
         with open(args.savefile, 'wb') as fobj:
             pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
-        _logger.info(" Done.\n")
+        _logger.info("Done.")
 
     if args.savesegfile is not None:
         _logger.info("Saving model segmentations to '%s'..." %
                      args.savesegfile)
         model.save_segmentations(args.savesegfile)
-        _logger.info(" Done.\n")
+        _logger.info("Done.")
 
     # Output lexicon
     if args.lexfile is not None:
@@ -1387,7 +1392,7 @@ Interactive use (read corpus from user):
             fobj.write("%s %s\n" % (model.get_item_count(item), item))
         if args.lexfile != '-':
             fobj.close()
-            _logger.info(" Done.\n")
+            _logger.info("Done.")
 
     # Segment test data
     if len(args.testfiles) > 0:
@@ -1406,10 +1411,11 @@ Interactive use (read corpus from user):
             fobj.write("%s\n" % ' '.join(items))
             i += 1
             if i % 10000 == 0:
-                _logger.info(".")
+                sys.stderr.write(".")
+        sys.stderr.write("\n")
         if args.outfile != '-':
             fobj.close()
-        _logger.info(" Done.\n")
+        _logger.info("Done.")
 
 if __name__ == "__main__":
     main(sys.argv[1:])
