@@ -198,6 +198,10 @@ class BaselineModel:
         """Return current lexicon instance."""
         return self.lexicon
 
+    def update_corpus_weight(self, factor):
+        """Multiply the corpus cost weight by given factor."""
+        self.corpuscostweight *= factor
+
     def set_annotations(self, annotations, supervisedcorpusweight):
         """Prepare model for semi-supervised learning with given annotations."""
         self.supervised = True
@@ -599,11 +603,23 @@ class BaselineModel:
                 _logger.debug("Corpus weight of annotated data set to %s\n" %
                         self.supervisedcorpusweight)
 
-    def get_viterbi_segments(self, compound, allow_new_items = True):
-        """Find optimal segmentation using the Viterbi algorithm."""
+    def get_viterbi_segments(self, compound, addcount = 1.0):
+        """Find optimal segmentation using the Viterbi algorithm.
+
+        Arguments:
+          compound -- compound to segment
+          addcount -- constant for additive smoothing (0 = no smoothing)
+
+        If additive smoothing is applied, new complex item types can
+        be selected during the search. Without smoothing, only new
+        single-atom items can be selected.
+
+        Returns the most probable segmentation and its log-probability.
+
+        """
         clen = len(compound)
         grid = [(0.0, None)]
-        logtokens = math.log(self.tokens)
+        logtokens = math.log(self.tokens + addcount)
         badlikelihood = clen * logtokens
         # Viterbi main loop
         for t in range(1, clen+1):
@@ -620,11 +636,14 @@ class BaselineModel:
                        self.analyses[item][2] == 0:
                     if self.analyses[item][1] < 1:
                         raise Error("count of %s is %s" % (item, self.analyses[item][1]))
-                    cost += logtokens - math.log(self.analyses[item][1])
-                elif allow_new_items:
-                    cost -= self.types * logtokens
-                    cost += (self.types+1) * math.log(self.tokens+1)
-                    cost += self.lexicon.get_codelength(item)
+                    cost += logtokens - math.log(self.analyses[item][1] + 
+                                                 addcount)
+                elif addcount > 0:
+                    cost += ((self.types+addcount) * 
+                             math.log(self.tokens+addcount) 
+                             - self.types * math.log(self.tokens) 
+                             + self.lexicon.get_codelength(item)) \
+                             / self.corpuscostweight
                 elif len(item) == 1:
                     cost += badlikelihood
                 else:
