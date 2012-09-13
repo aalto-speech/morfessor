@@ -1,9 +1,6 @@
 #!/usr/bin/python
 """
-Morfessor Baseline 2.0
-Corpus contains "compounds" (e.g. words or sentences)
-Smallest pieces are "atoms" (e.g. characters or words)
-Lexicon contains "items" (e.g. morphs or phrases)
+Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
 __all__ = ['InputFormatError','batch_train','online_train',
@@ -1039,9 +1036,9 @@ def main(argv):
     parser = argparse.ArgumentParser(
         prog = 'morfessor.py',
         description="""
-Morfessor Baseline %s
+Morfessor %s
 
-Copyright (c) 2012 Sami Virpioja
+Copyright (c) 2012, Sami Virpioja and Peter Smit
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
