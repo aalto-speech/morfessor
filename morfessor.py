@@ -414,7 +414,7 @@ class BaselineModel:
         self.supervisedlogtokensum = 0.0
         self.supervisedcorpuscost = 0.0
         # Add to self.supervisedmorphs
-        for w, alternatives in self.annotations.get_compounds():
+        for w, alternatives in self.annotations.get_data():
             if w in self.analyses:
                 c = self.analyses[w][0]
             else:
@@ -875,6 +875,10 @@ class Annotations:
 
     def get_compounds(self):
         """Return the annotated compounds."""
+        return self.analyses.keys()
+
+    def get_data(self):
+        """Return the annotated compounds and their analyses."""
         return self.analyses.items()
 
     def has_analysis(self, compound):
