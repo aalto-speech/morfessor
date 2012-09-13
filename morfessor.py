@@ -1,4 +1,4 @@
-#!/usr/bin/python
+!/usr/bin/python
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
@@ -598,10 +598,12 @@ class BaselineModel:
                 # Set the corpus cost weight of annotated data
                 # according to the ratio of compound tokens in the
                 # data sets
+                old = self.supervisedcorpusweight
                 self.supervisedcorpusweight = self.corpuscostweight * \
                     float(self.boundaries) / self.annotations.get_types()
-                _logger.debug("Corpus weight of annotated data set to %s\n" %
-                        self.supervisedcorpusweight)
+                if self.supervisedcorpusweight != old:
+                    _logger.info("Corpus weight of annotated data set to %s\n"
+                                 % self.supervisedcorpusweight)
 
     def get_viterbi_segments(self, compound, addcount = 1.0):
         """Find optimal segmentation using the Viterbi algorithm.
@@ -934,8 +936,67 @@ class Annotations:
             self.types += 1
         fobj.close()
 
+def _boundary_recall(prediction, reference):
+    """Calculate average boundary recall for given segmentations."""
+    rec_total = 0
+    rec_sum = 0.0
+    for pre_list, ref_list in zip(prediction, reference):
+        best = -1
+        for ref in ref_list:
+            # list of internal boundary positions
+            ref_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))], 
+                               ref, [0])[1:-1])
+            if len(ref_b) == 0:
+                best = 1.0
+                break
+            for pre in pre_list:
+                pre_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))], 
+                                   pre, [0])[1:-1])
+                r = len(ref_b.intersection(pre_b)) / float(len(ref_b))
+                if r > best:
+                    best = r
+        if best >= 0:
+            rec_sum += best
+            rec_total += 1
+    return rec_sum, rec_total
 
-def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005):
+def _bpr_evaluation(prediction, reference):
+    """Return boundary precision, recall, and F-score for segmentations."""
+    rec_s, rec_t = _boundary_recall(prediction, reference)
+    pre_s, pre_t = _boundary_recall(reference, prediction)
+    rec = rec_s / rec_t
+    pre = pre_s / pre_t
+    f = 2.0*pre*rec/(pre+rec)
+    return pre, rec, f
+
+def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
+    """Estimate if the given compounds are under- or oversegmented.
+
+    The decision is based on the difference between boundary precision 
+    and recall values for the given sample of segmented data.
+
+    Arguments:
+      segments -- list of predicted segmentations
+      annotations -- list of reference segmentations
+      threshold -- maximum threshold for the difference between 
+                   predictions and reference
+
+    Return 1 in the case of oversegmentation, -1 in the case of
+    undersegmentation, and 0 if no changes are required.
+
+    """
+    pre, rec, f = _bpr_evaluation(map(lambda x: [x], segments), annotations)
+    _logger.info("Boundary evaluation: precision %.4f; recall %.4f\n" % 
+                 (pre, rec))
+    if abs(pre - rec) < threshold:
+        return 0
+    elif rec > pre:
+        return 1
+    else:
+        return -1
+
+def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
+                develannots = None):
     """Do batch training for a Morfessor model.
 
     Arguments:
@@ -946,6 +1007,7 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005):
         finishthreshold -- finish training after the decrease in cost
                            per compound is smaller than the threshold
                            (default 0.005)
+        develannots -- annotated development data for tuning corpus weight
 
     The model should already include all the compounds in the corpus
     (run model.batch_init(corpus) beforehand).
@@ -961,6 +1023,7 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005):
     epochs = 0
     _logger.info("Starting batch training\n")
     _logger.info("Epochs: %s\tCost: %s\n" % (epochs, newcost))
+    forced_epochs = 1 # force this many epochs before stopping
     while True:
         # One epoch
         indices = range(corpus.get_type_count())
@@ -981,9 +1044,33 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005):
         model.epoch_update(epochs)
         oldcost = newcost
         newcost = model.get_cost()
+
+        if develannots is not None:
+            # Tune corpus weight based on development data
+            tmp = develannots.get_data()
+            wlist, annotations = zip(*tmp)
+            segments = [model.get_viterbi_segments(w)[0] for w in wlist]
+            d = _estimate_segmentation_dir(segments, annotations)
+            if d != 0:
+                if d > 0:
+                    model.update_corpus_weight(1+2.0/epochs)
+                else:
+                    model.update_corpus_weight(1.0/(1+2.0/epochs))
+                _logger.info("Corpus weight set to %s\n" % 
+                             model.corpuscostweight)
+                model.epoch_update(epochs)
+                newcost = model.get_cost()
+                # Prevent stopping on next epoch
+                if forced_epochs < 2:
+                    forced_epochs = 2
+
         _logger.info("Epochs: %s\tCost: %s\n" % (epochs, newcost))
-        if epochs > 1 and newcost >= oldcost - finishthreshold * wordstoprocess:
+        if forced_epochs == 0 and \
+                newcost >= oldcost - finishthreshold * wordstoprocess:
+            # TODO: wordstoprocess should rather be number of word tokens
             break
+        if forced_epochs > 0:
+            forced_epochs -= 1
     _logger.info("Done.\n")
     return epochs, newcost
 
@@ -1101,6 +1188,9 @@ Interactive use (read corpus from user):
                         default='none', metavar='<type>',
                         help="frequency dampening for training data ("+
                         "'none', 'log', or 'ones'; default '%(default)s')")
+    parser.add_argument('-D', '--develset', dest="develfile", default=None, 
+                        help="load annotated data for parameter "+
+                        "tuning", metavar='<file>')
     parser.add_argument('-e', '--epochinterval', dest="epochinterval", type=int,
                         default=10000, metavar='<int>',
                         help="epoch interval for online training ("+
@@ -1195,6 +1285,12 @@ Interactive use (read corpus from user):
     else:
         annotations = None
 
+    if args.develfile is not None:
+        develannots = Annotations()
+        develannots.load(args.develfile)
+    else:
+        develannots = None
+
     # Load exisiting model or create a new one
     if args.loadfile is not None:
         _logger.info("Loading model from '%s'..." % args.loadfile)
@@ -1247,7 +1343,8 @@ Interactive use (read corpus from user):
             model.batch_init(data, args.freqthreshold, dampfunc)
             if args.splitprob is not None:
                 model.random_split_init(data, args.splitprob)
-            e, c = batch_train(model, data, freqthreshold = args.freqthreshold)
+            e, c = batch_train(model, data, freqthreshold = args.freqthreshold,
+                               develannots = develannots)
         elif args.trainmode == 'online':
             data = Corpus(args.separator)
             dataiter = data.generator(args.trainfiles, args.cseparator)
