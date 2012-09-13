@@ -1,4 +1,4 @@
-!/usr/bin/python
+#!/usr/bin/python
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
