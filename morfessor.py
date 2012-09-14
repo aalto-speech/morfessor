@@ -594,7 +594,7 @@ class BaselineModel:
             self.counter = {}
         if self.supervised:
             self.update_supervised_choices()
-            if self.sweightbalance and epoch_num == 0:
+            if self.sweightbalance:
                 # Set the corpus cost weight of annotated data
                 # according to the ratio of compound tokens in the
                 # data sets
