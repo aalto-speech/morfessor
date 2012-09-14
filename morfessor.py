@@ -198,6 +198,14 @@ class BaselineModel:
         """Return current lexicon instance."""
         return self.lexicon
 
+    def get_compounds(self):
+        """Return the compound types stored by the model."""
+        return filter(lambda w: self.analyses[w][0] > 0, self.analyses.keys())
+
+    def get_compound_boundary_num(self):
+        """Return the number of compound boundaries encoded by the model."""
+        return self.boundaries
+
     def update_corpus_weight(self, factor):
         """Multiply the corpus cost weight by given factor."""
         self.corpuscostweight *= factor
@@ -995,17 +1003,13 @@ def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
     else:
         return -1
 
-def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
-                develannots = None):
+def batch_train(model, finishthreshold = 0.005, develannots = None):
     """Do batch training for a Morfessor model.
 
     Arguments:
         model -- model instance
-        corpus -- corpus instance
-        freqthreshold -- discard compounds that occur less than given
-                          times in corpus (default 1)
         finishthreshold -- finish training after the decrease in cost
-                           per compound is smaller than the threshold
+                           per compound token is smaller than the threshold
                            (default 0.005)
         develannots -- annotated development data for tuning corpus weight
 
@@ -1016,23 +1020,23 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
     model.epoch_update(0)
     oldcost = 0.0
     newcost = model.get_cost()
-    wordstoprocess = len(filter(lambda x: x >= freqthreshold,
-                                corpus.get_counts()))
-    _logger.info("Found %s compounds in training data" % wordstoprocess)
-    dotfreq = int(math.ceil(wordstoprocess / 70.0))
+    compounds = model.get_compounds()
+    ctypes = len(compounds)
+    ctokens = model.get_compound_boundary_num()
+    _logger.info("Compounds in training data: %s types / %s tokens" % 
+                 (ctypes, ctokens))
+    dotfreq = int(math.ceil(ctypes / 70.0))
     epochs = 0
     _logger.info("Starting batch training")
     _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
     forced_epochs = 1 # force this many epochs before stopping
     while True:
         # One epoch
-        indices = range(corpus.get_type_count())
+        indices = range(ctypes)
         random.shuffle(indices)
         i = 0
         for j in indices:
-            if corpus.get_count(j) < freqthreshold:
-                continue
-            w = corpus.get_compound_atoms(j)
+            w = compounds[j]
             segments = model.optimize(w)
             _logger.debug("#%s: %s" % (i, segments))
             i += 1
@@ -1068,8 +1072,7 @@ def batch_train(model, corpus, freqthreshold = 1, finishthreshold = 0.005,
         _logger.info("Epochs: %s" % epochs)
         _logger.info("Cost: %s" % newcost)
         if forced_epochs == 0 and \
-                newcost >= oldcost - finishthreshold * wordstoprocess:
-            # TODO: wordstoprocess should rather be number of word tokens
+                newcost >= oldcost - finishthreshold * ctokens:
             break
         if forced_epochs > 0:
             forced_epochs -= 1
@@ -1347,8 +1350,7 @@ Interactive use (read corpus from user):
             model.batch_init(data, args.freqthreshold, dampfunc)
             if args.splitprob is not None:
                 model.random_split_init(data, args.splitprob)
-            e, c = batch_train(model, data, freqthreshold = args.freqthreshold,
-                               develannots = develannots)
+            e, c = batch_train(model, develannots = develannots)
         elif args.trainmode == 'online':
             data = Corpus(args.separator)
             dataiter = data.generator(args.trainfiles, args.cseparator)
@@ -1357,7 +1359,7 @@ Interactive use (read corpus from user):
             data = Corpus(args.separator)
             dataiter = data.generator(args.trainfiles, args.cseparator)
             e, c = online_train(model, dataiter, args.epochinterval, dampfunc)
-            e, c = batch_train(model, data)
+            e, c = batch_train(model, develannots = develannots)
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
         te = time.time()
