@@ -36,8 +36,23 @@ except ImportError:
 
 def _progress(iter_func):
     """
-    Decorator for displaying a progress bar when iterating through a list
+    Decorator/function for displaying a progress bar when iterating through a
+    list
+
+    iter_func can be both a function providing a iterator (for decorator
+    style use) or an iterator itself.
+
+    No progressbar is displayed when stderr is redirected to a file
+
+    If the progressbar module is available a fancy percentage style
+    progressbar is displayed. Otherwise 20 dots are printed as indicator.
     """
+
+    # If sys.stderr is redirected to a file, don't display any progress
+    if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
+        return iter_func
+
+    #Try to see or the progressbar module is available, else fabricate our own
     try:
         from progressbar import ProgressBar
     except ImportError:
@@ -64,6 +79,8 @@ def _progress(iter_func):
                     raise
         ProgressBar = SimpleProgressBar
 
+    # In case of a decorator (argument is a function),
+    # wrap the functions result is a ProgressBar and return the new function
     if isinstance(iter_func,types.FunctionType):
         def i(*args, **kwargs):
             if logging.getLogger(__name__).isEnabledFor(logging.INFO):
@@ -73,10 +90,11 @@ def _progress(iter_func):
 
         return i
 
-
+    #In case of an iterator, wrap it in a ProgressBar and return it.
     elif hasattr(iter_func,'__iter__'):
         return ProgressBar()(iter_func)
 
+    #If all else fails, just return the original.
     return iter_func
 
 _logger = logging.getLogger(__name__)
