@@ -21,6 +21,7 @@ import random
 import re
 import sys
 import time
+import types
 
 try:
     # In Python2 import cPickle for better performance
@@ -35,11 +36,35 @@ except ImportError:
 
 def _progress(iter_func):
     """
-    Decorator for displaying a progress bar when iterating through a random word list
+    Decorator for displaying a progress bar when iterating through a list
     """
     try:
         from progressbar import ProgressBar
+    except ImportError:
+        class SimpleProgressBar:
+            NUM_DOTS = 20
+            def __call__(self,it):
+                self.it = iter(it)
+                self.i = 0
+                self.I = len(it)
 
+                return self
+
+            def __iter__(self):
+                return self
+
+            def next(self):
+                if self.i % (self.I//self.NUM_DOTS) == 0:
+                    sys.stderr.write('.')
+                self.i += 1
+                try:
+                    return self.it.next()
+                except StopIteration:
+                    sys.stderr.write('\n')
+                    raise
+        ProgressBar = SimpleProgressBar
+
+    if isinstance(iter_func,types.FunctionType):
         def i(*args, **kwargs):
             if logging.getLogger(__name__).isEnabledFor(logging.INFO):
                 return ProgressBar()(iter_func(*args, **kwargs))
@@ -47,8 +72,10 @@ def _progress(iter_func):
                 return iter_func(*args, **kwargs)
 
         return i
-    except ImportError:
-        pass
+
+
+    elif hasattr(iter_func,'__iter__'):
+        return ProgressBar()(iter_func)
 
     return iter_func
 
@@ -1053,7 +1080,7 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
         indices = range(ctypes)
         random.shuffle(indices)
 
-        for j in _progress(list)(indices):
+        for j in _progress(indices):
             w = compounds[j]
             segments = model.optimize(w)
 #            _logger.debug("#%s: %s" % (i, segments))
