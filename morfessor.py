@@ -33,6 +33,25 @@ try:
 except ImportError:
     pass
 
+def _progress(iter_func):
+    """
+    Decorator for displaying a progress bar when iterating through a random word list
+    """
+    try:
+        from progressbar import ProgressBar
+
+        def i(*args, **kwargs):
+            if logging.getLogger(__name__).isEnabledFor(logging.INFO):
+                return ProgressBar()(iter_func(*args, **kwargs))
+            else:
+                return iter_func(*args, **kwargs)
+
+        return i
+    except ImportError:
+        pass
+
+    return iter_func
+
 _logger = logging.getLogger(__name__)
 
 
@@ -1025,7 +1044,6 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
     ctokens = model.get_compound_boundary_num()
     _logger.info("Compounds in training data: %s types / %s tokens" %
                  (ctypes, ctokens))
-    dotfreq = int(math.ceil(ctypes / 70.0))
     epochs = 0
     _logger.info("Starting batch training")
     _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
@@ -1034,15 +1052,12 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
         # One epoch
         indices = range(ctypes)
         random.shuffle(indices)
-        i = 0
-        for j in indices:
+
+        for j in _progress(list)(indices):
             w = compounds[j]
             segments = model.optimize(w)
-            _logger.debug("#%s: %s" % (i, segments))
-            i += 1
-            if i % dotfreq == 0:
-                sys.stderr.write(".")
-        sys.stderr.write("\n")
+#            _logger.debug("#%s: %s" % (i, segments))
+
         epochs += 1
 
         _logger.debug("Cost before epoch update: %s" % model.get_cost())
