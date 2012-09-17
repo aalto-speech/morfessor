@@ -1165,6 +1165,7 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
             else:
                 model.add(w, 1)
             segments = model.optimize(w)
+#            _logger.debug("#%s: %s" % (i, segments))
             i += 1
 
         epochs += 1
@@ -1172,40 +1173,6 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
     model.epoch_update(epochs)
     newcost = model.get_cost()
     _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
-
-#    i = 0
-#    epochs = 0
-##    dotfreq = int(math.ceil(epochinterval / 70.0))
-#    for w in corpusiter:
-#        if dampfunc is not None:
-#            if not counts.has_key(w):
-#                c = 0
-#                counts[w] = 1
-#                addc = 1
-#            else:
-#                c = counts[w]
-#                counts[w] = c + 1
-#                addc = dampfunc(c+1) - dampfunc(c)
-#            if addc > 0:
-#                model.add(w, addc)
-#        else:
-#            model.add(w, 1)
-#        segments = model.optimize(w)
-##        _logger.debug("#%s: %s" % (i, segments))
-#        i += 1
-##        if i % dotfreq == 0:
-##            sys.stderr.write(".")
-#        if i % epochinterval == 0:
-#            epochs += 1
-#            model.epoch_update(epochs)
-#            newcost = model.get_cost()
-#            _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
-#    epochs += 1
-#    sys.stderr.write("\n")
-#    model.epoch_update(epochs)
-#    newcost = model.get_cost()
-#    _logger.info("Tokens processed: %s" % i)
-#    _logger.info("Cost: %s" % newcost)
     return epochs, newcost
 
 def main(argv):
