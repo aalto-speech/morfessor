@@ -488,7 +488,7 @@ class BaselineModel:
                 self.supervisedtokens += c
         self.supervisedlogtokensum = 0.0
         for m, f in self.superviseditems.items():
-            if self.analyses.has_key(m) and self.analyses[m][2] == 0:
+            if m in self.analyses and self.analyses[m][2] == 0:
                 self.supervisedlogtokensum += f * math.log(self.analyses[m][1])
             else:
                 self.supervisedlogtokensum += f * self.penaltylogprob
@@ -509,7 +509,7 @@ class BaselineModel:
         for analysis in choices:
             cost = 0.0
             for m in analysis:
-                if self.analyses.has_key(m) and self.analyses[m][2] == 0:
+                if m in self.analyses and self.analyses[m][2] == 0:
                     cost += math.log(self.tokens) - \
                         math.log(self.analyses[m][1])
                 else:
@@ -586,7 +586,7 @@ class BaselineModel:
         Adds or removes item to/from lexicon when necessary.
 
         """
-        if self.analyses.has_key(item):
+        if item in self.analyses:
             wcount, mcount, splitloc = self.analyses[item]
         else:
             wcount, mcount, splitloc = array.array('i', [0, 0, 0])
@@ -688,8 +688,7 @@ class BaselineModel:
                     continue
                 cost = grid[pt][0]
                 item = compound[pt:t]
-                if self.analyses.has_key(item) and \
-                       self.analyses[item][2] == 0:
+                if item in self.analyses and self.analyses[item][2] == 0:
                     if self.analyses[item][1] < 1:
                         raise Error("count of %s is %s" % (item, self.analyses[item][1]))
                     cost += logtokens - math.log(self.analyses[item][1] +
@@ -1066,7 +1065,7 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
     model.epoch_update(0)
     oldcost = 0.0
     newcost = model.get_cost()
-    compounds = model.get_compounds()
+    compounds = list(model.get_compounds())
     ctypes = len(compounds)
     ctokens = model.get_compound_boundary_num()
     _logger.info("Compounds in training data: %s types / %s tokens" %
@@ -1077,7 +1076,7 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
     forced_epochs = 1 # force this many epochs before stopping
     while True:
         # One epoch
-        indices = range(ctypes)
+        indices = list(range(ctypes))
         random.shuffle(indices)
 
         for j in _progress(indices):
