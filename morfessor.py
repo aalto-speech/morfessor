@@ -12,6 +12,7 @@ __author__ = 'Sami Virpioja, Peter Smit'
 __author_email__ = "sami.virpioja@aalto.fi"
 
 import array
+import collections
 import datetime
 import gzip
 import itertools
@@ -142,75 +143,58 @@ def frequency_distribution_cost(types, tokens):
         logfactorial(tokens-types)
 
 class Lexicon:
-    """Lexicon class for storing model items."""
+    """Lexicon class for storing model constructions."""
 
     def __init__(self):
         """Initialize a new lexicon instance."""
-        self.size = 0
-        self.dict = {}
-        self.atoms = {}
+        self.constructions = set()
+        self.atoms = collections.Counter()
         self.atoms_total = 0
         self.logtokensum = 0.0
 
-    def add(self, item, d = True):
-        """Add item to the lexicon (with optional data)."""
-        for atom in itertools.chain(item, [None]):
-            if not atom in self.atoms:
-                oldc = 0
-            else:
-                oldc = self.atoms[atom]
+    def add(self, construction):
+        """Add construction to the lexicon (with optional data)."""
+        for atom in itertools.chain(construction, [None]):
+            oldc = self.atoms[atom]
             self.logtokensum += (oldc+1) * math.log(oldc+1)
             if oldc > 0:
                 self.logtokensum -= oldc * math.log(oldc)
-            self.atoms[atom] = oldc + 1
-        self.atoms_total += len(item) + 1
-        self.dict[item] = d
-        self.size += 1
+            self.atoms[atom] += 1
 
-    def remove(self, item):
+        self.atoms_total += len(construction) + 1
+        self.constructions.add(construction)
+
+    def remove(self, construction):
         """Remove item from the lexicon."""
-        for atom in itertools.chain(item, [None]):
+        for atom in itertools.chain(construction, [None]):
             oldc = self.atoms[atom]
             self.logtokensum -= oldc * math.log(oldc)
             if oldc > 1:
                 self.logtokensum += (oldc-1) * math.log(oldc-1)
-            self.atoms[atom] = oldc - 1
+            self.atoms[atom] -= 1
             if self.atoms[atom] == 0:
                 del self.atoms[atom]
-        self.atoms_total -= len(item) + 1
-        del self.dict[item]
-        self.size -= 1
 
-    def has_item(self, item):
-        """Check if lexicon has the item."""
-        return self.dict.has_key(item)
+        self.atoms_total -= len(construction) + 1
+        self.constructions.remove(construction)
 
-    def get_items(self):
+    def get_constructions(self):
         """Return a list of the items in the lexicon."""
-        return self.dict.keys()
-
-    def get_value(self, item):
-        """Return data stored for the given item."""
-        return self.dict[item]
-
-    def set_value(self, item, v):
-        """Reset the stored data for the given item."""
-        self.dict[item] = v
+        return list(self.constructions)
 
     def get_cost(self):
         """Return the current coding cost of the lexicon."""
         if self.atoms_total < 2:
             return 0.0
         cost = frequency_distribution_cost(len(self.atoms), self.atoms_total)
-        cost += self.atoms_total * math.log(self.atoms_total) - \
-            self.logtokensum
+        cost += self.atoms_total * math.log(self.atoms_total) - self.logtokensum
         return cost
 
-    def get_codelength(self, item):
+    def get_codelength(self, construction):
         """Return an approximate codelength for new item."""
-        l = len(item) + 1
+        l = len(construction) + 1
         cost = l * math.log(self.atoms_total + l)
-        for atom in itertools.chain(item, [None]):
+        for atom in itertools.chain(construction, [None]):
             if atom in self.atoms:
                 c = self.atoms[atom]
             else:
@@ -1468,7 +1452,7 @@ Interactive use (read corpus from user):
             fobj = open(args.lexfile, 'w')
         if args.lexfile != '-':
             _logger.info("Saving model lexicon to '%s'..." % args.lexfile)
-        for item in sorted(model.get_lexicon().get_items()):
+        for item in sorted(model.get_lexicon().get_constructions()):
             fobj.write("%s %s\n" % (model.get_item_count(item), item))
         if args.lexfile != '-':
             fobj.close()
