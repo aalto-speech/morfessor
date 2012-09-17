@@ -1271,12 +1271,18 @@ Interactive use (read corpus from user):
                         metavar='<file>')
     args = parser.parse_args(argv)
 
+
+    logging_format = '%(asctime)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
     if args.verbose >= 2:
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG,format=logging_format,
+                            datefmt=date_format)
     elif args.verbose >=1:
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO,format=logging_format,
+                                    datefmt=date_format)
     else:
-        logging.basicConfig(level=logging.WARNING)
+        logging.basicConfig(level=logging.WARNING,format=logging_format,
+                                    datefmt=date_format)
 
     if args.loadfile is None and args.loadsegfile is None and \
             len(args.trainfiles) == 0:
