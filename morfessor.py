@@ -34,10 +34,11 @@ try:
 except ImportError:
     pass
 
+_logger = logging.getLogger(__name__)
+
 def _progress(iter_func):
-    """
-    Decorator/function for displaying a progress bar when iterating through a
-    list
+    """Decorator/function for displaying a progress bar when iterating
+    through a list.
 
     iter_func can be both a function providing a iterator (for decorator
     style use) or an iterator itself.
@@ -57,21 +58,25 @@ def _progress(iter_func):
         from progressbar import ProgressBar
     except ImportError:
         class SimpleProgressBar:
-            NUM_DOTS = 20
-            def __call__(self,it):
+            NUM_DOTS = 60
+            def __call__(self, it):
                 self.it = iter(it)
                 self.i = 0
-                self.I = len(it)
-
+                if len(it) <= self.NUM_DOTS:
+                    self.dotfreq = 1
+                elif len(it) <= 2 * self.NUM_DOTS:
+                    self.dotfreq = 2
+                else:
+                    self.dotfreq = len(it) // self.NUM_DOTS
                 return self
 
             def __iter__(self):
                 return self
 
             def next(self):
-                if self.i % (self.I//self.NUM_DOTS) == 0:
-                    sys.stderr.write('.')
                 self.i += 1
+                if self.i % self.dotfreq == 0:
+                    sys.stderr.write('.')
                 try:
                     return self.it.next()
                 except StopIteration:
@@ -97,9 +102,6 @@ def _progress(iter_func):
     #If all else fails, just return the original.
     return iter_func
 
-_logger = logging.getLogger(__name__)
-
-
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
@@ -120,6 +122,15 @@ class InputFormatError(Error):
         return "illegal format in file '%s'" % self.file
 
 _log2pi = math.log(2*math.pi)
+
+def _items_to_str(items):
+    """Return a readable string for a list of lexical items."""
+    if isinstance(items[0], str):
+        # Items are strings
+        return ' + '.join(items)
+    else:
+        # Items are not strings (should be tuples of strings)
+        return ' + '.join(map(lambda x: ' '.join(x), items))
 
 def logfactorial(n):
     """Calculate logarithm of n!.
@@ -1100,7 +1111,7 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
         for j in _progress(indices):
             w = compounds[j]
             segments = model.optimize(w)
-#            _logger.debug("#%s: %s" % (i, segments))
+            _logger.debug("#%s: %s -> %s" % (j, w, _items_to_str(segments)))
 
         epochs += 1
 
@@ -1183,7 +1194,7 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
             else:
                 model.add(w, 1)
             segments = model.optimize(w)
-#            _logger.debug("#%s: %s" % (i, segments))
+            _logger.debug("#%s: %s -> %s" % (i, w, _items_to_str(segments)))
             i += 1
 
         epochs += 1
@@ -1336,24 +1347,33 @@ Interactive use (read corpus from user):
                         metavar='<file>')
     args = parser.parse_args(argv)
 
+    if args.verbose >= 2:
+        loglevel = logging.DEBUG
+    elif args.verbose >= 1:
+        loglevel = logging.INFO
+    else:
+        loglevel = logging.WARNING
 
     logging_format = '%(asctime)s - %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
-    formatter = logging.Formatter(logging_format,date_format)
+    formatter = logging.Formatter(logging_format, date_format)
+    logging.basicConfig(level=loglevel, format=logging_format,
+                        datefmt=date_format)
+    _logger.propagate = False # do not forward messages to the root logger
 
-    if args.verbose >= 2:
-        logging.basicConfig(level=logging.DEBUG,format=logging_format,
-                            datefmt=date_format)
-    elif args.verbose >=1:
-        logging.basicConfig(level=logging.INFO,format=logging_format,
-                                    datefmt=date_format)
+    if args.log_file is None:
+        ch = logging.StreamHandler(sys.stderr)
+        ch.setLevel(loglevel)
+        ch.setFormatter(formatter)
+        _logger.addHandler(ch)
     else:
-        logging.basicConfig(level=logging.WARNING,format=logging_format,
-                                    datefmt=date_format)
-
-    if args.log_file is not None:
-        fh = logging.FileHandler(args.log_file,mode='w')
+        ch = logging.StreamHandler()
+        fh = logging.FileHandler(args.log_file, mode='w')
+        ch.setLevel(max(loglevel, logging.INFO)) # no debug messages
+        fh.setLevel(loglevel)
+        ch.setFormatter(formatter)
         fh.setFormatter(formatter)
+        _logger.addHandler(ch)
         _logger.addHandler(fh)
 
     if args.loadfile is None and args.loadsegfile is None and \
