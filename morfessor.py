@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
@@ -646,12 +646,12 @@ class BaselineModel:
                        self.analyses[item][2] == 0:
                     if self.analyses[item][1] < 1:
                         raise Error("count of %s is %s" % (item, self.analyses[item][1]))
-                    cost += logtokens - math.log(self.analyses[item][1] + 
+                    cost += logtokens - math.log(self.analyses[item][1] +
                                                  addcount)
                 elif addcount > 0:
-                    cost += ((self.types+addcount) * 
-                             math.log(self.tokens+addcount) 
-                             - self.types * math.log(self.tokens) 
+                    cost += ((self.types+addcount) *
+                             math.log(self.tokens+addcount)
+                             - self.types * math.log(self.tokens)
                              + self.lexicon.get_codelength(item)) \
                              / self.corpuscostweight
                 elif len(item) == 1:
@@ -952,13 +952,13 @@ def _boundary_recall(prediction, reference):
         best = -1
         for ref in ref_list:
             # list of internal boundary positions
-            ref_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))], 
+            ref_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))],
                                ref, [0])[1:-1])
             if len(ref_b) == 0:
                 best = 1.0
                 break
             for pre in pre_list:
-                pre_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))], 
+                pre_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))],
                                    pre, [0])[1:-1])
                 r = len(ref_b.intersection(pre_b)) / float(len(ref_b))
                 if r > best:
@@ -980,13 +980,13 @@ def _bpr_evaluation(prediction, reference):
 def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
     """Estimate if the given compounds are under- or oversegmented.
 
-    The decision is based on the difference between boundary precision 
+    The decision is based on the difference between boundary precision
     and recall values for the given sample of segmented data.
 
     Arguments:
       segments -- list of predicted segmentations
       annotations -- list of reference segmentations
-      threshold -- maximum threshold for the difference between 
+      threshold -- maximum threshold for the difference between
                    predictions and reference
 
     Return 1 in the case of oversegmentation, -1 in the case of
@@ -994,7 +994,7 @@ def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
 
     """
     pre, rec, f = _bpr_evaluation(map(lambda x: [x], segments), annotations)
-    _logger.info("Boundary evaluation: precision %.4f; recall %.4f" % 
+    _logger.info("Boundary evaluation: precision %.4f; recall %.4f" %
                  (pre, rec))
     if abs(pre - rec) < threshold:
         return 0
@@ -1023,7 +1023,7 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
     compounds = model.get_compounds()
     ctypes = len(compounds)
     ctokens = model.get_compound_boundary_num()
-    _logger.info("Compounds in training data: %s types / %s tokens" % 
+    _logger.info("Compounds in training data: %s types / %s tokens" %
                  (ctypes, ctokens))
     dotfreq = int(math.ceil(ctypes / 70.0))
     epochs = 0
@@ -1061,7 +1061,7 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
                     model.update_corpus_weight(1+2.0/epochs)
                 else:
                     model.update_corpus_weight(1.0/(1+2.0/epochs))
-                _logger.info("Corpus weight set to %s" % 
+                _logger.info("Corpus weight set to %s" %
                              model.corpuscostweight)
                 model.epoch_update(epochs)
                 newcost = model.get_cost()
@@ -1195,7 +1195,7 @@ Interactive use (read corpus from user):
                         default='none', metavar='<type>',
                         help="frequency dampening for training data ("+
                         "'none', 'log', or 'ones'; default '%(default)s')")
-    parser.add_argument('-D', '--develset', dest="develfile", default=None, 
+    parser.add_argument('-D', '--develset', dest="develfile", default=None,
                         help="load annotated data for parameter "+
                         "tuning", metavar='<file>')
     parser.add_argument('-e', '--epochinterval', dest="epochinterval", type=int,

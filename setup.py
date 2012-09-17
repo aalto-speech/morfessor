@@ -1,10 +1,17 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
+from distribute_setup import use_setuptools
+use_setuptools()
+
+from setuptools import setup
 
 import re
 main_py = open('morfessor.py').read()
 metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
+
+requires = [
+    'progressbar',
+]
 
 setup(name='Morfessor',
       version=metadata['version'],
@@ -22,5 +29,6 @@ setup(name='Morfessor',
           'Topic :: Scientific/Engineering',
       ],
       license="BSD",
-      scripts=['scripts/morfessor']
+      scripts=['scripts/morfessor'],
+      install_requires=requires,
      )
