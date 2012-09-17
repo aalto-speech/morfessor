@@ -1262,6 +1262,7 @@ Interactive use (read corpus from user):
                         default=None,
                         help="load existing model from segmentation file "+
                         "(Morfessor 1.0 format)", metavar='<file>')
+    parser.add_argument('--logfile',dest='log_file', metavar='<file>'),
     parser.add_argument('-m', '--mode', dest="trainmode", default='batch',
                         help="training mode ('batch', 'online', or "+
                         "'online+batch'; default '%(default)s')",
@@ -1320,6 +1321,8 @@ Interactive use (read corpus from user):
 
     logging_format = '%(asctime)s - %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
+    formatter = logging.Formatter(logging_format,date_format)
+
     if args.verbose >= 2:
         logging.basicConfig(level=logging.DEBUG,format=logging_format,
                             datefmt=date_format)
@@ -1329,6 +1332,11 @@ Interactive use (read corpus from user):
     else:
         logging.basicConfig(level=logging.WARNING,format=logging_format,
                                     datefmt=date_format)
+
+    if args.log_file is not None:
+        fh = logging.FileHandler(args.log_file,mode='w')
+        fh.setFormatter(formatter)
+        _logger.addHandler(fh)
 
     if args.loadfile is None and args.loadsegfile is None and \
             len(args.trainfiles) == 0:
