@@ -37,6 +37,8 @@ except ImportError:
 
 _logger = logging.getLogger(__name__)
 
+show_progress_bar = True
+
 def _progress(iter_func):
     """Decorator/function for displaying a progress bar when iterating
     through a list.
@@ -50,8 +52,7 @@ def _progress(iter_func):
     progressbar is displayed. Otherwise 20 dots are printed as indicator.
     """
 
-    # If sys.stderr is redirected to a file, don't display any progress
-    if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
+    if not show_progress_bar:
         return iter_func
 
     #Try to see or the progressbar module is available, else fabricate our own
@@ -1331,6 +1332,8 @@ Interactive use (read corpus from user):
                         metavar='<file>')
     args = parser.parse_args(argv)
 
+    global show_progress_bar
+
     if args.verbose >= 2:
         loglevel = logging.DEBUG
     elif args.verbose >= 1:
@@ -1340,7 +1343,8 @@ Interactive use (read corpus from user):
 
     logging_format = '%(asctime)s - %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
-    formatter = logging.Formatter(logging_format, date_format)
+    default_formatter = logging.Formatter(logging_format, date_format)
+    plain_formatter = logging.Formatter('%(message)s')
     logging.basicConfig(level=loglevel, format=logging_format,
                         datefmt=date_format)
     _logger.propagate = False # do not forward messages to the root logger
@@ -1348,17 +1352,30 @@ Interactive use (read corpus from user):
     if args.log_file is None:
         ch = logging.StreamHandler(sys.stderr)
         ch.setLevel(loglevel)
-        ch.setFormatter(formatter)
+        # If sys.stderr is redirected to a file, don't display
+        # progress bar but print time tags to log messages
+        if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
+            show_progress_bar = False
+            ch.setFormatter(default_formatter)
+        else:
+            ch.setFormatter(plain_formatter)
+            # Don't display progress bar if debug messages are printed
+            # to stderr stream
+            if loglevel == logging.DEBUG:
+                show_progress_bar = False
         _logger.addHandler(ch)
     else:
         ch = logging.StreamHandler()
         fh = logging.FileHandler(args.log_file, mode='w')
         ch.setLevel(max(loglevel, logging.INFO)) # no debug messages
         fh.setLevel(loglevel)
-        ch.setFormatter(formatter)
-        fh.setFormatter(formatter)
+        ch.setFormatter(plain_formatter)
+        fh.setFormatter(default_formatter)
         _logger.addHandler(ch)
         _logger.addHandler(fh)
+        # If sys.stderr is redirected to a file, don't display progress bar
+        if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
+            show_progress_bar = False
 
     if args.loadfile is None and args.loadsegfile is None and \
             len(args.trainfiles) == 0:
