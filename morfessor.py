@@ -125,14 +125,14 @@ class InputFormatError(Error):
 
 _log2pi = math.log(2*math.pi)
 
-def _items_to_str(items):
-    """Return a readable string for a list of lexical items."""
-    if isinstance(items[0], str):
-        # Items are strings
-        return ' + '.join(items)
+def _constructions_to_str(constructions):
+    """Return a readable string for a list of constructions."""
+    if isinstance(constructions[0], str):
+        # Constructions are strings
+        return ' + '.join(constructions)
     else:
-        # Items are not strings (should be tuples of strings)
-        return ' + '.join(map(lambda x: ' '.join(x), items))
+        # Constructions are not strings (should be tuples of strings)
+        return ' + '.join(map(lambda x: ' '.join(x), constructions))
 
 def logfactorial(n):
     """Calculate logarithm of n!.
@@ -177,7 +177,7 @@ class Lexicon:
         self.constructions.add(construction)
 
     def remove(self, construction):
-        """Remove item from the lexicon."""
+        """Remove construction from the lexicon."""
         for atom in itertools.chain(construction, [None]):
             oldc = self.atoms[atom]
             self.logtokensum -= oldc * math.log(oldc)
@@ -191,7 +191,7 @@ class Lexicon:
         self.constructions.remove(construction)
 
     def get_constructions(self):
-        """Return a list of the items in the lexicon."""
+        """Return a list of the constructions in the lexicon."""
         return list(self.constructions)
 
     def get_cost(self):
@@ -203,7 +203,7 @@ class Lexicon:
         return cost
 
     def get_codelength(self, construction):
-        """Return an approximate codelength for new item."""
+        """Return an approximate codelength for new construction."""
         l = len(construction) + 1
         cost = l * math.log(self.atoms_total + l)
         for atom in itertools.chain(construction, [None]):
@@ -219,7 +219,7 @@ class BaselineModel:
     """Morfessor Baseline model class."""
 
     def __init__(self, forcesplit_list = [], corpusweight = 1.0,
-                 annotations = None, supervisedcorpusweight = None,
+                 annotations = None, annotatedcorpusweight = None,
                  use_skips = False):
         """Initialize a new model instance.
 
@@ -228,29 +228,29 @@ class BaselineModel:
                                the given list
             corpusweight -- weight for the corpus cost
             annotations -- annotated data for semi-supervised training
-            supervisedcorpusweight -- weight for annotated corpus cost; if
+            annotatedcorpusweight -- weight for annotated corpus cost; if
                                       None, determine based on data sizes
-            use_skips -- randomly skip frequently occurring items to speed
-                         up training
+            use_skips -- randomly skip frequently occurring constructions 
+                         to speed up training
 
         """
         self.analyses = {}
         self.lexicon = Lexicon()
-        self.tokens = 0            # Num. of item tokens in corpus
-        self.types = 0             # Num. of item types in lexicon size
+        self.tokens = 0            # Num. of construction tokens (in corpus)
+        self.types = 0             # Num. of construction types (in lexicon)
         self.boundaries = 0        # Compound boundary tokens in corpus
         self.logtokensum = 0.0     # Unnormalized coding length of the corpus
         self.freqdistrcost = 0.0   # Coding cost of frequencies
         self.corpuscost = 0.0      # Code length of pointers in corpus
         self.permutationcost = 0.0 # Code length reduction from permutations
-        self.lexiconcost = 0.0     # Code length of lexical items
-        self.use_skips = use_skips # Use random skips for frequent items
+        self.lexiconcost = 0.0     # Code length of construction lexicon
+        self.use_skips = use_skips # Random skips for frequent constructions
         if self.use_skips:
-            self.counter = {}       # Counter for random skipping
+            self.counter = collections.Counter() # Counter for random skipping
         self.corpuscostweight = corpusweight
         self.forcesplit_list = forcesplit_list
         if annotations is not None:
-            self.set_annotations(annotations, supervisedcorpusweight)
+            self.set_annotations(annotations, annotatedcorpusweight)
         else:
             self.supervised = False
 
@@ -270,21 +270,21 @@ class BaselineModel:
         """Multiply the corpus cost weight by given factor."""
         self.corpuscostweight *= factor
 
-    def set_annotations(self, annotations, supervisedcorpusweight):
+    def set_annotations(self, annotations, annotatedcorpusweight):
         """Prepare model for semi-supervised learning with given annotations."""
         self.supervised = True
         self.annotations = annotations
-        self.superviseditems = {} # {item: count}
-        self.supervisedtokens = 0
-        self.supervisedlogtokensum = 0.0
-        self.supervisedcorpuscost = 0.0
-        if supervisedcorpusweight is None:
-            self.supervisedcorpusweight = 1.0
+        self.annotatedconstructions = {} # {construction: count}
+        self.annotatedtokens = 0
+        self.annotatedlogtokensum = 0.0
+        self.annotatedcorpuscost = 0.0
+        if annotatedcorpusweight is None:
+            self.annotatedcorpusweight = 1.0
             self.sweightbalance = True
         else:
-            self.supervisedcorpusweight = supervisedcorpusweight
+            self.annotatedcorpusweight = annotatedcorpusweight
             self.sweightbalance = False
-        self.penaltylogprob = -9999.9 # cost for missing a known item
+        self.penaltylogprob = -9999.9 # cost for missing a known construction
 
     def load_segmentations(self, segfile):
         """Load model from existing segmentations in the given file.
@@ -292,7 +292,7 @@ class BaselineModel:
         The format of the input file should be that of the Morfessor
         1.0 software. I.e., each line stores one compound as:
 
-        <count> <item1> + <item2> + ... + <itemN>
+        <count> <construction1> + <construction2> + ... + <constructionN>
 
         """
         if segfile.endswith('.gz'):
@@ -308,10 +308,10 @@ class BaselineModel:
                 raise InputFormatError(segfile, line)
             count = int(m.group(1))
             comp = m.group(2)
-            items = comp.split(' + ')
-            comp = "".join(items)
+            constructions = comp.split(' + ')
+            comp = "".join(constructions)
             self.add(comp, count)
-            self.set_compound_analysis(comp, items)
+            self.set_compound_analysis(comp, constructions)
         fobj.close()
 
     def save_segmentations(self, segfile):
@@ -320,7 +320,7 @@ class BaselineModel:
         The format of output file follows that of the Morfessor 1.0
         software. I.e., each line stores one compound as:
 
-        <count> <item1> + <item2> + ... + <itemN>
+        <count> <construction1> + <construction2> + ... + <constructionN>
 
         """
         if segfile.endswith('.gz'):
@@ -334,8 +334,8 @@ class BaselineModel:
             c = self.analyses[w][0]
             if c > 0:
                 # w is a real compound in training data
-                items = self.expand_compound(w)
-                fobj.write("%s %s\n" % (c, ' + '.join(map(str, items))))
+                constructions = self.expand_compound(w)
+                fobj.write("%s %s\n" % (c, ' + '.join(map(str, constructions))))
         fobj.close()
 
     def batch_init(self, corpus, freqthreshold = 1, cfunc = lambda x: x):
@@ -395,54 +395,54 @@ class BaselineModel:
 
         Arguments:
             w -- compound to split
-            parts -- items of the compound to use
+            parts -- desired constructions of the compound
 
         The analysis is stored internally as a right-branching tree.
 
         """
-        item = w
+        construction = w
         for p in range(len(parts)-1):
-            wcount, mcount = self.remove(item)
+            wcount, mcount = self.remove(construction)
             prefix = parts[p]
             suffix = reduce(lambda x, y: x + y, parts[p+1:])
-            self.analyses[item] = array.array('i', [wcount, mcount,
-                                                    len(prefix)])
-            self.modify_item_count(prefix, mcount)
-            self.modify_item_count(suffix, mcount)
-            item = suffix
+            self.analyses[construction] = array.array('i', [wcount, mcount,
+                                                            len(prefix)])
+            self.modify_construction_count(prefix, mcount)
+            self.modify_construction_count(suffix, mcount)
+            construction = suffix
 
     def add(self, w, c):
         """Add compound w with count c."""
-        self.modify_item_count(w, c)
+        self.modify_construction_count(w, c)
         self.analyses[w][0] += c
         self.boundaries += c
 
-    def remove(self, item):
-        """Remove item from model."""
-        wcount, mcount, splitloc = self.analyses[item]
-        self.modify_item_count(item, -mcount)
+    def remove(self, construction):
+        """Remove construction from model."""
+        wcount, mcount, splitloc = self.analyses[construction]
+        self.modify_construction_count(construction, -mcount)
         return wcount, mcount
 
     def expand_compound(self, w):
         """Return a list containing the analysis of compound w."""
-        return self.expand_item(w)
+        return self.expand_construction(w)
 
-    def expand_item(self, item):
-        """Return a list containing the analysis of the existing item."""
-        wcount, mcount, splitloc = self.analyses[item]
-        items = []
+    def expand_construction(self, construction):
+        """Return a list containing the analysis of the existing construction."""
+        wcount, mcount, splitloc = self.analyses[construction]
+        constructions = []
         if splitloc > 0:
-            prefix = item[:splitloc]
-            suffix = item[splitloc:]
-            items += self.expand_item(prefix)
-            items += self.expand_item(suffix)
+            prefix = construction[:splitloc]
+            suffix = construction[splitloc:]
+            constructions += self.expand_construction(prefix)
+            constructions += self.expand_construction(suffix)
         else:
-            items.append(item)
-        return items
+            constructions.append(construction)
+        return constructions
 
-    def get_item_count(self, item):
-        """Return the count of the item."""
-        return self.analyses[item][1]
+    def get_construction_count(self, construction):
+        """Return the count of the construction."""
+        return self.analyses[construction][1]
 
     def get_cost(self):
         """Return current model cost."""
@@ -459,19 +459,19 @@ class BaselineModel:
         if self.supervised:
             b = self.annotations.get_types()
             if b > 0:
-                self.supervisedcorpuscost = self.supervisedcorpusweight * \
-                    ((self.supervisedtokens + b) * math.log(n) -
-                     self.supervisedlogtokensum -
+                self.annotatedcorpuscost = self.annotatedcorpusweight * \
+                    ((self.annotatedtokens + b) * math.log(n) -
+                     self.annotatedlogtokensum -
                      b * math.log(self.boundaries))
             else:
-                self.supervisedcorpuscost = 0.0
+                self.annotatedcorpuscost = 0.0
             return self.permutationcost + self.freqdistrcost + \
-                self.lexiconcost + self.corpuscost + self.supervisedcorpuscost
+                self.lexiconcost + self.corpuscost + self.annotatedcorpuscost
         else:
             return self.permutationcost + self.freqdistrcost + \
                 self.lexiconcost + self.corpuscost
 
-    def update_supervised_choices(self):
+    def updated_annotation_choices(self):
         """Update the selection of alternative analyses in annotations.
 
         For semi-supervised models, select the most likely alternative
@@ -481,11 +481,11 @@ class BaselineModel:
         if not self.supervised:
             return
         # Clean up everything just to be safe
-        self.superviseditems = {}
-        self.supervisedtokens = 0
-        self.supervisedlogtokensum = 0.0
-        self.supervisedcorpuscost = 0.0
-        # Add to self.supervisedmorphs
+        self.annotatedconstructions = {}
+        self.annotatedtokens = 0
+        self.annotatedlogtokensum = 0.0
+        self.annotatedcorpuscost = 0.0
+        # Add data to self.annotatedconstructions
         for w, alternatives in self.annotations.get_data():
             if w in self.analyses:
                 c = self.analyses[w][0]
@@ -495,26 +495,26 @@ class BaselineModel:
                 c = 1
             analysis, cost = self.best_analysis(alternatives)
             for m in analysis:
-                if self.superviseditems.has_key(m):
-                    self.superviseditems[m] += c
+                if self.annotatedconstructions.has_key(m):
+                    self.annotatedconstructions[m] += c
                 else:
-                    self.superviseditems[m] = c
-                self.supervisedtokens += c
-        self.supervisedlogtokensum = 0.0
-        for m, f in self.superviseditems.items():
+                    self.annotatedconstructions[m] = c
+                self.annotatedtokens += c
+        self.annotatedlogtokensum = 0.0
+        for m, f in self.annotatedconstructions.items():
             if m in self.analyses and self.analyses[m][2] == 0:
-                self.supervisedlogtokensum += f * math.log(self.analyses[m][1])
+                self.annotatedlogtokensum += f * math.log(self.analyses[m][1])
             else:
-                self.supervisedlogtokensum += f * self.penaltylogprob
+                self.annotatedlogtokensum += f * self.penaltylogprob
         if self.tokens > 0:
             n = self.tokens + self.boundaries
             b = self.annotations.get_types() # boundaries in annotated data
-            self.supervisedcorpuscost = self.supervisedcorpusweight * \
-                ((self.supervisedtokens + b) * math.log(n) -
-                 self.supervisedlogtokensum -
+            self.annotatedcorpuscost = self.annotatedcorpusweight * \
+                ((self.annotatedtokens + b) * math.log(n) -
+                 self.annotatedlogtokensum -
                  b * math.log(self.boundaries))
         else:
-            self.supervisedcorpuscost = 0.0
+            self.annotatedcorpuscost = 0.0
 
     def best_analysis(self, choices):
         """Select the best analysis out of the given choices."""
@@ -533,114 +533,123 @@ class BaselineModel:
                 bestanalysis = analysis
         return bestanalysis, bestcost
 
-    def optimize(self, item):
-        """Optimize segmentation by recursive splitting.
+    def recursive_optimize(self, construction):
+        """Optimize segmentation of the construction by recursive splitting.
 
         Returns list of segments.
         """
-        if len(item) == 1: # Single atom
-            return [item]
+        if len(construction) == 1: # Single atom
+            return [construction]
 
         if self.use_skips:
-            if item in self.counter:
-                t = self.counter[item]
+            if construction in self.counter:
+                t = self.counter[construction]
                 if random.random() > 1.0/(max(1, t)):
-                    return self.expand_item(item)
-                self.counter[item] += 1
-            else:
-                self.counter[item] = 1
+                    return self.expand_construction(construction)
+            self.counter[construction] += 1
 
-        if item[0] in self.forcesplit_list:
-            wcount, mcount = self.remove(item)
-            self.analyses[item] = array.array('i', [wcount, mcount, 1])
-            self.modify_item_count(item[:1], mcount)
-            self.modify_item_count(item[1:], mcount)
-            return [item[0]] + self.optimize(item[1:])
+        if construction[0] in self.forcesplit_list:
+            wcount, mcount = self.remove(construction)
+            self.analyses[construction] = array.array('i', [wcount, mcount, 1])
+            self.modify_construction_count(construction[:1], mcount)
+            self.modify_construction_count(construction[1:], mcount)
+            return [construction[0]] + self.recursive_optimize(construction[1:])
 
-        wcount, mcount = self.remove(item)
-        self.modify_item_count(item, mcount)
+        wcount, mcount = self.remove(construction)
+        self.modify_construction_count(construction, mcount)
         mincost = self.get_cost()
-        self.modify_item_count(item, -mcount)
+        self.modify_construction_count(construction, -mcount)
         splitloc = 0
-        for i in range(1, len(item)):
-            if item[i] in self.forcesplit_list:
+        for i in range(1, len(construction)):
+            if construction[i] in self.forcesplit_list:
                 splitloc = i
                 break
-            prefix = item[:i]
-            suffix = item[i:]
-            self.modify_item_count(prefix, mcount)
-            self.modify_item_count(suffix, mcount)
+            prefix = construction[:i]
+            suffix = construction[i:]
+            self.modify_construction_count(prefix, mcount)
+            self.modify_construction_count(suffix, mcount)
             cost = self.get_cost()
-            self.modify_item_count(prefix, -mcount)
-            self.modify_item_count(suffix, -mcount)
+            self.modify_construction_count(prefix, -mcount)
+            self.modify_construction_count(suffix, -mcount)
             if cost <= mincost:
                 mincost = cost
                 splitloc = i
         if splitloc > 0:
-            # Virtual item
-            self.analyses[item] = array.array('i', [wcount, mcount, splitloc])
-            prefix = item[:splitloc]
-            suffix = item[splitloc:]
-            self.modify_item_count(prefix, mcount)
-            self.modify_item_count(suffix, mcount)
-            lp = self.optimize(prefix)
+            # Virtual construction
+            self.analyses[construction] = \
+                array.array('i', [wcount, mcount, splitloc])
+            prefix = construction[:splitloc]
+            suffix = construction[splitloc:]
+            self.modify_construction_count(prefix, mcount)
+            self.modify_construction_count(suffix, mcount)
+            lp = self.recursive_optimize(prefix)
             if suffix != prefix:
-                return lp + self.optimize(suffix)
+                return lp + self.recursive_optimize(suffix)
             else:
                 return lp + lp
         else:
-            # Real item
-            self.analyses[item] = array.array('i', [wcount, 0, 0])
-            self.modify_item_count(item, mcount)
-            return [item]
+            # Real construction
+            self.analyses[construction] = array.array('i', [wcount, 0, 0])
+            self.modify_construction_count(construction, mcount)
+            return [construction]
 
-    def modify_item_count(self, item, dcount):
-        """Modify the count of item by dcount.
+    def modify_construction_count(self, construction, dcount):
+        """Modify the count of construction by dcount.
 
-        Adds or removes item to/from lexicon when necessary.
+        For virtual constructions, recurses to child nodes in the
+        tree. For real constructions, adds/removes construction
+        to/from the lexicon whenever necessary.
 
         """
-        if item in self.analyses:
-            wcount, mcount, splitloc = self.analyses[item]
+        if construction in self.analyses:
+            wcount, mcount, splitloc = self.analyses[construction]
         else:
             wcount, mcount, splitloc = array.array('i', [0, 0, 0])
         newmcount = mcount + dcount
         if newmcount == 0:
-            del self.analyses[item]
+            del self.analyses[construction]
         else:
-            self.analyses[item] = array.array('i', [wcount, newmcount,
+            self.analyses[construction] = array.array('i', [wcount, newmcount,
                                                     splitloc])
         if splitloc > 0:
-            # Virtual item
-            prefix = item[:splitloc]
-            suffix = item[splitloc:]
-            self.modify_item_count(prefix, dcount)
-            self.modify_item_count(suffix, dcount)
+            # Virtual construction
+            prefix = construction[:splitloc]
+            suffix = construction[splitloc:]
+            self.modify_construction_count(prefix, dcount)
+            self.modify_construction_count(suffix, dcount)
         else:
-            # Real item
+            # Real construction
             self.tokens += dcount
             if mcount > 1:
                 self.logtokensum -= mcount * math.log(mcount)
-                if self.supervised and self.superviseditems.has_key(item):
-                    self.supervisedlogtokensum -= \
-                        self.superviseditems[item] * math.log(mcount)
+                if self.supervised and \
+                        self.annotatedconstructions.has_key(construction):
+                    self.annotatedlogtokensum -= \
+                        self.annotatedconstructions[construction] * \
+                        math.log(mcount)
             if newmcount > 1:
                 self.logtokensum += newmcount * math.log(newmcount)
-                if self.supervised and self.superviseditems.has_key(item):
-                    self.supervisedlogtokensum += \
-                        self.superviseditems[item] * math.log(newmcount)
+                if self.supervised and \
+                        self.annotatedconstructions.has_key(construction):
+                    self.annotatedlogtokensum += \
+                        self.annotatedconstructions[construction] * \
+                        math.log(newmcount)
             if mcount == 0 and newmcount > 0:
-                self.lexicon.add(item)
+                self.lexicon.add(construction)
                 self.types += 1
-                if self.supervised and self.superviseditems.has_key(item):
-                    self.supervisedlogtokensum -= \
-                        self.superviseditems[item] * self.penaltylogprob
+                if self.supervised and \
+                        self.annotatedconstructions.has_key(construction):
+                    self.annotatedlogtokensum -= \
+                        self.annotatedconstructions[construction] * \
+                        self.penaltylogprob
             elif mcount > 0 and newmcount == 0:
-                self.lexicon.remove(item)
+                self.lexicon.remove(construction)
                 self.types -= 1
-                if self.supervised and self.superviseditems.has_key(item):
-                    self.supervisedlogtokensum += \
-                        self.superviseditems[item] * self.penaltylogprob
+                if self.supervised and \
+                        self.annotatedconstructions.has_key(construction):
+                    self.annotatedlogtokensum += \
+                        self.annotatedconstructions[construction] * \
+                        self.penaltylogprob
 
     def epoch_update(self, epoch_num):
         """Do model updates that are necessary between training epochs.
@@ -648,7 +657,7 @@ class BaselineModel:
         The argument is the number of training epochs finished.
 
         In practice, this does two things:
-        - If random skipping is in use, reset item counters.
+        - If random skipping is in use, reset construction counters.
         - If semi-supervised learning is in use and there are alternative
           analyses in the annotated data, select the annotations that are
           most likely given the model parameters. If not hand-set, update
@@ -659,30 +668,30 @@ class BaselineModel:
 
         """
         if self.use_skips:
-            self.counter = {}
+            self.counter = collections.Counter()
         if self.supervised:
-            self.update_supervised_choices()
+            self.updated_annotation_choices()
             if self.sweightbalance:
                 # Set the corpus cost weight of annotated data
                 # according to the ratio of compound tokens in the
                 # data sets
-                old = self.supervisedcorpusweight
-                self.supervisedcorpusweight = self.corpuscostweight * \
+                old = self.annotatedcorpusweight
+                self.annotatedcorpusweight = self.corpuscostweight * \
                     float(self.boundaries) / self.annotations.get_types()
-                if self.supervisedcorpusweight != old:
+                if self.annotatedcorpusweight != old:
                     _logger.info("Corpus weight of annotated data set to %s"
-                                 % self.supervisedcorpusweight)
+                                 % self.annotatedcorpusweight)
 
     def get_viterbi_segments(self, compound, addcount = 1.0):
         """Find optimal segmentation using the Viterbi algorithm.
 
         Arguments:
-          compound -- compound to segment
+          compound -- compound to be segmented
           addcount -- constant for additive smoothing (0 = no smoothing)
 
-        If additive smoothing is applied, new complex item types can
+        If additive smoothing is applied, new complex construction types can
         be selected during the search. Without smoothing, only new
-        single-atom items can be selected.
+        single-atom constructions can be selected.
 
         Returns the most probable segmentation and its log-probability.
 
@@ -701,19 +710,22 @@ class BaselineModel:
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
-                item = compound[pt:t]
-                if item in self.analyses and self.analyses[item][2] == 0:
-                    if self.analyses[item][1] < 1:
-                        raise Error("count of %s is %s" % (item, self.analyses[item][1]))
-                    cost += logtokens - math.log(self.analyses[item][1] +
-                                                 addcount)
+                construction = compound[pt:t]
+                if construction in self.analyses and \
+                        self.analyses[construction][2] == 0:
+                    if self.analyses[construction][1] <= 0:
+                        raise Error("Construction count of '%s' is %s" % 
+                                    (construction, 
+                                     self.analyses[construction][1]))
+                    cost += logtokens - math.log(self.analyses[construction][1]
+                                                 + addcount)
                 elif addcount > 0:
                     cost += ((self.types+addcount) *
                              math.log(self.tokens+addcount)
                              - self.types * math.log(self.tokens)
-                             + self.lexicon.get_codelength(item)) \
+                             + self.lexicon.get_codelength(construction)) \
                              / self.corpuscostweight
-                elif len(item) == 1:
+                elif len(construction) == 1:
                     cost += badlikelihood
                 else:
                     continue
@@ -721,16 +733,16 @@ class BaselineModel:
                     bestcost = cost
                     bestpath = pt
             grid.append((bestcost, bestpath))
-        items = []
+        constructions = []
         path = grid[-1][1]
         lt = clen + 1
         while path is not None:
             t = path
-            items.append(compound[t:lt])
+            constructions.append(compound[t:lt])
             path = grid[t][1]
             lt = t
-        items.reverse()
-        return items, bestcost
+        constructions.reverse()
+        return constructions, bestcost
 
 class Corpus:
     """Class for storing text corpus as a list of compound objects."""
@@ -982,7 +994,7 @@ class Annotations:
 
         Arguments:
             datafile -- filename
-            separator -- regexp for separating items in one analysis
+            separator -- regexp for separating constructions in one analysis
             comment_re -- regexp for separating alternative analyses
 
         """
@@ -1095,8 +1107,9 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
 
         for j in _progress(indices):
             w = compounds[j]
-            segments = model.optimize(w)
-            _logger.debug("#%s: %s -> %s" % (j, w, _items_to_str(segments)))
+            segments = model.recursive_optimize(w)
+            _logger.debug("#%s: %s -> %s" % 
+                          (j, w, _constructions_to_str(segments)))
 
         epochs += 1
 
@@ -1178,8 +1191,9 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
                     model.add(w, addc)
             else:
                 model.add(w, 1)
-            segments = model.optimize(w)
-            _logger.debug("#%s: %s -> %s" % (i, w, _items_to_str(segments)))
+            segments = model.recursive_optimize(w)
+            _logger.debug("#%s: %s -> %s" % 
+                          (i, w, _constructions_to_str(segments)))
             i += 1
 
         epochs += 1
@@ -1237,7 +1251,7 @@ Interactive use (read corpus from user):
 
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-a', '--annotations', dest="annofile", default=None,
+    parser.add_argument('-A', '--annotations', dest="annofile", default=None,
                         help="load annotated data for semi-supervised "+
                         "learning", metavar='<file>')
     parser.add_argument('-b', '--break', dest="separator", type=str,
@@ -1322,7 +1336,7 @@ Interactive use (read corpus from user):
     parser.add_argument('-w', '--corpusweight', dest="corpusweight",
                         type=float, default=1.0, metavar='<float>',
                         help="corpus weight parameter (default %(default)s)")
-    parser.add_argument('-W', '--supervisedweight', dest="scorpusweight",
+    parser.add_argument('-W', '--annotationweight', dest="annotationweight",
                         type=float, default=None, metavar='<float>',
                         help="corpus weight parameter for annotated data "+
                         "(if unset, the weight is set to balance the "+
@@ -1405,13 +1419,13 @@ Interactive use (read corpus from user):
         _logger.info("Done.")
         if annotations is not None:
             # Add annotated data to model
-            model.set_annotations(annotations, args.scorpusweight)
+            model.set_annotations(annotations, args.annotationweight)
     elif args.loadsegfile is not None:
         _logger.info("Loading model from '%s'..." % args.loadsegfile)
         model = BaselineModel(forcesplit_list = args.forcesplit,
                               corpusweight = args.corpusweight,
                               annotations = annotations,
-                              supervisedcorpusweight = args.scorpusweight,
+                              annotatedcorpusweight = args.annotationweight,
                               use_skips = args.skips)
         model.load_segmentations(args.loadsegfile)
         _logger.info("Done.")
@@ -1419,7 +1433,7 @@ Interactive use (read corpus from user):
         model = BaselineModel(forcesplit_list = args.forcesplit,
                               corpusweight = args.corpusweight,
                               annotations = annotations,
-                              supervisedcorpusweight = args.scorpusweight,
+                              annotatedcorpusweight = args.annotationweight,
                               use_skips = args.skips)
 
     # Train model
@@ -1464,7 +1478,7 @@ Interactive use (read corpus from user):
         te = time.time()
         _logger.info("Epochs: %s" % e)
         _logger.info("Final cost: %s" % c)
-        _logger.info("Time: %.3fs" % (te-ts))
+        _logger.info("Training time: %.3fs" % (te-ts))
 
     # Save model
     if args.savefile is not None:
@@ -1489,8 +1503,9 @@ Interactive use (read corpus from user):
             fobj = open(args.lexfile, 'w')
         if args.lexfile != '-':
             _logger.info("Saving model lexicon to '%s'..." % args.lexfile)
-        for item in sorted(model.get_lexicon().get_constructions()):
-            fobj.write("%s %s\n" % (model.get_item_count(item), item))
+        for construction in sorted(model.get_lexicon().get_constructions()):
+            fobj.write("%s %s\n" % (model.get_construction_count(construction), 
+                                    construction))
         if args.lexfile != '-':
             fobj.close()
             _logger.info("Done.")
@@ -1508,8 +1523,8 @@ Interactive use (read corpus from user):
         testdataiter = testdata.generator(args.testfiles, args.cseparator)
         i = 0
         for compound in testdataiter:
-            items, logp = model.get_viterbi_segments(compound)
-            fobj.write("%s\n" % ' '.join(items))
+            constructions, logp = model.get_viterbi_segments(compound)
+            fobj.write("%s\n" % ' '.join(constructions))
             i += 1
             if i % 10000 == 0:
                 sys.stderr.write(".")
