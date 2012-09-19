@@ -2,6 +2,8 @@
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
+import io
+import locale
 
 __all__ = ['InputFormatError','batch_train','online_train',
            'Lexicon','BaselineModel', 'Corpus',
@@ -230,7 +232,7 @@ class BaselineModel:
             annotations -- annotated data for semi-supervised training
             annotatedcorpusweight -- weight for annotated corpus cost; if
                                       None, determine based on data sizes
-            use_skips -- randomly skip frequently occurring constructions 
+            use_skips -- randomly skip frequently occurring constructions
                          to speed up training
 
         """
@@ -714,8 +716,8 @@ class BaselineModel:
                 if construction in self.analyses and \
                         self.analyses[construction][2] == 0:
                     if self.analyses[construction][1] <= 0:
-                        raise Error("Construction count of '%s' is %s" % 
-                                    (construction, 
+                        raise Error("Construction count of '%s' is %s" %
+                                    (construction,
                                      self.analyses[construction][1]))
                     cost += logtokens - math.log(self.analyses[construction][1]
                                                  + addcount)
@@ -1108,7 +1110,7 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
         for j in _progress(indices):
             w = compounds[j]
             segments = model.recursive_optimize(w)
-            _logger.debug("#%s: %s -> %s" % 
+            _logger.debug("#%s: %s -> %s" %
                           (j, w, _constructions_to_str(segments)))
 
         epochs += 1
@@ -1192,7 +1194,7 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
             else:
                 model.add(w, 1)
             segments = model.recursive_optimize(w)
-            _logger.debug("#%s: %s -> %s" % 
+            _logger.debug("#%s: %s -> %s" %
                           (i, w, _constructions_to_str(segments)))
             i += 1
 
@@ -1202,6 +1204,27 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
     newcost = model.get_cost()
     _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
     return epochs, newcost
+
+def _find_encoding(*files):
+    test_encodings = [locale.getpreferredencoding(),'utf-8']
+    for encoding in test_encodings:
+        ok = True
+        for f in files:
+            if f is None:
+                continue
+            try:
+                for line in io.open(f,encoding=encoding):
+                    pass
+            except UnicodeDecodeError:
+                ok = False
+                break
+        if ok:
+            _logger.info("Detected %s encoding" % encoding)
+            return encoding
+
+    raise UnicodeError("Can not determine encoding of input files")
+
+
 
 def main(argv):
     import argparse
@@ -1276,6 +1299,9 @@ Interactive use (read corpus from user):
                         default=10000, metavar='<int>',
                         help="epoch interval for online training ("+
                         "default %(default)s)")
+    parser.add_argument('-E', '--encoding', dest='encoding',
+                        help="Specify encoding of input and output files. By "
+                             "default the local encoding and utf-8 are tried")
     parser.add_argument('-f', '--forcesplit', dest="forcesplit", type=list,
                         default=['-'], metavar='<list>',
                         help="force split on given atoms (default %(default)s)")
@@ -1398,6 +1424,10 @@ Interactive use (read corpus from user):
     if args.randseed is not None:
         random.seed(args.randseed)
 
+    if args.encoding is None:
+        args.encoding = _find_encoding(args.annofile, args.develfile,
+                                       args.loadfile, args.loadsegfile,
+                                       *(args.trainfiles +args.testfiles))
     # Load annotated data if specified
     if args.annofile is not None:
         annotations = Annotations()
@@ -1504,7 +1534,7 @@ Interactive use (read corpus from user):
         if args.lexfile != '-':
             _logger.info("Saving model lexicon to '%s'..." % args.lexfile)
         for construction in sorted(model.get_lexicon().get_constructions()):
-            fobj.write("%s %s\n" % (model.get_construction_count(construction), 
+            fobj.write("%s %s\n" % (model.get_construction_count(construction),
                                     construction))
         if args.lexfile != '-':
             fobj.close()
@@ -1534,4 +1564,8 @@ Interactive use (read corpus from user):
         _logger.info("Done.")
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except Exception as e:
+        _logger.error("Fatal Error %s %s" % (type(e), e.message))
+        raise
