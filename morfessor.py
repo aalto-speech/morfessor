@@ -249,8 +249,7 @@ class BaselineModel:
         self.permutationcost = 0.0 # Code length reduction from permutations
         self.lexiconcost = 0.0     # Code length of construction lexicon
         self.use_skips = use_skips # Random skips for frequent constructions
-        if self.use_skips:
-            self.counter = collections.Counter() # Counter for random skipping
+        self.counter = collections.Counter() # Counter for random skipping
         self.corpuscostweight = corpusweight
         self.forcesplit_list = forcesplit_list
         if annotations is not None:
@@ -378,34 +377,34 @@ class BaselineModel:
             parts = self.random_split(w, threshold)
             self.set_compound_analysis(w, parts)
 
-    def random_split(self, w, threshold):
+    def random_split(self, compound, threshold):
         """Return a random split for compound.
 
         Arguments:
-            w -- compound to split
+            compound -- compound to split
             threshold -- probability of splitting at each position
 
         """
         parts = []
         startpos = 0
-        for i in range(1, len(w)):
+        for i in range(1, len(compound)):
             if random.random() < threshold:
-                parts.append(w[startpos:i])
+                parts.append(compound[startpos:i])
                 startpos = i
-        parts.append(w[startpos:len(w)])
+        parts.append(compound[startpos:len(compound)])
         return parts
 
-    def set_compound_analysis(self, w, parts):
+    def set_compound_analysis(self, compound, parts):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
-            w -- compound to split
+            compound -- compound to split
             parts -- desired constructions of the compound
 
         The analysis is stored internally as a right-branching tree.
 
         """
-        construction = w
+        construction = compound
         for p in range(len(parts)-1):
             rcount, count = self.remove(construction)
             prefix = parts[p]
@@ -416,10 +415,12 @@ class BaselineModel:
             self.modify_construction_count(suffix, count)
             construction = suffix
 
-    def add(self, w, c):
-        """Add compound w with count c."""
-        self.modify_construction_count(w, c)
-        self.analyses[w] = self.analyses[w]._replace(rcount=c)
+    def add(self, compound, c):
+        """Add compound with count c to data."""
+        self.modify_construction_count(compound, c)
+        oldrc = self.analyses[compound].rcount
+        self.analyses[compound] = \
+            self.analyses[compound]._replace(rcount=oldrc+c)
         self.boundaries += c
 
     def remove(self, construction):
@@ -428,12 +429,12 @@ class BaselineModel:
         self.modify_construction_count(construction, -count)
         return rcount, count
 
-    def expand_compound(self, w):
-        """Return a list containing the analysis of compound w."""
-        return self.expand_construction(w)
+    def expand_compound(self, compound):
+        """Return a list containing the analysis of compound."""
+        return self.expand_construction(compound)
 
     def expand_construction(self, construction):
-        """Return a list containing the analysis of the existing construction."""
+        """Return a list containing the analysis of the construction."""
         rcount, count, splitloc = self.analyses[construction]
         constructions = []
         if splitloc > 0:
@@ -598,6 +599,46 @@ class BaselineModel:
             self.modify_construction_count(construction, count)
             return [construction]
 
+    def viterbi_optimize(self, compound, addcount=0, maxlen=30):
+        """Optimize segmentation of the compound using the Viterbi algorithm.
+
+        Arguments:
+          compound -- compound to optimize
+          addcount -- constant for additive smoothing of Viterbi probs
+          maxlen -- maximum length for a construction
+
+        Returns list of segments.
+        """
+        clen = len(compound)
+        if clen == 1: # Single atom
+            return [compound]
+
+        if self.use_skips:
+            if compound in self.counter:
+                t = self.counter[compound]
+                if random.random() > 1.0/(max(1, t)):
+                    return self.expand_construction(compound)
+            self.counter[compound] += 1
+
+        # Collect forced subsegments
+        mainparts = []
+        j = 0
+        for i in range(1, clen):
+            if compound[i] in self.forcesplit_list:
+                mainparts.append((j, compound[j:i]))
+                mainparts.append((i, compound[i:i+1]))
+                j = i + 1
+        if j < clen:
+            mainparts.append((j, compound[j:]))
+
+        # Use Viterbi algorithm to optimize the subsegments
+        constructions = []
+        for i, part in mainparts:
+            constructions += self.get_viterbi_segments(part, addcount=addcount, 
+                                                       maxlen=maxlen)[0]
+        self.set_compound_analysis(compound, constructions)
+        return constructions
+
     def modify_construction_count(self, construction, dcount):
         """Modify the count of construction by dcount.
 
@@ -609,7 +650,7 @@ class BaselineModel:
         if construction in self.analyses:
             rcount, count, splitloc = self.analyses[construction]
         else:
-            rcount, count, splitloc = ConstrNode(0, 0, 0)
+            rcount, count, splitloc = 0, 0, 0
         newcount = count + dcount
         if newcount == 0:
             del self.analyses[construction]
@@ -687,12 +728,13 @@ class BaselineModel:
                     _logger.info("Corpus weight of annotated data set to %s"
                                  % self.annotatedcorpusweight)
 
-    def get_viterbi_segments(self, compound, addcount = 1.0):
+    def get_viterbi_segments(self, compound, addcount=1.0, maxlen=30):
         """Find optimal segmentation using the Viterbi algorithm.
 
         Arguments:
           compound -- compound to be segmented
           addcount -- constant for additive smoothing (0 = no smoothing)
+          maxlen -- maximum length for the constructions
 
         If additive smoothing is applied, new complex construction types can
         be selected during the search. Without smoothing, only new
@@ -711,7 +753,7 @@ class BaselineModel:
             # Note that we can come from any node in history.
             bestpath = None
             bestcost = None
-            for pt in range(0, t):
+            for pt in range(max(0, t-maxlen), t):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
@@ -725,11 +767,16 @@ class BaselineModel:
                     cost += logtokens - \
                         math.log(self.analyses[construction].count + addcount)
                 elif addcount > 0:
-                    cost += ((self.types+addcount) *
-                             math.log(self.tokens+addcount)
-                             - self.types * math.log(self.tokens)
-                             + self.lexicon.get_codelength(construction)) \
-                             / self.corpuscostweight
+                    if self.tokens == 0:
+                        cost += (addcount * math.log(addcount) + 
+                                 self.lexicon.get_codelength(construction)) \
+                                 / self.corpuscostweight
+                    else:
+                        cost += ((self.types+addcount) *
+                                 math.log(self.tokens+addcount)
+                                 - self.types * math.log(self.tokens)
+                                 + self.lexicon.get_codelength(construction)) \
+                                 / self.corpuscostweight
                 elif len(construction) == 1:
                     cost += badlikelihood
                 else:
@@ -813,7 +860,7 @@ class Corpus:
         return self.text
 
     def get_max_compound_len(self):
-        """Return the maximum of the lenghts of the compounds in the corpus."""
+        """Return the maximum of the lengths of the compounds in the corpus."""
         return self.max_clen
 
     def get_compound_len(self, c):
@@ -1079,11 +1126,13 @@ def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
     else:
         return -1
 
-def batch_train(model, finishthreshold = 0.005, develannots = None):
+def batch_train(model, algorithm='recursive', finishthreshold=0.005, 
+                develannots=None):
     """Do batch training for a Morfessor model.
 
     Arguments:
         model -- model instance
+        algorithm -- name of the training algorithm to use
         finishthreshold -- finish training after the decrease in cost
                            per compound token is smaller than the threshold
                            (default 0.005)
@@ -1112,10 +1161,14 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
 
         for j in _progress(indices):
             w = compounds[j]
-            segments = model.recursive_optimize(w)
+            if algorithm == 'recursive':
+                segments = model.recursive_optimize(w)
+            elif algorithm == 'viterbi':
+                segments = model.viterbi_optimize(w)
+            else:
+                raise Error("unknown algorithm '%s'" % algorithm)
             _logger.debug("#%s: %s -> %s" % 
                           (j, w, _constructions_to_str(segments)))
-
         epochs += 1
 
         _logger.debug("Cost before epoch update: %s" % model.get_cost())
@@ -1152,12 +1205,14 @@ def batch_train(model, finishthreshold = 0.005, develannots = None):
     _logger.info("Done.")
     return epochs, newcost
 
-def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
+def online_train(model, corpusiter, algorithm='recursive', 
+                 epochinterval=10000, dampfunc=None):
     """Do on-line training for a Morfessor model.
 
     Arguments:
         model -- model instance
         corpusiter -- iterator over corpus
+        algorithm -- name of the training algorithm to use
         epochinterval -- run model.epoch_update() after every n:th word
                          (default 10000)
         dampfunc -- function for dampening the compound frequencies
@@ -1196,7 +1251,12 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
                     model.add(w, addc)
             else:
                 model.add(w, 1)
-            segments = model.recursive_optimize(w)
+            if algorithm == 'recursive':
+                segments = model.recursive_optimize(w)
+            elif algorithm == 'viterbi':
+                segments = model.viterbi_optimize(w)
+            else:
+                raise Error("unknown algorithm '%s'" % algorithm)
             _logger.debug("#%s: %s -> %s" % 
                           (i, w, _constructions_to_str(segments)))
             i += 1
@@ -1256,6 +1316,11 @@ Interactive use (read corpus from user):
 
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('-a', '--algorithm', dest="algorithm", 
+                        default='recursive',
+                        help="algorithm type ('recursive', 'viterbi'; "+
+                        "default '%(default)s')",
+                        metavar='<algorithm>')
     parser.add_argument('-A', '--annotations', dest="annofile", default=None,
                         help="load annotated data for semi-supervised "+
                         "learning", metavar='<file>')
@@ -1443,6 +1508,10 @@ Interactive use (read corpus from user):
 
     # Train model
     if len(args.trainfiles) > 0:
+        # Check that the algorithm exists
+        if not args.algorithm in ['recursive', 'viterbi']:
+            parser.error("unknown algorithm '%s'" % args.algorithm)
+
         # Set frequency dampening function
         if args.dampening == 'none':
             dampfunc = lambda x: x
@@ -1453,8 +1522,8 @@ Interactive use (read corpus from user):
         else:
             parser.error("unknown dampening type '%s'" % args.dampening)
         ts = time.time()
+        data = Corpus(args.separator)
         if args.trainmode == 'batch':
-            data = Corpus(args.separator)
             for f in args.trainfiles:
                 if f == '-':
                     _logger.info("Loading training data from standard input")
@@ -1465,19 +1534,21 @@ Interactive use (read corpus from user):
                 else:
                     data.load(f, args.cseparator)
                 _logger.info("Done.")
-            model.batch_init(data, args.freqthreshold, dampfunc)
-            if args.splitprob is not None:
-                model.random_split_init(data, args.splitprob)
-            e, c = batch_train(model, develannots = develannots)
+            if len(model.get_compounds()) == 0:
+                model.batch_init(data, args.freqthreshold, dampfunc)
+                if args.splitprob is not None:
+                    model.random_split_init(data, args.splitprob)
+            e, c = batch_train(model, args.algorithm, develannots = develannots)
         elif args.trainmode == 'online':
-            data = Corpus(args.separator)
             dataiter = data.generator(args.trainfiles, args.cseparator)
-            e, c = online_train(model, dataiter, args.epochinterval, dampfunc)
+            e, c = online_train(model, dataiter, args.algorithm, 
+                                args.epochinterval, dampfunc)
         elif args.trainmode == 'online+batch':
-            data = Corpus(args.separator)
             dataiter = data.generator(args.trainfiles, args.cseparator)
-            e, c = online_train(model, dataiter, args.epochinterval, dampfunc)
-            e, c = batch_train(model, develannots = develannots)
+            e, c = online_train(model, dataiter, args.algorithm, 
+                                args.epochinterval, dampfunc)
+            e, c = batch_train(model, args.algorithm, 
+                               develannots = develannots)
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
         te = time.time()
