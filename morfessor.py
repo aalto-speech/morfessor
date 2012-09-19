@@ -11,7 +11,6 @@ __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
 __author_email__ = "sami.virpioja@aalto.fi"
 
-import array
 import collections
 import datetime
 import gzip
@@ -214,6 +213,11 @@ class Lexicon:
             cost -= math.log(c)
         return cost
 
+# rcount = root count (from corpus)
+# count = total count of the node
+# splitloc = location of the split for virtual constructions; otherwise 0
+ConstrNode = collections.namedtuple('ConstrNode', 
+                                    ['rcount', 'count', 'splitloc'])
 
 class BaselineModel:
     """Morfessor Baseline model class."""
@@ -260,7 +264,8 @@ class BaselineModel:
 
     def get_compounds(self):
         """Return the compound types stored by the model."""
-        return filter(lambda w: self.analyses[w][0] > 0, self.analyses.keys())
+        return filter(lambda w: self.analyses[w].rcount > 0, 
+                      self.analyses.keys())
 
     def get_compound_boundary_num(self):
         """Return the number of compound boundaries encoded by the model."""
@@ -331,7 +336,7 @@ class BaselineModel:
         fobj.write("# Output from Morfessor Baseline %s, %s\n" %
                    (__version__, d.isoformat(' ')))
         for w in sorted(self.analyses.keys()):
-            c = self.analyses[w][0]
+            c = self.analyses[w].rcount
             if c > 0:
                 # w is a real compound in training data
                 constructions = self.expand_compound(w)
@@ -402,26 +407,26 @@ class BaselineModel:
         """
         construction = w
         for p in range(len(parts)-1):
-            wcount, mcount = self.remove(construction)
+            rcount, count = self.remove(construction)
             prefix = parts[p]
             suffix = reduce(lambda x, y: x + y, parts[p+1:])
-            self.analyses[construction] = array.array('i', [wcount, mcount,
-                                                            len(prefix)])
-            self.modify_construction_count(prefix, mcount)
-            self.modify_construction_count(suffix, mcount)
+            self.analyses[construction] = ConstrNode(rcount, count, 
+                                                     len(prefix))
+            self.modify_construction_count(prefix, count)
+            self.modify_construction_count(suffix, count)
             construction = suffix
 
     def add(self, w, c):
         """Add compound w with count c."""
         self.modify_construction_count(w, c)
-        self.analyses[w][0] += c
+        self.analyses[w] = self.analyses[w]._replace(rcount=c)
         self.boundaries += c
 
     def remove(self, construction):
         """Remove construction from model."""
-        wcount, mcount, splitloc = self.analyses[construction]
-        self.modify_construction_count(construction, -mcount)
-        return wcount, mcount
+        rcount, count, splitloc = self.analyses[construction]
+        self.modify_construction_count(construction, -count)
+        return rcount, count
 
     def expand_compound(self, w):
         """Return a list containing the analysis of compound w."""
@@ -429,7 +434,7 @@ class BaselineModel:
 
     def expand_construction(self, construction):
         """Return a list containing the analysis of the existing construction."""
-        wcount, mcount, splitloc = self.analyses[construction]
+        rcount, count, splitloc = self.analyses[construction]
         constructions = []
         if splitloc > 0:
             prefix = construction[:splitloc]
@@ -442,7 +447,7 @@ class BaselineModel:
 
     def get_construction_count(self, construction):
         """Return the count of the construction."""
-        return self.analyses[construction][1]
+        return self.analyses[construction].count
 
     def get_cost(self):
         """Return current model cost."""
@@ -488,7 +493,7 @@ class BaselineModel:
         # Add data to self.annotatedconstructions
         for w, alternatives in self.annotations.get_data():
             if w in self.analyses:
-                c = self.analyses[w][0]
+                c = self.analyses[w].rcount
             else:
                 # Add compound also to the unannotated data
                 self.add(w, 1)
@@ -502,8 +507,9 @@ class BaselineModel:
                 self.annotatedtokens += c
         self.annotatedlogtokensum = 0.0
         for m, f in self.annotatedconstructions.items():
-            if m in self.analyses and self.analyses[m][2] == 0:
-                self.annotatedlogtokensum += f * math.log(self.analyses[m][1])
+            if m in self.analyses and self.analyses[m].splitloc == 0:
+                self.annotatedlogtokensum += \
+                    f * math.log(self.analyses[m].count)
             else:
                 self.annotatedlogtokensum += f * self.penaltylogprob
         if self.tokens > 0:
@@ -523,9 +529,9 @@ class BaselineModel:
         for analysis in choices:
             cost = 0.0
             for m in analysis:
-                if m in self.analyses and self.analyses[m][2] == 0:
+                if m in self.analyses and self.analyses[m].splitloc == 0:
                     cost += math.log(self.tokens) - \
-                        math.log(self.analyses[m][1])
+                        math.log(self.analyses[m].count)
                 else:
                     cost -= self.penaltylogprob # penaltylogprob is negative
             if bestcost is None or cost < bestcost:
@@ -549,16 +555,16 @@ class BaselineModel:
             self.counter[construction] += 1
 
         if construction[0] in self.forcesplit_list:
-            wcount, mcount = self.remove(construction)
-            self.analyses[construction] = array.array('i', [wcount, mcount, 1])
-            self.modify_construction_count(construction[:1], mcount)
-            self.modify_construction_count(construction[1:], mcount)
+            rcount, count = self.remove(construction)
+            self.analyses[construction] = ConstrNode(rcount, count, 1)
+            self.modify_construction_count(construction[:1], count)
+            self.modify_construction_count(construction[1:], count)
             return [construction[0]] + self.recursive_optimize(construction[1:])
 
-        wcount, mcount = self.remove(construction)
-        self.modify_construction_count(construction, mcount)
+        rcount, count = self.remove(construction)
+        self.modify_construction_count(construction, count)
         mincost = self.get_cost()
-        self.modify_construction_count(construction, -mcount)
+        self.modify_construction_count(construction, -count)
         splitloc = 0
         for i in range(1, len(construction)):
             if construction[i] in self.forcesplit_list:
@@ -566,22 +572,21 @@ class BaselineModel:
                 break
             prefix = construction[:i]
             suffix = construction[i:]
-            self.modify_construction_count(prefix, mcount)
-            self.modify_construction_count(suffix, mcount)
+            self.modify_construction_count(prefix, count)
+            self.modify_construction_count(suffix, count)
             cost = self.get_cost()
-            self.modify_construction_count(prefix, -mcount)
-            self.modify_construction_count(suffix, -mcount)
+            self.modify_construction_count(prefix, -count)
+            self.modify_construction_count(suffix, -count)
             if cost <= mincost:
                 mincost = cost
                 splitloc = i
         if splitloc > 0:
             # Virtual construction
-            self.analyses[construction] = \
-                array.array('i', [wcount, mcount, splitloc])
+            self.analyses[construction] = ConstrNode(rcount, count, splitloc)
             prefix = construction[:splitloc]
             suffix = construction[splitloc:]
-            self.modify_construction_count(prefix, mcount)
-            self.modify_construction_count(suffix, mcount)
+            self.modify_construction_count(prefix, count)
+            self.modify_construction_count(suffix, count)
             lp = self.recursive_optimize(prefix)
             if suffix != prefix:
                 return lp + self.recursive_optimize(suffix)
@@ -589,8 +594,8 @@ class BaselineModel:
                 return lp + lp
         else:
             # Real construction
-            self.analyses[construction] = array.array('i', [wcount, 0, 0])
-            self.modify_construction_count(construction, mcount)
+            self.analyses[construction] = ConstrNode(rcount, 0, 0)
+            self.modify_construction_count(construction, count)
             return [construction]
 
     def modify_construction_count(self, construction, dcount):
@@ -602,15 +607,15 @@ class BaselineModel:
 
         """
         if construction in self.analyses:
-            wcount, mcount, splitloc = self.analyses[construction]
+            rcount, count, splitloc = self.analyses[construction]
         else:
-            wcount, mcount, splitloc = array.array('i', [0, 0, 0])
-        newmcount = mcount + dcount
-        if newmcount == 0:
+            rcount, count, splitloc = ConstrNode(0, 0, 0)
+        newcount = count + dcount
+        if newcount == 0:
             del self.analyses[construction]
         else:
-            self.analyses[construction] = array.array('i', [wcount, newmcount,
-                                                    splitloc])
+            self.analyses[construction] = ConstrNode(rcount, newcount,
+                                                     splitloc)
         if splitloc > 0:
             # Virtual construction
             prefix = construction[:splitloc]
@@ -620,21 +625,21 @@ class BaselineModel:
         else:
             # Real construction
             self.tokens += dcount
-            if mcount > 1:
-                self.logtokensum -= mcount * math.log(mcount)
+            if count > 1:
+                self.logtokensum -= count * math.log(count)
                 if self.supervised and \
                         self.annotatedconstructions.has_key(construction):
                     self.annotatedlogtokensum -= \
                         self.annotatedconstructions[construction] * \
-                        math.log(mcount)
-            if newmcount > 1:
-                self.logtokensum += newmcount * math.log(newmcount)
+                        math.log(count)
+            if newcount > 1:
+                self.logtokensum += newcount * math.log(newcount)
                 if self.supervised and \
                         self.annotatedconstructions.has_key(construction):
                     self.annotatedlogtokensum += \
                         self.annotatedconstructions[construction] * \
-                        math.log(newmcount)
-            if mcount == 0 and newmcount > 0:
+                        math.log(newcount)
+            if count == 0 and newcount > 0:
                 self.lexicon.add(construction)
                 self.types += 1
                 if self.supervised and \
@@ -642,7 +647,7 @@ class BaselineModel:
                     self.annotatedlogtokensum -= \
                         self.annotatedconstructions[construction] * \
                         self.penaltylogprob
-            elif mcount > 0 and newmcount == 0:
+            elif count > 0 and newcount == 0:
                 self.lexicon.remove(construction)
                 self.types -= 1
                 if self.supervised and \
@@ -712,13 +717,13 @@ class BaselineModel:
                 cost = grid[pt][0]
                 construction = compound[pt:t]
                 if construction in self.analyses and \
-                        self.analyses[construction][2] == 0:
-                    if self.analyses[construction][1] <= 0:
+                        self.analyses[construction].splitloc == 0:
+                    if self.analyses[construction].count <= 0:
                         raise Error("Construction count of '%s' is %s" % 
                                     (construction, 
-                                     self.analyses[construction][1]))
-                    cost += logtokens - math.log(self.analyses[construction][1]
-                                                 + addcount)
+                                     self.analyses[construction].count))
+                    cost += logtokens - \
+                        math.log(self.analyses[construction].count + addcount)
                 elif addcount > 0:
                     cost += ((self.types+addcount) *
                              math.log(self.tokens+addcount)
