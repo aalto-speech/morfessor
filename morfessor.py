@@ -223,6 +223,12 @@ ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
 class MorfessorIO:
+    """
+    Definition for  all input and output files. Also handles all encoding
+    issues.
+
+    """
+
     def __init__(self, encoding=None, construction_separator=' + ',
                  comment_start='#', compound_separator='\W+',
                  atom_separator=None):
@@ -232,16 +238,31 @@ class MorfessorIO:
         self.comment_start = comment_start
         self.compound_separator = compound_separator
         self.atom_separator = atom_separator
+
         if atom_separator is not None:
             self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
 
+
     def read_segmentation_file(self, file_name, **kwargs):
+        """
+        Read files with the following format:
+        <count> <construction1><sep><construction2><sep>...<constructionN>
+        """
+        _logger.info("Reading segmentations from '%s'..." % file_name)
+
         for line in self._read_text_file(file_name):
             count, compound = line.split()
             yield int(count), line.split(self.construction_separator)
 
+        _logger.info("Done.")
+
     def write_segmentation_file(self, file_name, segmentations, **kwargs):
-        _logger.info("Saving model segmentations to '%s'..." % file_name)
+        """
+        Write files in the following format:
+        <count> <construction1><sep><construction2><sep>...<constructionN>
+        """
+        _logger.info("Saving segmentations to '%s'..." % file_name)
+
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
@@ -256,18 +277,37 @@ class MorfessorIO:
         _logger.info("Done.")
 
     def read_corpus_files(self, file_names):
+        """
+        Reading one or more corpus files, yielding the same information as
+        read_corpus_file()
+        """
         for file_name in file_names:
             for item in self.read_corpus_file(file_name):
                 yield item
 
-    def read_corpus_file(self, file_name, **kwargs):
+    def read_corpus_file(self, file_name):
+        """
+        Read one corpus file. Yield for each compound found (1,compound)
+        """
+        _logger.info("Reading corpus from '%s'..." % file_name)
+
         compound_sep = re.compile(self.compound_separator, re.UNICODE)
         for line in self._read_text_file(file_name):
             for compound in compound_sep.split(line):
                 if len(compound) > 0:
                     yield 1, compound, self._split_atoms(compound)
 
-    def read_corpus_list_file(self, file_name, **kwargs):
+        _logger.info("Done.")
+
+    def read_corpus_list_file(self, file_name):
+        """
+        Read a corpus list file. Each line has the format:
+        <count> <compound>
+
+        Yield tuples (count,compound) for each compound
+        """
+        _logger.info("Reading corpus from list '%s'..." % file_name)
+
         for line in self._read_text_file(file_name):
             try:
                 count, compound = line.split(None, 1)
@@ -275,37 +315,55 @@ class MorfessorIO:
             except ValueError:
                 yield 1, line, self._split_atoms(line)
 
-    def read_annotations_file(self, file_name, **kwargs):
-        annotations = []
+        _logger.info("Done.")
+
+    def read_annotations_file(self, file_name):
+        """
+        Read a annotations file. Each line has the format:
+        <compound> <constr1> <constr2> ... <constrN>, <constr1>...<constrN>, ...
+
+        Yield tuples (compound, list(analyses))
+        """
+        _logger.info("Reading annotations from '%s'..." % file_name)
+
         for line in self._read_text_file(file_name):
             analyses = []
-            compound, analyses_line = line.split(None,1)
+            compound, analyses_line = line.split(None, 1)
 
             for analysis in analyses_line.split(','):
                 analyses.append(analysis.split(' '))
 
-            annotations.append((compound, analyses))
+            yield compound, analyses
 
-        return annotations
+        _logger.info("Done.")
 
     def write_lexicon_file(self, file_name, lexicon):
+        """ Write to a Lexicon file all constructions and their counts """
         _logger.info("Saving model lexicon to '%s'..." % file_name)
+
         with self._open_text_file_write(file_name) as file_obj:
             for construction, count in lexicon:
-                file_obj.write("%s %s\n" % (construction,count))
+                file_obj.write("%s %s\n" % (construction, count))
+
         _logger.info("Done.")
 
     def read_binary_model_file(self, file_name):
+        """ Read a pickled model from file """
         _logger.info("Loading model from '%s'..." % file_name)
+
         with open(file_name, 'rb') as fobj:
             model = pickle.load(fobj)
+
         _logger.info("Done.")
         return model
 
     def write_binary_model_file(self, file_name, model):
+        """ Pickle a model to a file """
         _logger.info("Saving model to '%s'..." % file_name)
+
         with open(file_name, 'wb') as fobj:
             pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
+
         _logger.info("Done.")
 
     def _split_atoms(self, construction):
@@ -315,6 +373,7 @@ class MorfessorIO:
             return self._atom_sep_re.split(construction)
 
     def _open_text_file_write(self, file_name):
+        """Open a file with the appropriate compression and encoding"""
         if file_name == '-':
             file_obj = sys.stdout
         elif file_name.endswith('.gz'):
@@ -325,6 +384,10 @@ class MorfessorIO:
         return codecs.getwriter(self.encoding)(file_obj)
 
     def _read_text_file(self, file_name):
+        """
+        Read a text file with the appropriate compression and encoding.
+        Comments and empty lines are skipped.
+        """
         if self.encoding is None:
             self.encoding = self._find_encoding(file_name)
 
@@ -342,12 +405,14 @@ class MorfessorIO:
                 yield line
 
     def _find_encoding(self, *files):
+        """
+        If no encoding is given, this method can test which of the default
+        encodings would work
+        """
         test_encodings = [locale.getpreferredencoding(), 'utf-8']
         for encoding in test_encodings:
             ok = True
             for f in files:
-                if f is None:
-                    continue
                 try:
                     for _ in io.open(f, encoding=encoding):
                         pass
@@ -1431,6 +1496,7 @@ Interactive use (read corpus from user):
         develannots.load(io.read_annotations_file(args.develfile))
     else:
         develannots = None
+
 
     # Load exisiting model or create a new one
     if args.loadfile is not None:
