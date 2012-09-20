@@ -222,7 +222,7 @@ class Lexicon:
 ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
-class MorfessorModelIO:
+class MorfessorIO:
     def __init__(self, encoding=None, construction_separator=' + ',
                  comment_start='#', compound_separator='\W+',
                  atom_separator=None):
@@ -276,13 +276,37 @@ class MorfessorModelIO:
                 yield 1, line, self._split_atoms(line)
 
     def read_annotations_file(self, file_name, **kwargs):
-        pass
+        annotations = []
+        for line in self._read_text_file(file_name):
+            analyses = []
+            compound, analyses_line = line.split(None,1)
+
+            for analysis in analyses_line.split(','):
+                analyses.append(analysis.split(' '))
+
+            annotations.append((compound, analyses))
+
+        return annotations
+
+    def write_lexicon_file(self, file_name, lexicon):
+        _logger.info("Saving model lexicon to '%s'..." % file_name)
+        with self._open_text_file_write(file_name) as file_obj:
+            for construction, count in lexicon:
+                file_obj.write("%s %s\n" % (construction,count))
+        _logger.info("Done.")
 
     def read_binary_model_file(self, file_name):
-        pass
+        _logger.info("Loading model from '%s'..." % file_name)
+        with open(file_name, 'rb') as fobj:
+            model = pickle.load(fobj)
+        _logger.info("Done.")
+        return model
 
     def write_binary_model_file(self, file_name, model):
-        pass
+        _logger.info("Saving model to '%s'..." % file_name)
+        with open(file_name, 'wb') as fobj:
+            pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
+        _logger.info("Done.")
 
     def _split_atoms(self, construction):
         if self.atom_separator is None:
@@ -291,7 +315,9 @@ class MorfessorModelIO:
             return self._atom_sep_re.split(construction)
 
     def _open_text_file_write(self, file_name):
-        if file_name.endswith('.gz'):
+        if file_name == '-':
+            file_obj = sys.stdout
+        elif file_name.endswith('.gz'):
             file_obj = gzip.open(file_name, 'w')
         else:
             file_obj = open(file_name, 'w')
@@ -302,15 +328,17 @@ class MorfessorModelIO:
         if self.encoding is None:
             self.encoding = self._find_encoding(file_name)
 
-        if file_name.endswith('.gz'):
-            file_obj = gzip.open(file_name)
+        if file_name == '-':
+            file_obj = sys.stdin
+        elif file_name.endswith('.gz'):
+            file_obj = gzip.open(file_name, 'rb')
         else:
-            file_obj = open(file_name)
+            file_obj = open(file_name, 'rb')
 
         for line in codecs.getreader(self.encoding)(file_obj):
             line.rstrip()
 
-            if line > 0 and not line.startswith(self.comment_start):
+            if len(line) > 0 and not line.startswith(self.comment_start):
                 yield line
 
     def _find_encoding(self, *files):
@@ -905,7 +933,7 @@ class Corpus:
         else:
             return len(re.split(self.atom_sep, c))
 
-    def load(self, data_iter, yield_atoms=False):
+    def load(self, data_iter):
         for count, compound, atoms in data_iter:
             if compound in self.strdict:
                 i = self.strdict[compound]
@@ -918,12 +946,24 @@ class Corpus:
                 self.types += 1
                 self.max_clen = max(self.max_clen, len(atoms))
 
-            if yield_atoms:
-                for _ in range(count):
-                    self.tokens += 1
-                    yield atoms
+            self.tokens += count
+
+    def load_gen(self, data_iter):
+        for count, compound, atoms in data_iter:
+            if compound in self.strdict:
+                i = self.strdict[compound]
+                self.counts[i] += count
             else:
-                self.tokens += count
+                i = self.types
+                self.strdict[compound] = i
+                self.compounds.append(compound)
+                self.counts.append(count)
+                self.types += 1
+                self.max_clen = max(self.max_clen, len(atoms))
+
+            for _ in range(count):
+                self.tokens += 1
+                yield atoms
 
 
 class Annotations:
@@ -954,7 +994,7 @@ class Annotations:
         """Return the analyses for the given compound."""
         return self.analyses[compound]
 
-    def load(self, datafile, separator = ' ', altseparator = ', '):
+    def load(self, data):
         """Load annotations from file.
 
         Arguments:
@@ -963,22 +1003,11 @@ class Annotations:
             comment_re -- regexp for separating alternative analyses
 
         """
-        if datafile[-3:] == '.gz':
-            fobj = gzip.open(datafile, 'r')
-        else:
-            fobj = open(datafile, 'r')
-        for line in fobj:
-            try:
-                compound, analyses_part = line.split("\t")
-            except ValueError:
-                raise InputFormatError(datafile, line)
-            alt_analyses = analyses_part.split(altseparator)
-            analyses = []
-            for i in range(len(alt_analyses)):
-                analyses.append(alt_analyses[i].split(separator))
+
+        for compound, analyses in data:
             self.analyses[compound] = analyses
-            self.types += 1
-        fobj.close()
+
+        self.types = len(self.analyses)
 
 def _boundary_recall(prediction, reference):
     """Calculate average boundary recall for given segmentations."""
@@ -1387,28 +1416,26 @@ Interactive use (read corpus from user):
     if args.randseed is not None:
         random.seed(args.randseed)
 
-    model_io = MorfessorModelIO(encoding=args.encoding,
+    io = MorfessorIO(encoding=args.encoding,
         compound_separator=args.cseparator, atom_separator=args.separator)
 
     # Load annotated data if specified
     if args.annofile is not None:
         annotations = Annotations()
-        annotations.load(args.annofile)
+        annotations.load(io.read_annotations_file(args.annofile))
     else:
         annotations = None
 
     if args.develfile is not None:
         develannots = Annotations()
-        develannots.load(args.develfile)
+        develannots.load(io.read_annotations_file(args.develfile))
     else:
         develannots = None
 
     # Load exisiting model or create a new one
     if args.loadfile is not None:
-        _logger.info("Loading model from '%s'..." % args.loadfile)
-        with open(args.loadfile, 'rb') as fobj:
-            model = pickle.load(fobj)
-        _logger.info("Done.")
+        model = io.read_binary_model_file(args.loadfile)
+
         if annotations is not None:
             # Add annotated data to model
             model.set_annotations(annotations, args.annotationweight)
@@ -1419,8 +1446,7 @@ Interactive use (read corpus from user):
                               annotations = annotations,
                               annotatedcorpusweight = args.annotationweight,
                               use_skips = args.skips)
-        model.load_segmentations(
-            model_io.read_segmentation_file(args.loadsegfile))
+        model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
         _logger.info("Done.")
     else:
         model = BaselineModel(forcesplit_list = args.forcesplit,
@@ -1449,9 +1475,9 @@ Interactive use (read corpus from user):
                 else:
                     _logger.info("Loading training data file '%s'..." % f)
                 if args.list:
-                    data.load(model_io.read_corpus_list_file(f))
+                    data.load(io.read_corpus_list_file(f))
                 else:
-                    data.load(model_io.read_corpus_file(f))
+                    data.load(io.read_corpus_file(f))
                 _logger.info("Done.")
             model.batch_init(data, args.freqthreshold, dampfunc)
             if args.splitprob is not None:
@@ -1459,13 +1485,11 @@ Interactive use (read corpus from user):
             e, c = batch_train(model, develannots = develannots)
         elif args.trainmode == 'online':
             data = Corpus(args.separator)
-            dataiter = data.load(model_io.read_corpus_files(args.trainfiles),
-                yield_atoms=True)
+            dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
             e, c = online_train(model, dataiter, args.epochinterval, dampfunc)
         elif args.trainmode == 'online+batch':
             data = Corpus(args.separator)
-            dataiter = data.load(model_io.read_corpus_files(args.trainfiles),
-                yield_atoms=True)
+            dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
             e, c = online_train(model, dataiter, args.epochinterval, dampfunc)
             e, c = batch_train(model, develannots = develannots)
         else:
@@ -1477,54 +1501,32 @@ Interactive use (read corpus from user):
 
     # Save model
     if args.savefile is not None:
-        _logger.info("Saving model to '%s'..." % args.savefile)
-        with open(args.savefile, 'wb') as fobj:
-            pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
-        _logger.info("Done.")
+        io.write_binary_model_file(args.savefile, model)
 
     if args.savesegfile is not None:
-        model_io.write_segmentation_file(args.savesegfile,
-            model.get_segmentations())
+        io.write_segmentation_file(args.savesegfile, model.get_segmentations())
 
     # Output lexicon
     if args.lexfile is not None:
-        if args.lexfile == '-':
-            fobj = sys.stdout
-        elif args.lexfile[-3:] == '.gz':
-            fobj = gzip.open(args.lexfile, 'w')
-        else:
-            fobj = open(args.lexfile, 'w')
-        if args.lexfile != '-':
-            _logger.info("Saving model lexicon to '%s'..." % args.lexfile)
-        for construction in sorted(model.get_lexicon().get_constructions()):
-            fobj.write("%s %s\n" % (model.get_construction_count(construction),
-                                    construction))
-        if args.lexfile != '-':
-            fobj.close()
-            _logger.info("Done.")
+        constructions = model.get_lexicon().get_constructions()
+        data = [(c, model.get_construction_count(c)) for c in sorted(
+            constructions)]
+        io.write_lexicon_file(args.lexfile,data)
 
     # Segment test data
     if len(args.testfiles) > 0:
         _logger.info("Segmenting test data...")
-        if args.outfile == '-':
-            fobj = sys.stdout
-        elif args.outfile[-3:] == '.gz':
-            fobj = gzip.open(args.outfile, 'w')
-        else:
-            fobj = open(args.outfile, 'w')
-        testdata = Corpus(args.separator)
-        testdataiter = testdata.load(model_io.read_corpus_files(args.testfiles),
-            yield_atoms=True)
-        i = 0
-        for compound in testdataiter:
-            constructions, logp = model.get_viterbi_segments(compound)
-            fobj.write("%s\n" % ' '.join(constructions))
-            i += 1
-            if i % 10000 == 0:
-                sys.stderr.write(".")
-        sys.stderr.write("\n")
-        if args.outfile != '-':
-            fobj.close()
+        with io._open_text_file_write(args.outfile) as fobj:
+            testdata = Corpus(args.separator)
+            testdataiter = testdata.load_gen(io.read_corpus_files(args.testfiles))
+            i = 0
+            for compound in testdataiter:
+                constructions, logp = model.get_viterbi_segments(compound)
+                fobj.write("%s\n" % ' '.join(constructions))
+                i += 1
+                if i % 10000 == 0:
+                    sys.stderr.write(".")
+            sys.stderr.write("\n")
         _logger.info("Done.")
 
 if __name__ == "__main__":
