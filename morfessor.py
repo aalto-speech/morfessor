@@ -266,12 +266,12 @@ class MorfessorIO:
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
-                           (__version__, d.isoformat(' ')), )
+                           (__version__, d) )
 
             for count, segmentation in segmentations:
                 file_obj.write(
-                    "%s %s\n" %
-                    (count, self.construction_separator.join(segmentations))
+                    "%d %s\n" %
+                    (count, self.construction_separator.join(segmentation))
                 )
 
         _logger.info("Done.")
@@ -377,9 +377,9 @@ class MorfessorIO:
         if file_name == '-':
             file_obj = sys.stdout
         elif file_name.endswith('.gz'):
-            file_obj = gzip.open(file_name, 'w')
+            file_obj = gzip.open(file_name, 'wb')
         else:
-            file_obj = open(file_name, 'w')
+            file_obj = open(file_name, 'wb')
 
         return codecs.getwriter(self.encoding)(file_obj)
 
@@ -399,7 +399,7 @@ class MorfessorIO:
             file_obj = open(file_name, 'rb')
 
         for line in codecs.getreader(self.encoding)(file_obj):
-            line.rstrip()
+            line = line.rstrip()
 
             if len(line) > 0 and not line.startswith(self.comment_start):
                 yield line
