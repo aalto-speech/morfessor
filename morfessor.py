@@ -1262,27 +1262,6 @@ def online_train(model, corpusiter, epochinterval = 10000, dampfunc = None):
     _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
     return epochs, newcost
 
-def _find_encoding(*files):
-    test_encodings = [locale.getpreferredencoding(),'utf-8']
-    for encoding in test_encodings:
-        ok = True
-        for f in files:
-            if f is None:
-                continue
-            try:
-                for line in io.open(f,encoding=encoding):
-                    pass
-            except UnicodeDecodeError:
-                ok = False
-                break
-        if ok:
-            _logger.info("Detected %s encoding" % encoding)
-            return encoding
-
-    raise UnicodeError("Can not determine encoding of input files")
-
-
-
 def main(argv):
     import argparse
 
