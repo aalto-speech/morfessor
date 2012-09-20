@@ -52,6 +52,7 @@ def _progress(iter_func):
 
     If the progressbar module is available a fancy percentage style
     progressbar is displayed. Otherwise 20 dots are printed as indicator.
+
     """
 
     if not show_progress_bar:
@@ -96,7 +97,6 @@ def _progress(iter_func):
                 return ProgressBar()(iter_func(*args, **kwargs))
             else:
                 return iter_func(*args, **kwargs)
-
         return i
 
     #In case of an iterator, wrap it in a ProgressBar and return it.
@@ -129,7 +129,8 @@ _log2pi = math.log(2*math.pi)
 
 def _constructions_to_str(constructions):
     """Return a readable string for a list of constructions."""
-    if isinstance(constructions[0], str):
+    if isinstance(constructions[0], str) or \
+            isinstance(constructions[0], unicode):
         # Constructions are strings
         return ' + '.join(constructions)
     else:
@@ -216,9 +217,8 @@ ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
 class MorfessorIO:
-    """
-    Definition for  all input and output files. Also handles all encoding
-    issues.
+    """Definition for all input and output files. Also handles all
+    encoding issues.
 
     """
 
@@ -226,99 +226,95 @@ class MorfessorIO:
                  comment_start='#', compound_separator='\W+',
                  atom_separator=None):
         self.encoding = encoding
-
         self.construction_separator = construction_separator
         self.comment_start = comment_start
         self.compound_separator = compound_separator
         self.atom_separator = atom_separator
-
         if atom_separator is not None:
             self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
 
-
     def read_segmentation_file(self, file_name, **kwargs):
-        """
-        Read files with the following format:
+        """Read segmentation file.
+
+        File format:
         <count> <construction1><sep><construction2><sep>...<constructionN>
+
         """
         _logger.info("Reading segmentations from '%s'..." % file_name)
-
         for line in self._read_text_file(file_name):
             count, compound = line.split()
             yield int(count), line.split(self.construction_separator)
-
         _logger.info("Done.")
 
     def write_segmentation_file(self, file_name, segmentations, **kwargs):
-        """
-        Write files in the following format:
+        """Write segmentation file. 
+
+        File format:
         <count> <construction1><sep><construction2><sep>...<constructionN>
+
         """
         _logger.info("Saving segmentations to '%s'..." % file_name)
-
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
-                           (__version__, d) )
+                           (__version__, d))
 
             for count, segmentation in segmentations:
                 file_obj.write(
-                    "%d %s\n" %
-                    (count, self.construction_separator.join(segmentation))
-                )
-
+                    "%d %s\n" % 
+                    (count, self.construction_separator.join(segmentation)))
         _logger.info("Done.")
 
     def read_corpus_files(self, file_names):
-        """
-        Reading one or more corpus files, yielding the same information as
-        read_corpus_file()
+        """Read one or more corpus files.
+
+        Yield for each compound found (1, compound, compound_atoms).
+
         """
         for file_name in file_names:
             for item in self.read_corpus_file(file_name):
                 yield item
 
     def read_corpus_file(self, file_name):
-        """
-        Read one corpus file. Yield for each compound found (1,compound)
+        """Read one corpus file. 
+
+        Yield for each compound found (1, compound, compound_atoms).
+
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
-
         compound_sep = re.compile(self.compound_separator, re.UNICODE)
         for line in self._read_text_file(file_name):
             for compound in compound_sep.split(line):
                 if len(compound) > 0:
                     yield 1, compound, self._split_atoms(compound)
-
         _logger.info("Done.")
 
     def read_corpus_list_file(self, file_name):
-        """
-        Read a corpus list file. Each line has the format:
+        """Read a corpus list file. 
+
+        Each line has the format:
         <count> <compound>
 
-        Yield tuples (count,compound) for each compound
+        Yield tuples (count, compound, compound_atoms) for each compound.
         """
         _logger.info("Reading corpus from list '%s'..." % file_name)
-
         for line in self._read_text_file(file_name):
             try:
                 count, compound = line.split(None, 1)
                 yield int(count), compound, self._split_atoms(compound)
             except ValueError:
                 yield 1, line, self._split_atoms(line)
-
         _logger.info("Done.")
 
     def read_annotations_file(self, file_name):
-        """
-        Read a annotations file. Each line has the format:
+        """Read a annotations file. 
+
+        Each line has the format:
         <compound> <constr1> <constr2> ... <constrN>, <constr1>...<constrN>, ...
 
-        Yield tuples (compound, list(analyses))
+        Yield tuples (compound, list(analyses)).
         """
         _logger.info("Reading annotations from '%s'..." % file_name)
-
         for line in self._read_text_file(file_name):
             analyses = []
             compound, analyses_line = line.split(None, 1)
@@ -327,39 +323,33 @@ class MorfessorIO:
                 analyses.append(analysis.split(' '))
 
             yield compound, analyses
-
         _logger.info("Done.")
 
     def write_lexicon_file(self, file_name, lexicon):
-        """ Write to a Lexicon file all constructions and their counts """
+        """Write to a Lexicon file all constructions and their counts."""
         _logger.info("Saving model lexicon to '%s'..." % file_name)
-
         with self._open_text_file_write(file_name) as file_obj:
             for construction, count in lexicon:
                 file_obj.write("%d %s\n" % (count, construction))
-
         _logger.info("Done.")
 
     def read_binary_model_file(self, file_name):
-        """ Read a pickled model from file """
+        """Read a pickled model from file."""
         _logger.info("Loading model from '%s'..." % file_name)
-
         with open(file_name, 'rb') as fobj:
             model = pickle.load(fobj)
-
         _logger.info("Done.")
         return model
 
     def write_binary_model_file(self, file_name, model):
-        """ Pickle a model to a file """
+        """Pickle a model to a file."""
         _logger.info("Saving model to '%s'..." % file_name)
-
         with open(file_name, 'wb') as fobj:
             pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
-
         _logger.info("Done.")
 
     def _split_atoms(self, construction):
+        """Split construction to its atoms."""
         if self.atom_separator is None:
             return construction
         else:
@@ -377,13 +367,13 @@ class MorfessorIO:
         return codecs.getwriter(self.encoding)(file_obj)
 
     def _read_text_file(self, file_name):
-        """
-        Read a text file with the appropriate compression and encoding.
+        """Read a text file with the appropriate compression and encoding.
+
         Comments and empty lines are skipped.
+
         """
         if self.encoding is None:
             self.encoding = self._find_encoding(file_name)
-
         if file_name == '-':
             file_obj = sys.stdin
         elif file_name.endswith('.gz'):
@@ -393,19 +383,22 @@ class MorfessorIO:
 
         for line in codecs.getreader(self.encoding)(file_obj):
             line = line.rstrip()
-
             if len(line) > 0 and not line.startswith(self.comment_start):
                 yield line
 
     def _find_encoding(self, *files):
-        """
-        If no encoding is given, this method can test which of the default
-        encodings would work
+        """Test default encodings on reading files.
+
+        If no encoding is given, this method can be used to test which
+        of the default encodings would work.
+
         """
         test_encodings = [locale.getpreferredencoding(), 'utf-8']
         for encoding in test_encodings:
             ok = True
             for f in files:
+                if f == '-':
+                    continue
                 try:
                     for _ in io.open(f, encoding=encoding):
                         pass
@@ -975,6 +968,7 @@ class Corpus:
         """Check whether the corpus has given compound.
 
         The input can be either a string or a list/tuple of strings.
+
         """
         if type(c) == str:
             return (c in self.strdict)
@@ -1441,8 +1435,8 @@ Interactive use (read corpus from user):
     # If debug messages are printed to screen or if stderr is not a tty (but
     # a pipe or a file), don't show the progressbar
     global show_progress_bar
-    if ch.level > logging.INFO or\
-       (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty()):
+    if ch.level > logging.INFO or \
+            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty()):
         show_progress_bar = False
 
     if args.loadfile is None and args.loadsegfile is None and \
@@ -1452,9 +1446,10 @@ Interactive use (read corpus from user):
     if args.randseed is not None:
         random.seed(args.randseed)
 
-    io = MorfessorIO(encoding=args.encoding,
-        compound_separator=args.cseparator, atom_separator=args.separator)
-
+    io = MorfessorIO(encoding=args.encoding, 
+                     compound_separator=args.cseparator, 
+                     atom_separator=args.separator)
+    
     # Load annotated data if specified
     if args.annofile is not None:
         annotations = Annotations()
@@ -1547,7 +1542,8 @@ Interactive use (read corpus from user):
         _logger.info("Segmenting test data...")
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = Corpus(args.separator)
-            testdataiter = testdata.load_gen(io.read_corpus_files(args.testfiles))
+            testdataiter = \
+                testdata.load_gen(io.read_corpus_files(args.testfiles))
             i = 0
             for compound in testdataiter:
                 constructions, logp = model.get_viterbi_segments(compound)
