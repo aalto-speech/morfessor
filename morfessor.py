@@ -153,18 +153,6 @@ def frequency_distribution_cost(types, tokens):
     return logfactorial(tokens-1) - logfactorial(types-1) - \
         logfactorial(tokens-types)
 
-def _catalan(n):
-    """Return n:th Catalan number"""
-    return math.factorial(2*n) / math.factorial(n) / math.factorial(n+1)
-
-def _number_of_parses(n):
-    """Calculate the number of parses for a binary tree with n leaves"""
-    return _catalan(n-1)
-
-def _subtree_ratio(k, n):
-    """Calculate the ratio of parses for k-leaf subtree in n-leaf tree"""
-    return _catalan(n-k) * _catalan(k-1) / _catalan(n-1)
-
 class Lexicon:
     """Lexicon class for storing model constructions."""
 
@@ -637,15 +625,15 @@ class BaselineModel:
         j = 0
         for i in range(1, clen):
             if compound[i] in self.forcesplit_list:
-                mainparts.append((j, compound[j:i]))
-                mainparts.append((i, compound[i:i+1]))
+                mainparts.append(compound[j:i])
+                mainparts.append(compound[i:i+1])
                 j = i + 1
         if j < clen:
-            mainparts.append((j, compound[j:]))
+            mainparts.append(compound[j:])
 
         # Use Viterbi algorithm to optimize the subsegments
         constructions = []
-        for i, part in mainparts:
+        for part in mainparts:
             constructions += self.get_viterbi_segments(part, addcount=addcount, 
                                                        maxlen=maxlen)[0]
         self.set_compound_analysis(compound, constructions)
