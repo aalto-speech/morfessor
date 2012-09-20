@@ -1408,8 +1408,6 @@ Interactive use (read corpus from user):
                         metavar='<file>')
     args = parser.parse_args(argv)
 
-    global show_progress_bar
-
     if args.verbose >= 2:
         loglevel = logging.DEBUG
     elif args.verbose >= 1:
@@ -1421,37 +1419,33 @@ Interactive use (read corpus from user):
     date_format = '%Y-%m-%d %H:%M:%S'
     default_formatter = logging.Formatter(logging_format, date_format)
     plain_formatter = logging.Formatter('%(message)s')
-    logging.basicConfig(level=loglevel, format=logging_format,
-                        datefmt=date_format)
+    logging.basicConfig(level=loglevel)
     _logger.propagate = False # do not forward messages to the root logger
 
-    if args.log_file is None:
-        ch = logging.StreamHandler(sys.stderr)
-        ch.setLevel(loglevel)
-        # If sys.stderr is redirected to a file, don't display
-        # progress bar but print time tags to log messages
-        if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
-            show_progress_bar = False
-            ch.setFormatter(default_formatter)
-        else:
-            ch.setFormatter(plain_formatter)
-            # Don't display progress bar if debug messages are printed
-            # to stderr stream
-            if loglevel == logging.DEBUG:
-                show_progress_bar = False
-        _logger.addHandler(ch)
-    else:
-        ch = logging.StreamHandler()
-        fh = logging.FileHandler(args.log_file, mode='w')
-        ch.setLevel(max(loglevel, logging.INFO)) # no debug messages
+    # Basic settings for logging to the error stream
+    ch = logging.StreamHandler()
+    ch.setLevel(loglevel)
+    ch.setFormatter(default_formatter)
+    _logger.addHandler(ch)
+
+    #Settings for when log_file is present
+    if args.log_file is not None:
+        fh = logging.FileHandler(args.log_file, 'w')
         fh.setLevel(loglevel)
-        ch.setFormatter(plain_formatter)
         fh.setFormatter(default_formatter)
-        _logger.addHandler(ch)
         _logger.addHandler(fh)
-        # If sys.stderr is redirected to a file, don't display progress bar
-        if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
-            show_progress_bar = False
+
+        #If logging to a file, make INFO the highest level for the error stream
+        ch.setLevel(max(loglevel, logging.INFO))
+        #Also, don't print timestamps to the error stream
+        ch.setFormatter(plain_formatter)
+
+    # If debug messages are printed to screen or if stderr is not a tty (but
+    # a pipe or a file), don't show the progressbar
+    global show_progress_bar
+    if ch.level > logging.INFO or\
+       (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty()):
+        show_progress_bar = False
 
     if args.loadfile is None and args.loadsegfile is None and \
             len(args.trainfiles) == 0:
@@ -1515,15 +1509,10 @@ Interactive use (read corpus from user):
         if args.trainmode == 'batch':
             data = Corpus(args.separator)
             for f in args.trainfiles:
-                if f == '-':
-                    _logger.info("Loading training data from standard input")
-                else:
-                    _logger.info("Loading training data file '%s'..." % f)
                 if args.list:
                     data.load(io.read_corpus_list_file(f))
                 else:
                     data.load(io.read_corpus_file(f))
-                _logger.info("Done.")
             model.batch_init(data, args.freqthreshold, dampfunc)
             if args.splitprob is not None:
                 model.random_split_init(data, args.splitprob)
