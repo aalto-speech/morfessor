@@ -6,9 +6,9 @@ import codecs
 import io
 import locale
 
-__all__ = ['InputFormatError','batch_train','online_train',
-           'Lexicon','BaselineModel', 'Corpus',
-           'Annotations']
+__all__ = ['InputFormatError', 'MorfessorIO', 
+           'Lexicon', 'BaselineModel', 'Corpus', 'Annotations',
+           'batch_train', 'online_train']
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
@@ -106,25 +106,6 @@ def _progress(iter_func):
     #If all else fails, just return the original.
     return iter_func
 
-class Error(Exception):
-    """Base class for exceptions in this module."""
-    pass
-
-class InputFormatError(Error):
-    """Exception raised for problems in reading input files.
-
-    Attributes:
-        file -- input file in which the error occurred
-        line -- line that caused the error
-
-    """
-    def __init__(self, filename, line):
-        self.file = filename
-        self.line = line
-
-    def __str__(self):
-        return "illegal format in file '%s'" % self.file
-
 _log2pi = math.log(2*math.pi)
 
 def _constructions_to_str(constructions):
@@ -157,64 +138,24 @@ def frequency_distribution_cost(types, tokens):
     return logfactorial(tokens-1) - logfactorial(types-1) - \
         logfactorial(tokens-types)
 
-class Lexicon:
-    """Lexicon class for storing model constructions."""
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
 
-    def __init__(self):
-        """Initialize a new lexicon instance."""
-        self.atoms = collections.Counter()
-        self.atoms_total = 0
-        self.logtokensum = 0.0
+class InputFormatError(Error):
+    """Exception raised for problems in reading input files.
 
-    def add(self, construction):
-        """Add construction to the lexicon (with optional data)."""
-        for atom in itertools.chain(construction, [None]):
-            oldc = self.atoms[atom]
-            self.logtokensum += (oldc+1) * math.log(oldc+1)
-            if oldc > 0:
-                self.logtokensum -= oldc * math.log(oldc)
-            self.atoms[atom] += 1
+    Attributes:
+        file -- input file in which the error occurred
+        line -- line that caused the error
 
-        self.atoms_total += len(construction) + 1
+    """
+    def __init__(self, filename, line):
+        self.file = filename
+        self.line = line
 
-    def remove(self, construction):
-        """Remove construction from the lexicon."""
-        for atom in itertools.chain(construction, [None]):
-            oldc = self.atoms[atom]
-            self.logtokensum -= oldc * math.log(oldc)
-            if oldc > 1:
-                self.logtokensum += (oldc-1) * math.log(oldc-1)
-            self.atoms[atom] -= 1
-            if self.atoms[atom] == 0:
-                del self.atoms[atom]
-
-        self.atoms_total -= len(construction) + 1
-
-    def get_cost(self):
-        """Return the current coding cost of the lexicon."""
-        if self.atoms_total < 2:
-            return 0.0
-        cost = frequency_distribution_cost(len(self.atoms), self.atoms_total)
-        cost += self.atoms_total * math.log(self.atoms_total) - self.logtokensum
-        return cost
-
-    def get_codelength(self, construction):
-        """Return an approximate codelength for new construction."""
-        l = len(construction) + 1
-        cost = l * math.log(self.atoms_total + l)
-        for atom in itertools.chain(construction, [None]):
-            if atom in self.atoms:
-                c = self.atoms[atom]
-            else:
-                c = 1
-            cost -= math.log(c)
-        return cost
-
-# rcount = root count (from corpus)
-# count = total count of the node
-# splitloc = location of the split for virtual constructions; otherwise 0
-ConstrNode = collections.namedtuple('ConstrNode',
-                                    ['rcount', 'count', 'splitloc'])
+    def __str__(self):
+        return "illegal format in file '%s'" % self.file
 
 class MorfessorIO:
     """Definition for all input and output files. Also handles all
@@ -242,8 +183,8 @@ class MorfessorIO:
         """
         _logger.info("Reading segmentations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
-            count, compound = line.split()
-            yield int(count), line.split(self.construction_separator)
+            count, compound = line.split(' ', 1)
+            yield int(count), compound.split(self.construction_separator)
         _logger.info("Done.")
 
     def write_segmentation_file(self, file_name, segmentations, **kwargs):
@@ -411,6 +352,64 @@ class MorfessorIO:
 
         raise UnicodeError("Can not determine encoding of input files")
 
+class Lexicon:
+    """Lexicon class for storing model constructions."""
+
+    def __init__(self):
+        """Initialize a new lexicon instance."""
+        self.atoms = collections.Counter()
+        self.atoms_total = 0
+        self.logtokensum = 0.0
+
+    def add(self, construction):
+        """Add construction to the lexicon (with optional data)."""
+        for atom in itertools.chain(construction, [None]):
+            oldc = self.atoms[atom]
+            self.logtokensum += (oldc+1) * math.log(oldc+1)
+            if oldc > 0:
+                self.logtokensum -= oldc * math.log(oldc)
+            self.atoms[atom] += 1
+
+        self.atoms_total += len(construction) + 1
+
+    def remove(self, construction):
+        """Remove construction from the lexicon."""
+        for atom in itertools.chain(construction, [None]):
+            oldc = self.atoms[atom]
+            self.logtokensum -= oldc * math.log(oldc)
+            if oldc > 1:
+                self.logtokensum += (oldc-1) * math.log(oldc-1)
+            self.atoms[atom] -= 1
+            if self.atoms[atom] == 0:
+                del self.atoms[atom]
+
+        self.atoms_total -= len(construction) + 1
+
+    def get_cost(self):
+        """Return the current coding cost of the lexicon."""
+        if self.atoms_total < 2:
+            return 0.0
+        cost = frequency_distribution_cost(len(self.atoms), self.atoms_total)
+        cost += self.atoms_total * math.log(self.atoms_total) - self.logtokensum
+        return cost
+
+    def get_codelength(self, construction):
+        """Return an approximate codelength for new construction."""
+        l = len(construction) + 1
+        cost = l * math.log(self.atoms_total + l)
+        for atom in itertools.chain(construction, [None]):
+            if atom in self.atoms:
+                c = self.atoms[atom]
+            else:
+                c = 1
+            cost -= math.log(c)
+        return cost
+
+# rcount = root count (from corpus)
+# count = total count of the node
+# splitloc = location of the split for virtual constructions; otherwise 0
+ConstrNode = collections.namedtuple('ConstrNode',
+                                    ['rcount', 'count', 'splitloc'])
 
 class BaselineModel:
     """Morfessor Baseline model class."""
@@ -463,6 +462,46 @@ class BaselineModel:
         """Return the number of compound boundaries encoded by the model."""
         return self.boundaries
 
+    def get_construction_count(self, construction):
+        """Return the count of the construction."""
+        return self.analyses[construction].count
+
+    def get_constructions(self):
+        """Return a list of the present constructions and their counts."""
+        return sorted((c, node.count) for c, node in self.analyses.items()
+                      if node.splitloc == 0)
+
+    def add(self, compound, c):
+        """Add compound with count c to data."""
+        self.modify_construction_count(compound, c)
+        oldrc = self.analyses[compound].rcount
+        self.analyses[compound] = \
+            self.analyses[compound]._replace(rcount=oldrc+c)
+        self.boundaries += c
+
+    def remove(self, construction):
+        """Remove construction from model."""
+        rcount, count, splitloc = self.analyses[construction]
+        self.modify_construction_count(construction, -count)
+        return rcount, count
+
+    def expand_compound(self, compound):
+        """Return a list containing the constructions of a compound."""
+        return self.expand_construction(compound)
+
+    def expand_construction(self, construction):
+        """Expand a virtual construction to its parts."""
+        rcount, count, splitloc = self.analyses[construction]
+        constructions = []
+        if splitloc > 0:
+            prefix = construction[:splitloc]
+            suffix = construction[splitloc:]
+            constructions += self.expand_construction(prefix)
+            constructions += self.expand_construction(suffix)
+        else:
+            constructions.append(construction)
+        return constructions
+
     def update_corpus_weight(self, factor):
         """Multiply the corpus cost weight by given factor."""
         self.corpuscostweight *= factor
@@ -486,8 +525,8 @@ class BaselineModel:
     def load_segmentations(self, segmentations):
         """Load model from existing segmentations.
 
-        segmentations should be an iterator providing a count and a
-        segmentation
+        The argument should be an iterator providing a count and a
+        segmentation.
         """
 
         for count, segmentation in segmentations:
@@ -496,8 +535,7 @@ class BaselineModel:
             self.set_compound_analysis(comp, segmentation)
 
     def get_segmentations(self):
-        """Retrieve segmentations for all real compounds """
-
+        """Retrieve segmentations for all compounds encoded by the model."""
         for w in sorted(self.analyses.keys()):
             c = self.analyses[w].rcount
             if c > 0:
@@ -575,46 +613,6 @@ class BaselineModel:
             self.modify_construction_count(prefix, count)
             self.modify_construction_count(suffix, count)
             construction = suffix
-
-    def add(self, compound, c):
-        """Add compound with count c to data."""
-        self.modify_construction_count(compound, c)
-        oldrc = self.analyses[compound].rcount
-        self.analyses[compound] = \
-            self.analyses[compound]._replace(rcount=oldrc+c)
-        self.boundaries += c
-
-    def remove(self, construction):
-        """Remove construction from model."""
-        rcount, count, splitloc = self.analyses[construction]
-        self.modify_construction_count(construction, -count)
-        return rcount, count
-
-    def expand_compound(self, compound):
-        """Return a list containing the analysis of compound."""
-        return self.expand_construction(compound)
-
-    def expand_construction(self, construction):
-        """Return a list containing the analysis of the construction."""
-        rcount, count, splitloc = self.analyses[construction]
-        constructions = []
-        if splitloc > 0:
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
-            constructions += self.expand_construction(prefix)
-            constructions += self.expand_construction(suffix)
-        else:
-            constructions.append(construction)
-        return constructions
-
-    def get_construction_count(self, construction):
-        """Return the count of the construction."""
-        return self.analyses[construction].count
-
-    def get_real_constructions(self):
-        """Return the -real- constructions and their count."""
-        return sorted((c, node.count) for c, node in self.analyses.items()
-            if node.splitloc == 0)
 
     def get_cost(self):
         """Return current model cost."""
@@ -1374,8 +1372,8 @@ Interactive use (read corpus from user):
                         default=None, metavar='<regexp>',
                         help="atom separator regexp (default %(default)s)")
     parser.add_argument('-c', '--compbreak', dest="cseparator", type=str,
-        default='\W+', metavar='<regexp>',
-        help="compound separator regexp "+
+                        default='\W+', metavar='<regexp>',
+                        help="compound separator regexp "+
                         "(default '%(default)s')")
     parser.add_argument('-C', '--compoundlistdata', dest="list", default=False,
                         action='store_true',
@@ -1394,7 +1392,7 @@ Interactive use (read corpus from user):
                         "default %(default)s)")
     parser.add_argument('-E', '--encoding', dest='encoding',
                         help="Specify encoding of input and output files. By "
-                             "default the local encoding and utf-8 are tried")
+                        "default the local encoding and utf-8 are tried")
     parser.add_argument('-f', '--forcesplit', dest="forcesplit", type=list,
                         default=['-'], metavar='<list>',
                         help="force split on given atoms (default %(default)s)")
@@ -1607,7 +1605,7 @@ Interactive use (read corpus from user):
 
     # Output lexicon
     if args.lexfile is not None:
-        io.write_lexicon_file(args.lexfile, model.get_real_constructions())
+        io.write_lexicon_file(args.lexfile, model.get_constructions())
 
     # Segment test data
     if len(args.testfiles) > 0:
