@@ -161,7 +161,6 @@ class Lexicon:
 
     def __init__(self):
         """Initialize a new lexicon instance."""
-        self.constructions = set()
         self.atoms = collections.Counter()
         self.atoms_total = 0
         self.logtokensum = 0.0
@@ -176,7 +175,6 @@ class Lexicon:
             self.atoms[atom] += 1
 
         self.atoms_total += len(construction) + 1
-        self.constructions.add(construction)
 
     def remove(self, construction):
         """Remove construction from the lexicon."""
@@ -190,11 +188,6 @@ class Lexicon:
                 del self.atoms[atom]
 
         self.atoms_total -= len(construction) + 1
-        self.constructions.remove(construction)
-
-    def get_constructions(self):
-        """Return a list of the constructions in the lexicon."""
-        return list(self.constructions)
 
     def get_cost(self):
         """Return the current coding cost of the lexicon."""
@@ -343,7 +336,7 @@ class MorfessorIO:
 
         with self._open_text_file_write(file_name) as file_obj:
             for construction, count in lexicon:
-                file_obj.write("%s %s\n" % (construction, count))
+                file_obj.write("%d %s\n" % (count, construction))
 
         _logger.info("Done.")
 
@@ -623,6 +616,11 @@ class BaselineModel:
     def get_construction_count(self, construction):
         """Return the count of the construction."""
         return self.analyses[construction].count
+
+    def get_real_constructions(self):
+        """Return the -real- constructions and their count."""
+        return sorted((c, node.count) for c, node in self.analyses.items()
+            if node.splitloc == 0)
 
     def get_cost(self):
         """Return current model cost."""
@@ -1542,10 +1540,7 @@ Interactive use (read corpus from user):
 
     # Output lexicon
     if args.lexfile is not None:
-        constructions = model.get_lexicon().get_constructions()
-        data = [(c, model.get_construction_count(c)) for c in sorted(
-            constructions)]
-        io.write_lexicon_file(args.lexfile,data)
+        io.write_lexicon_file(args.lexfile, model.get_real_constructions())
 
     # Segment test data
     if len(args.testfiles) > 0:
