@@ -2,6 +2,7 @@
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
+import codecs
 import io
 import locale
 
@@ -221,6 +222,117 @@ class Lexicon:
 ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
+class MorfessorModelIO:
+    def __init__(self, encoding=None, construction_separator=' + ',
+                 comment_start='#', compound_separator='\W+',
+                 atom_separator=None):
+        self.encoding = encoding
+
+        self.construction_separator = construction_separator
+        self.comment_start = comment_start
+        self.compound_separator = compound_separator
+        self.atom_separator = atom_separator
+        if atom_separator is not None:
+            self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
+
+    def read_segmentation_file(self, file_name, **kwargs):
+        for line in self._read_text_file(file_name):
+            count, compound = line.split()
+            yield int(count), line.split(self.construction_separator)
+
+    def write_segmentation_file(self, file_name, segmentations, **kwargs):
+        _logger.info("Saving model segmentations to '%s'..." % file_name)
+        with self._open_text_file_write(file_name) as file_obj:
+            d = datetime.datetime.now().replace(microsecond=0)
+            file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
+                           (__version__, d.isoformat(' ')), )
+
+            for count, segmentation in segmentations:
+                file_obj.write(
+                    "%s %s\n" %
+                    (count, self.construction_separator.join(segmentations))
+                )
+
+        _logger.info("Done.")
+
+    def read_corpus_files(self, file_names):
+        for file_name in file_names:
+            for item in self.read_corpus_file(file_name):
+                yield item
+
+    def read_corpus_file(self, file_name, **kwargs):
+        compound_sep = re.compile(self.compound_separator, re.UNICODE)
+        for line in self._read_text_file(file_name):
+            for compound in compound_sep.split(line):
+                if len(compound) > 0:
+                    yield 1, compound, self._split_atoms(compound)
+
+    def read_corpus_list_file(self, file_name, **kwargs):
+        for line in self._read_text_file(file_name):
+            try:
+                count, compound = line.split(None, 1)
+                yield int(count), compound, self._split_atoms(compound)
+            except ValueError:
+                yield 1, line, self._split_atoms(line)
+
+    def read_annotations_file(self, file_name, **kwargs):
+        pass
+
+    def read_binary_model_file(self, file_name):
+        pass
+
+    def write_binary_model_file(self, file_name, model):
+        pass
+
+    def _split_atoms(self, construction):
+        if self.atom_separator is None:
+            return construction
+        else:
+            return self._atom_sep_re.split(construction)
+
+    def _open_text_file_write(self, file_name):
+        if file_name.endswith('.gz'):
+            file_obj = gzip.open(file_name, 'w')
+        else:
+            file_obj = open(file_name, 'w')
+
+        return codecs.getwriter(self.encoding)(file_obj)
+
+    def _read_text_file(self, file_name):
+        if self.encoding is None:
+            self.encoding = self._find_encoding(file_name)
+
+        if file_name.endswith('.gz'):
+            file_obj = gzip.open(file_name)
+        else:
+            file_obj = open(file_name)
+
+        for line in codecs.getreader(self.encoding)(file_obj):
+            line.rstrip()
+
+            if line > 0 and not line.startswith(self.comment_start):
+                yield line
+
+    def _find_encoding(self, *files):
+        test_encodings = [locale.getpreferredencoding(), 'utf-8']
+        for encoding in test_encodings:
+            ok = True
+            for f in files:
+                if f is None:
+                    continue
+                try:
+                    for _ in io.open(f, encoding=encoding):
+                        pass
+                except UnicodeDecodeError:
+                    ok = False
+                    break
+            if ok:
+                _logger.info("Detected %s encoding" % encoding)
+                return encoding
+
+        raise UnicodeError("Can not determine encoding of input files")
+
+
 class BaselineModel:
     """Morfessor Baseline model class."""
 
@@ -293,57 +405,25 @@ class BaselineModel:
             self.sweightbalance = False
         self.penaltylogprob = -9999.9 # cost for missing a known construction
 
-    def load_segmentations(self, segfile):
-        """Load model from existing segmentations in the given file.
+    def load_segmentations(self, segmentations):
+        """Load model from existing segmentations.
 
-        The format of the input file should be that of the Morfessor
-        1.0 software. I.e., each line stores one compound as:
-
-        <count> <construction1> + <construction2> + ... + <constructionN>
-
+        segmentations should be an iterator providing a count and a
+        segmentation
         """
-        if segfile.endswith('.gz'):
-            fobj = gzip.open(segfile, 'r')
-        else:
-            fobj = open(segfile, 'r')
 
-        for line in fobj:
-            if re.search('^#', line):
-                continue
-            m = re.search('^[ \t]*([0-9]+)[ \t](.+)$', line)
-            if not m:
-                raise InputFormatError(segfile, line)
-            count = int(m.group(1))
-            comp = m.group(2)
-            constructions = comp.split(' + ')
-            comp = "".join(constructions)
+        for count, segmentation in segmentations:
+            comp = "".join(segmentation)
             self.add(comp, count)
-            self.set_compound_analysis(comp, constructions)
-        fobj.close()
+            self.set_compound_analysis(comp, segmentation)
 
-    def save_segmentations(self, segfile):
-        """Save model segmentations into the given file,
+    def get_segmentations(self):
+        """Retrieve segmentations for all real compounds """
 
-        The format of output file follows that of the Morfessor 1.0
-        software. I.e., each line stores one compound as:
-
-        <count> <construction1> + <construction2> + ... + <constructionN>
-
-        """
-        if segfile.endswith('.gz'):
-            fobj = gzip.open(segfile, 'w')
-        else:
-            fobj = open(segfile, 'w')
-        d = datetime.datetime.now().replace(microsecond = 0)
-        fobj.write("# Output from Morfessor Baseline %s, %s\n" %
-                   (__version__, d.isoformat(' ')))
         for w in sorted(self.analyses.keys()):
             c = self.analyses[w].rcount
             if c > 0:
-                # w is a real compound in training data
-                constructions = self.expand_compound(w)
-                fobj.write("%s %s\n" % (c, ' + '.join(map(str, constructions))))
-        fobj.close()
+                yield c, self.expand_compound(w)
 
     def batch_init(self, corpus, freqthreshold = 1, cfunc = lambda x: x):
         """Initialize the model for batch training.
@@ -825,147 +905,25 @@ class Corpus:
         else:
             return len(re.split(self.atom_sep, c))
 
-    def load(self, datafile, compound_sep = ' *', comment_re = "^#"):
-        """Load corpus from file.
-
-        Arguments:
-            datafile -- filename
-            compound_sep -- regexp for separating compounds
-            comment_re -- regexp for comment lines
-
-        """
-        self.files.append((datafile, 'corpus', compound_sep, comment_re))
-        if datafile == '-':
-            fobj = sys.stdin
-        elif datafile[-3:] == '.gz':
-            fobj = gzip.open(datafile, 'r')
-        else:
-            fobj = open(datafile, 'r')
-
-        for line in fobj:
-            if re.search(comment_re, line):
-                continue
-            if compound_sep is None or compound_sep == '':
-                # Line is one compound
-                compounds = [line.rstrip()]
-            else:
-                # Line can have several compounds
-                compounds = re.split(compound_sep, line.rstrip())
-            linetext = []
-            for comp in compounds:
-                if comp == '':
-                    continue
-                if comp in self.strdict:
-                    i = self.strdict[comp]
-                    self.counts[i] += 1
-                else:
-                    i = self.types
-                    self.strdict[comp] = i
-                    self.compounds.append(comp)
-                    self.counts.append(1)
-                    self.types += 1
-                    self.max_clen = max(self.max_clen,
-                                        self.get_compound_len(comp))
-                self.tokens += 1
-                linetext.append(i)
-            self.text.append(linetext)
-
-        if datafile != '-':
-            fobj.close()
-
-    def generator(self, datafiles, compound_sep = ' *', comment_re = "^#"):
-        """Return a iterator for the compounds in a set of corpora.
-
-        Arguments:
-            datafiles -- a list of filenames
-            compound_sep -- regexp for separating compounds (default ' *')
-            comment_re -- regexp for comment lines (default '^#')
-
-        """
-        for datafile in datafiles:
-            self.files.append((datafile, compound_sep, comment_re))
-            if datafile == '-':
-                fobj = sys.stdin
-            elif datafile[-3:] == '.gz':
-                fobj = gzip.open(datafile, 'r')
-            else:
-                fobj = open(datafile, 'r')
-
-            for line in fobj:
-                if re.search(comment_re, line):
-                    continue
-                if compound_sep is None or compound_sep == '':
-                    # Line is one compound
-                    compounds = [line.rstrip()]
-                else:
-                    # Line can have several compounds
-                    compounds = re.split(compound_sep, line.rstrip())
-                linetext = []
-                for comp in compounds:
-                    if comp == '':
-                        continue
-                    if comp in self.strdict:
-                        i = self.strdict[comp]
-                        self.counts[i] += 1
-                    else:
-                        i = self.types
-                        self.strdict[comp] = i
-                        self.compounds.append(comp)
-                        self.counts.append(1)
-                        self.types += 1
-                        self.max_clen = max(self.max_clen,
-                                            self.get_compound_len(comp))
-                    self.tokens += 1
-                    linetext.append(i)
-                    yield self.get_compound_atoms(i)
-                self.text.append(linetext)
-            if datafile != '-':
-                fobj.close()
-
-    def load_from_list(self, datafile, comment_re = "^#"):
-        """Load data from a file that contains a list of compounds.
-
-        Arguments:
-            datafile -- filename
-            comment_re -- regexp for comment lines (default '^#')
-
-        Each line of the datafile should contain one compound,
-        optionally preceeded by an integer count. (If the count is not
-        available, it is assumed to be one.)
-        """
-        self.files.append((datafile, 'list', comment_re))
-        if datafile == '-':
-            fobj = sys.stdin
-        elif datafile[-3:] == '.gz':
-            fobj = gzip.open(datafile, 'r')
-        else:
-            fobj = open(datafile, 'r')
-        for line in fobj:
-            if re.search(comment_re, line):
-                continue
-            m = re.search('^([0-9]+) +(.*)$', line)
-            if m:
-                count = int(m.group(1))
-                comp = m.group(2)
-            else:
-                count = 1
-                comp = line.rstrip()
-            if comp == '':
-                continue
-            if comp in self.strdict:
-                i = self.strdict[comp]
+    def load(self, data_iter, yield_atoms=False):
+        for count, compound, atoms in data_iter:
+            if compound in self.strdict:
+                i = self.strdict[compound]
                 self.counts[i] += count
             else:
                 i = self.types
-                self.strdict[comp] = i
-                self.compounds.append(comp)
+                self.strdict[compound] = i
+                self.compounds.append(compound)
                 self.counts.append(count)
                 self.types += 1
-                self.max_clen = max(self.max_clen,
-                                    self.get_compound_len(comp))
-            self.tokens += count
-        if datafile != '-':
-            fobj.close()
+                self.max_clen = max(self.max_clen, len(atoms))
+
+            if yield_atoms:
+                for _ in range(count):
+                    self.tokens += 1
+                    yield atoms
+            else:
+                self.tokens += count
 
 
 class Annotations:
@@ -1286,8 +1244,8 @@ Interactive use (read corpus from user):
                         default=None, metavar='<regexp>',
                         help="atom separator regexp (default %(default)s)")
     parser.add_argument('-c', '--compbreak', dest="cseparator", type=str,
-                        default=' +', metavar='<regexp>',
-                        help="compound separator regexp "+
+        default='\W+', metavar='<regexp>',
+        help="compound separator regexp "+
                         "(default '%(default)s')")
     parser.add_argument('-C', '--compoundlistdata', dest="list", default=False,
                         action='store_true',
@@ -1429,10 +1387,9 @@ Interactive use (read corpus from user):
     if args.randseed is not None:
         random.seed(args.randseed)
 
-    if args.encoding is None:
-        args.encoding = _find_encoding(args.annofile, args.develfile,
-                                       args.loadfile, args.loadsegfile,
-                                       *(args.trainfiles +args.testfiles))
+    model_io = MorfessorModelIO(encoding=args.encoding,
+        compound_separator=args.cseparator, atom_separator=args.separator)
+
     # Load annotated data if specified
     if args.annofile is not None:
         annotations = Annotations()
@@ -1462,7 +1419,8 @@ Interactive use (read corpus from user):
                               annotations = annotations,
                               annotatedcorpusweight = args.annotationweight,
                               use_skips = args.skips)
-        model.load_segmentations(args.loadsegfile)
+        model.load_segmentations(
+            model_io.read_segmentation_file(args.loadsegfile))
         _logger.info("Done.")
     else:
         model = BaselineModel(forcesplit_list = args.forcesplit,
@@ -1491,9 +1449,9 @@ Interactive use (read corpus from user):
                 else:
                     _logger.info("Loading training data file '%s'..." % f)
                 if args.list:
-                    data.load_from_list(f)
+                    data.load(model_io.read_corpus_list_file(f))
                 else:
-                    data.load(f, args.cseparator)
+                    data.load(model_io.read_corpus_file(f))
                 _logger.info("Done.")
             model.batch_init(data, args.freqthreshold, dampfunc)
             if args.splitprob is not None:
@@ -1501,11 +1459,13 @@ Interactive use (read corpus from user):
             e, c = batch_train(model, develannots = develannots)
         elif args.trainmode == 'online':
             data = Corpus(args.separator)
-            dataiter = data.generator(args.trainfiles, args.cseparator)
+            dataiter = data.load(model_io.read_corpus_files(args.trainfiles),
+                yield_atoms=True)
             e, c = online_train(model, dataiter, args.epochinterval, dampfunc)
         elif args.trainmode == 'online+batch':
             data = Corpus(args.separator)
-            dataiter = data.generator(args.trainfiles, args.cseparator)
+            dataiter = data.load(model_io.read_corpus_files(args.trainfiles),
+                yield_atoms=True)
             e, c = online_train(model, dataiter, args.epochinterval, dampfunc)
             e, c = batch_train(model, develannots = develannots)
         else:
@@ -1523,10 +1483,8 @@ Interactive use (read corpus from user):
         _logger.info("Done.")
 
     if args.savesegfile is not None:
-        _logger.info("Saving model segmentations to '%s'..." %
-                     args.savesegfile)
-        model.save_segmentations(args.savesegfile)
-        _logger.info("Done.")
+        model_io.write_segmentation_file(args.savesegfile,
+            model.get_segmentations())
 
     # Output lexicon
     if args.lexfile is not None:
@@ -1555,7 +1513,8 @@ Interactive use (read corpus from user):
         else:
             fobj = open(args.outfile, 'w')
         testdata = Corpus(args.separator)
-        testdataiter = testdata.generator(args.testfiles, args.cseparator)
+        testdataiter = testdata.load(model_io.read_corpus_files(args.testfiles),
+            yield_atoms=True)
         i = 0
         for compound in testdataiter:
             constructions, logp = model.get_viterbi_segments(compound)
@@ -1572,5 +1531,5 @@ if __name__ == "__main__":
     try:
         main(sys.argv[1:])
     except Exception as e:
-        _logger.error("Fatal Error %s %s" % (type(e), e.message))
+        _logger.error("Fatal Error %s %s" % (type(e), str(e)))
         raise
