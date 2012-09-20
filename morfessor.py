@@ -2,6 +2,9 @@
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
+import codecs
+import io
+import locale
 
 __all__ = ['InputFormatError','batch_train','online_train',
            'Lexicon','BaselineModel', 'Corpus',
@@ -49,6 +52,7 @@ def _progress(iter_func):
 
     If the progressbar module is available a fancy percentage style
     progressbar is displayed. Otherwise 20 dots are printed as indicator.
+
     """
 
     if not show_progress_bar:
@@ -93,7 +97,6 @@ def _progress(iter_func):
                 return ProgressBar()(iter_func(*args, **kwargs))
             else:
                 return iter_func(*args, **kwargs)
-
         return i
 
     #In case of an iterator, wrap it in a ProgressBar and return it.
@@ -126,7 +129,8 @@ _log2pi = math.log(2*math.pi)
 
 def _constructions_to_str(constructions):
     """Return a readable string for a list of constructions."""
-    if isinstance(constructions[0], str):
+    if isinstance(constructions[0], str) or \
+            isinstance(constructions[0], unicode):
         # Constructions are strings
         return ' + '.join(constructions)
     else:
@@ -158,7 +162,6 @@ class Lexicon:
 
     def __init__(self):
         """Initialize a new lexicon instance."""
-        self.constructions = set()
         self.atoms = collections.Counter()
         self.atoms_total = 0
         self.logtokensum = 0.0
@@ -173,7 +176,6 @@ class Lexicon:
             self.atoms[atom] += 1
 
         self.atoms_total += len(construction) + 1
-        self.constructions.add(construction)
 
     def remove(self, construction):
         """Remove construction from the lexicon."""
@@ -187,11 +189,6 @@ class Lexicon:
                 del self.atoms[atom]
 
         self.atoms_total -= len(construction) + 1
-        self.constructions.remove(construction)
-
-    def get_constructions(self):
-        """Return a list of the constructions in the lexicon."""
-        return list(self.constructions)
 
     def get_cost(self):
         """Return the current coding cost of the lexicon."""
@@ -216,8 +213,204 @@ class Lexicon:
 # rcount = root count (from corpus)
 # count = total count of the node
 # splitloc = location of the split for virtual constructions; otherwise 0
-ConstrNode = collections.namedtuple('ConstrNode', 
+ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
+
+class MorfessorIO:
+    """Definition for all input and output files. Also handles all
+    encoding issues.
+
+    """
+
+    def __init__(self, encoding=None, construction_separator=' + ',
+                 comment_start='#', compound_separator='\W+',
+                 atom_separator=None):
+        self.encoding = encoding
+        self.construction_separator = construction_separator
+        self.comment_start = comment_start
+        self.compound_separator = compound_separator
+        self.atom_separator = atom_separator
+        if atom_separator is not None:
+            self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
+
+    def read_segmentation_file(self, file_name, **kwargs):
+        """Read segmentation file.
+
+        File format:
+        <count> <construction1><sep><construction2><sep>...<constructionN>
+
+        """
+        _logger.info("Reading segmentations from '%s'..." % file_name)
+        for line in self._read_text_file(file_name):
+            count, compound = line.split()
+            yield int(count), line.split(self.construction_separator)
+        _logger.info("Done.")
+
+    def write_segmentation_file(self, file_name, segmentations, **kwargs):
+        """Write segmentation file. 
+
+        File format:
+        <count> <construction1><sep><construction2><sep>...<constructionN>
+
+        """
+        _logger.info("Saving segmentations to '%s'..." % file_name)
+        with self._open_text_file_write(file_name) as file_obj:
+            d = datetime.datetime.now().replace(microsecond=0)
+            file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
+                           (__version__, d))
+
+            for count, segmentation in segmentations:
+                file_obj.write(
+                    "%d %s\n" % 
+                    (count, self.construction_separator.join(segmentation)))
+        _logger.info("Done.")
+
+    def read_corpus_files(self, file_names):
+        """Read one or more corpus files.
+
+        Yield for each compound found (1, compound, compound_atoms).
+
+        """
+        for file_name in file_names:
+            for item in self.read_corpus_file(file_name):
+                yield item
+
+    def read_corpus_file(self, file_name):
+        """Read one corpus file. 
+
+        Yield for each compound found (1, compound, compound_atoms).
+
+        """
+        _logger.info("Reading corpus from '%s'..." % file_name)
+        compound_sep = re.compile(self.compound_separator, re.UNICODE)
+        for line in self._read_text_file(file_name):
+            for compound in compound_sep.split(line):
+                if len(compound) > 0:
+                    yield 1, compound, self._split_atoms(compound)
+        _logger.info("Done.")
+
+    def read_corpus_list_file(self, file_name):
+        """Read a corpus list file. 
+
+        Each line has the format:
+        <count> <compound>
+
+        Yield tuples (count, compound, compound_atoms) for each compound.
+        """
+        _logger.info("Reading corpus from list '%s'..." % file_name)
+        for line in self._read_text_file(file_name):
+            try:
+                count, compound = line.split(None, 1)
+                yield int(count), compound, self._split_atoms(compound)
+            except ValueError:
+                yield 1, line, self._split_atoms(line)
+        _logger.info("Done.")
+
+    def read_annotations_file(self, file_name):
+        """Read a annotations file. 
+
+        Each line has the format:
+        <compound> <constr1> <constr2> ... <constrN>, <constr1>...<constrN>, ...
+
+        Yield tuples (compound, list(analyses)).
+        """
+        _logger.info("Reading annotations from '%s'..." % file_name)
+        for line in self._read_text_file(file_name):
+            analyses = []
+            compound, analyses_line = line.split(None, 1)
+
+            for analysis in analyses_line.split(','):
+                analyses.append(analysis.split(' '))
+
+            yield compound, analyses
+        _logger.info("Done.")
+
+    def write_lexicon_file(self, file_name, lexicon):
+        """Write to a Lexicon file all constructions and their counts."""
+        _logger.info("Saving model lexicon to '%s'..." % file_name)
+        with self._open_text_file_write(file_name) as file_obj:
+            for construction, count in lexicon:
+                file_obj.write("%d %s\n" % (count, construction))
+        _logger.info("Done.")
+
+    def read_binary_model_file(self, file_name):
+        """Read a pickled model from file."""
+        _logger.info("Loading model from '%s'..." % file_name)
+        with open(file_name, 'rb') as fobj:
+            model = pickle.load(fobj)
+        _logger.info("Done.")
+        return model
+
+    def write_binary_model_file(self, file_name, model):
+        """Pickle a model to a file."""
+        _logger.info("Saving model to '%s'..." % file_name)
+        with open(file_name, 'wb') as fobj:
+            pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
+        _logger.info("Done.")
+
+    def _split_atoms(self, construction):
+        """Split construction to its atoms."""
+        if self.atom_separator is None:
+            return construction
+        else:
+            return self._atom_sep_re.split(construction)
+
+    def _open_text_file_write(self, file_name):
+        """Open a file with the appropriate compression and encoding"""
+        if file_name == '-':
+            file_obj = sys.stdout
+        elif file_name.endswith('.gz'):
+            file_obj = gzip.open(file_name, 'wb')
+        else:
+            file_obj = open(file_name, 'wb')
+
+        return codecs.getwriter(self.encoding)(file_obj)
+
+    def _read_text_file(self, file_name):
+        """Read a text file with the appropriate compression and encoding.
+
+        Comments and empty lines are skipped.
+
+        """
+        if self.encoding is None:
+            self.encoding = self._find_encoding(file_name)
+        if file_name == '-':
+            file_obj = sys.stdin
+        elif file_name.endswith('.gz'):
+            file_obj = gzip.open(file_name, 'rb')
+        else:
+            file_obj = open(file_name, 'rb')
+
+        for line in codecs.getreader(self.encoding)(file_obj):
+            line = line.rstrip()
+            if len(line) > 0 and not line.startswith(self.comment_start):
+                yield line
+
+    def _find_encoding(self, *files):
+        """Test default encodings on reading files.
+
+        If no encoding is given, this method can be used to test which
+        of the default encodings would work.
+
+        """
+        test_encodings = [locale.getpreferredencoding(), 'utf-8']
+        for encoding in test_encodings:
+            ok = True
+            for f in files:
+                if f == '-':
+                    continue
+                try:
+                    for _ in io.open(f, encoding=encoding):
+                        pass
+                except UnicodeDecodeError:
+                    ok = False
+                    break
+            if ok:
+                _logger.info("Detected %s encoding" % encoding)
+                return encoding
+
+        raise UnicodeError("Can not determine encoding of input files")
+
 
 class BaselineModel:
     """Morfessor Baseline model class."""
@@ -234,7 +427,7 @@ class BaselineModel:
             annotations -- annotated data for semi-supervised training
             annotatedcorpusweight -- weight for annotated corpus cost; if
                                       None, determine based on data sizes
-            use_skips -- randomly skip frequently occurring constructions 
+            use_skips -- randomly skip frequently occurring constructions
                          to speed up training
 
         """
@@ -263,7 +456,7 @@ class BaselineModel:
 
     def get_compounds(self):
         """Return the compound types stored by the model."""
-        return filter(lambda w: self.analyses[w].rcount > 0, 
+        return filter(lambda w: self.analyses[w].rcount > 0,
                       self.analyses.keys())
 
     def get_compound_boundary_num(self):
@@ -290,57 +483,25 @@ class BaselineModel:
             self.sweightbalance = False
         self.penaltylogprob = -9999.9 # cost for missing a known construction
 
-    def load_segmentations(self, segfile):
-        """Load model from existing segmentations in the given file.
+    def load_segmentations(self, segmentations):
+        """Load model from existing segmentations.
 
-        The format of the input file should be that of the Morfessor
-        1.0 software. I.e., each line stores one compound as:
-
-        <count> <construction1> + <construction2> + ... + <constructionN>
-
+        segmentations should be an iterator providing a count and a
+        segmentation
         """
-        if segfile.endswith('.gz'):
-            fobj = gzip.open(segfile, 'r')
-        else:
-            fobj = open(segfile, 'r')
 
-        for line in fobj:
-            if re.search('^#', line):
-                continue
-            m = re.search('^[ \t]*([0-9]+)[ \t](.+)$', line)
-            if not m:
-                raise InputFormatError(segfile, line)
-            count = int(m.group(1))
-            comp = m.group(2)
-            constructions = comp.split(' + ')
-            comp = "".join(constructions)
+        for count, segmentation in segmentations:
+            comp = "".join(segmentation)
             self.add(comp, count)
-            self.set_compound_analysis(comp, constructions)
-        fobj.close()
+            self.set_compound_analysis(comp, segmentation)
 
-    def save_segmentations(self, segfile):
-        """Save model segmentations into the given file,
+    def get_segmentations(self):
+        """Retrieve segmentations for all real compounds """
 
-        The format of output file follows that of the Morfessor 1.0
-        software. I.e., each line stores one compound as:
-
-        <count> <construction1> + <construction2> + ... + <constructionN>
-
-        """
-        if segfile.endswith('.gz'):
-            fobj = gzip.open(segfile, 'w')
-        else:
-            fobj = open(segfile, 'w')
-        d = datetime.datetime.now().replace(microsecond = 0)
-        fobj.write("# Output from Morfessor Baseline %s, %s\n" %
-                   (__version__, d.isoformat(' ')))
         for w in sorted(self.analyses.keys()):
             c = self.analyses[w].rcount
             if c > 0:
-                # w is a real compound in training data
-                constructions = self.expand_compound(w)
-                fobj.write("%s %s\n" % (c, ' + '.join(map(str, constructions))))
-        fobj.close()
+                yield c, self.expand_compound(w)
 
     def batch_init(self, corpus, freqthreshold = 1, cfunc = lambda x: x):
         """Initialize the model for batch training.
@@ -409,7 +570,7 @@ class BaselineModel:
             rcount, count = self.remove(construction)
             prefix = parts[p]
             suffix = reduce(lambda x, y: x + y, parts[p+1:])
-            self.analyses[construction] = ConstrNode(rcount, count, 
+            self.analyses[construction] = ConstrNode(rcount, count,
                                                      len(prefix))
             self.modify_construction_count(prefix, count)
             self.modify_construction_count(suffix, count)
@@ -449,6 +610,11 @@ class BaselineModel:
     def get_construction_count(self, construction):
         """Return the count of the construction."""
         return self.analyses[construction].count
+
+    def get_real_constructions(self):
+        """Return the -real- constructions and their count."""
+        return sorted((c, node.count) for c, node in self.analyses.items()
+            if node.splitloc == 0)
 
     def get_cost(self):
         """Return current model cost."""
@@ -761,8 +927,8 @@ class BaselineModel:
                 if construction in self.analyses and \
                         self.analyses[construction].splitloc == 0:
                     if self.analyses[construction].count <= 0:
-                        raise Error("Construction count of '%s' is %s" % 
-                                    (construction, 
+                        raise Error("Construction count of '%s' is %s" %
+                                    (construction,
                                      self.analyses[construction].count))
                     cost += logtokens - \
                         math.log(self.analyses[construction].count + addcount)
@@ -849,6 +1015,7 @@ class Corpus:
         """Check whether the corpus has given compound.
 
         The input can be either a string or a list/tuple of strings.
+
         """
         if type(c) == str:
             return (c in self.strdict)
@@ -870,147 +1037,37 @@ class Corpus:
         else:
             return len(re.split(self.atom_sep, c))
 
-    def load(self, datafile, compound_sep = ' *', comment_re = "^#"):
-        """Load corpus from file.
-
-        Arguments:
-            datafile -- filename
-            compound_sep -- regexp for separating compounds
-            comment_re -- regexp for comment lines
-
-        """
-        self.files.append((datafile, 'corpus', compound_sep, comment_re))
-        if datafile == '-':
-            fobj = sys.stdin
-        elif datafile[-3:] == '.gz':
-            fobj = gzip.open(datafile, 'r')
-        else:
-            fobj = open(datafile, 'r')
-
-        for line in fobj:
-            if re.search(comment_re, line):
-                continue
-            if compound_sep is None or compound_sep == '':
-                # Line is one compound
-                compounds = [line.rstrip()]
-            else:
-                # Line can have several compounds
-                compounds = re.split(compound_sep, line.rstrip())
-            linetext = []
-            for comp in compounds:
-                if comp == '':
-                    continue
-                if comp in self.strdict:
-                    i = self.strdict[comp]
-                    self.counts[i] += 1
-                else:
-                    i = self.types
-                    self.strdict[comp] = i
-                    self.compounds.append(comp)
-                    self.counts.append(1)
-                    self.types += 1
-                    self.max_clen = max(self.max_clen,
-                                        self.get_compound_len(comp))
-                self.tokens += 1
-                linetext.append(i)
-            self.text.append(linetext)
-
-        if datafile != '-':
-            fobj.close()
-
-    def generator(self, datafiles, compound_sep = ' *', comment_re = "^#"):
-        """Return a iterator for the compounds in a set of corpora.
-
-        Arguments:
-            datafiles -- a list of filenames
-            compound_sep -- regexp for separating compounds (default ' *')
-            comment_re -- regexp for comment lines (default '^#')
-
-        """
-        for datafile in datafiles:
-            self.files.append((datafile, compound_sep, comment_re))
-            if datafile == '-':
-                fobj = sys.stdin
-            elif datafile[-3:] == '.gz':
-                fobj = gzip.open(datafile, 'r')
-            else:
-                fobj = open(datafile, 'r')
-
-            for line in fobj:
-                if re.search(comment_re, line):
-                    continue
-                if compound_sep is None or compound_sep == '':
-                    # Line is one compound
-                    compounds = [line.rstrip()]
-                else:
-                    # Line can have several compounds
-                    compounds = re.split(compound_sep, line.rstrip())
-                linetext = []
-                for comp in compounds:
-                    if comp == '':
-                        continue
-                    if comp in self.strdict:
-                        i = self.strdict[comp]
-                        self.counts[i] += 1
-                    else:
-                        i = self.types
-                        self.strdict[comp] = i
-                        self.compounds.append(comp)
-                        self.counts.append(1)
-                        self.types += 1
-                        self.max_clen = max(self.max_clen,
-                                            self.get_compound_len(comp))
-                    self.tokens += 1
-                    linetext.append(i)
-                    yield self.get_compound_atoms(i)
-                self.text.append(linetext)
-            if datafile != '-':
-                fobj.close()
-
-    def load_from_list(self, datafile, comment_re = "^#"):
-        """Load data from a file that contains a list of compounds.
-
-        Arguments:
-            datafile -- filename
-            comment_re -- regexp for comment lines (default '^#')
-
-        Each line of the datafile should contain one compound,
-        optionally preceeded by an integer count. (If the count is not
-        available, it is assumed to be one.)
-        """
-        self.files.append((datafile, 'list', comment_re))
-        if datafile == '-':
-            fobj = sys.stdin
-        elif datafile[-3:] == '.gz':
-            fobj = gzip.open(datafile, 'r')
-        else:
-            fobj = open(datafile, 'r')
-        for line in fobj:
-            if re.search(comment_re, line):
-                continue
-            m = re.search('^([0-9]+) +(.*)$', line)
-            if m:
-                count = int(m.group(1))
-                comp = m.group(2)
-            else:
-                count = 1
-                comp = line.rstrip()
-            if comp == '':
-                continue
-            if comp in self.strdict:
-                i = self.strdict[comp]
+    def load(self, data_iter):
+        for count, compound, atoms in data_iter:
+            if compound in self.strdict:
+                i = self.strdict[compound]
                 self.counts[i] += count
             else:
                 i = self.types
-                self.strdict[comp] = i
-                self.compounds.append(comp)
+                self.strdict[compound] = i
+                self.compounds.append(compound)
                 self.counts.append(count)
                 self.types += 1
-                self.max_clen = max(self.max_clen,
-                                    self.get_compound_len(comp))
+                self.max_clen = max(self.max_clen, len(atoms))
+
             self.tokens += count
-        if datafile != '-':
-            fobj.close()
+
+    def load_gen(self, data_iter):
+        for count, compound, atoms in data_iter:
+            if compound in self.strdict:
+                i = self.strdict[compound]
+                self.counts[i] += count
+            else:
+                i = self.types
+                self.strdict[compound] = i
+                self.compounds.append(compound)
+                self.counts.append(count)
+                self.types += 1
+                self.max_clen = max(self.max_clen, len(atoms))
+
+            for _ in range(count):
+                self.tokens += 1
+                yield atoms
 
 
 class Annotations:
@@ -1041,7 +1098,7 @@ class Annotations:
         """Return the analyses for the given compound."""
         return self.analyses[compound]
 
-    def load(self, datafile, separator = ' ', altseparator = ', '):
+    def load(self, data):
         """Load annotations from file.
 
         Arguments:
@@ -1050,22 +1107,11 @@ class Annotations:
             comment_re -- regexp for separating alternative analyses
 
         """
-        if datafile[-3:] == '.gz':
-            fobj = gzip.open(datafile, 'r')
-        else:
-            fobj = open(datafile, 'r')
-        for line in fobj:
-            try:
-                compound, analyses_part = line.split("\t")
-            except ValueError:
-                raise InputFormatError(datafile, line)
-            alt_analyses = analyses_part.split(altseparator)
-            analyses = []
-            for i in range(len(alt_analyses)):
-                analyses.append(alt_analyses[i].split(separator))
+
+        for compound, analyses in data:
             self.analyses[compound] = analyses
-            self.types += 1
-        fobj.close()
+
+        self.types = len(self.analyses)
 
 def _boundary_recall(prediction, reference):
     """Calculate average boundary recall for given segmentations."""
@@ -1328,8 +1374,8 @@ Interactive use (read corpus from user):
                         default=None, metavar='<regexp>',
                         help="atom separator regexp (default %(default)s)")
     parser.add_argument('-c', '--compbreak', dest="cseparator", type=str,
-                        default=' +', metavar='<regexp>',
-                        help="compound separator regexp "+
+        default='\W+', metavar='<regexp>',
+        help="compound separator regexp "+
                         "(default '%(default)s')")
     parser.add_argument('-C', '--compoundlistdata', dest="list", default=False,
                         action='store_true',
@@ -1346,6 +1392,9 @@ Interactive use (read corpus from user):
                         default=10000, metavar='<int>',
                         help="epoch interval for online training ("+
                         "default %(default)s)")
+    parser.add_argument('-E', '--encoding', dest='encoding',
+                        help="Specify encoding of input and output files. By "
+                             "default the local encoding and utf-8 are tried")
     parser.add_argument('-f', '--forcesplit', dest="forcesplit", type=list,
                         default=['-'], metavar='<list>',
                         help="force split on given atoms (default %(default)s)")
@@ -1416,8 +1465,6 @@ Interactive use (read corpus from user):
                         metavar='<file>')
     args = parser.parse_args(argv)
 
-    global show_progress_bar
-
     if args.verbose >= 2:
         loglevel = logging.DEBUG
     elif args.verbose >= 1:
@@ -1429,37 +1476,33 @@ Interactive use (read corpus from user):
     date_format = '%Y-%m-%d %H:%M:%S'
     default_formatter = logging.Formatter(logging_format, date_format)
     plain_formatter = logging.Formatter('%(message)s')
-    logging.basicConfig(level=loglevel, format=logging_format,
-                        datefmt=date_format)
+    logging.basicConfig(level=loglevel)
     _logger.propagate = False # do not forward messages to the root logger
 
-    if args.log_file is None:
-        ch = logging.StreamHandler(sys.stderr)
-        ch.setLevel(loglevel)
-        # If sys.stderr is redirected to a file, don't display
-        # progress bar but print time tags to log messages
-        if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
-            show_progress_bar = False
-            ch.setFormatter(default_formatter)
-        else:
-            ch.setFormatter(plain_formatter)
-            # Don't display progress bar if debug messages are printed
-            # to stderr stream
-            if loglevel == logging.DEBUG:
-                show_progress_bar = False
-        _logger.addHandler(ch)
-    else:
-        ch = logging.StreamHandler()
-        fh = logging.FileHandler(args.log_file, mode='w')
-        ch.setLevel(max(loglevel, logging.INFO)) # no debug messages
+    # Basic settings for logging to the error stream
+    ch = logging.StreamHandler()
+    ch.setLevel(loglevel)
+    ch.setFormatter(default_formatter)
+    _logger.addHandler(ch)
+
+    #Settings for when log_file is present
+    if args.log_file is not None:
+        fh = logging.FileHandler(args.log_file, 'w')
         fh.setLevel(loglevel)
-        ch.setFormatter(plain_formatter)
         fh.setFormatter(default_formatter)
-        _logger.addHandler(ch)
         _logger.addHandler(fh)
-        # If sys.stderr is redirected to a file, don't display progress bar
-        if hasattr(sys.stderr,'isatty') and not sys.stderr.isatty():
-            show_progress_bar = False
+
+        #If logging to a file, make INFO the highest level for the error stream
+        ch.setLevel(max(loglevel, logging.INFO))
+        #Also, don't print timestamps to the error stream
+        ch.setFormatter(plain_formatter)
+
+    # If debug messages are printed to screen or if stderr is not a tty (but
+    # a pipe or a file), don't show the progressbar
+    global show_progress_bar
+    if ch.level > logging.INFO or \
+            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty()):
+        show_progress_bar = False
 
     if args.loadfile is None and args.loadsegfile is None and \
             len(args.trainfiles) == 0:
@@ -1468,25 +1511,28 @@ Interactive use (read corpus from user):
     if args.randseed is not None:
         random.seed(args.randseed)
 
+    io = MorfessorIO(encoding=args.encoding, 
+                     compound_separator=args.cseparator, 
+                     atom_separator=args.separator)
+    
     # Load annotated data if specified
     if args.annofile is not None:
         annotations = Annotations()
-        annotations.load(args.annofile)
+        annotations.load(io.read_annotations_file(args.annofile))
     else:
         annotations = None
 
     if args.develfile is not None:
         develannots = Annotations()
-        develannots.load(args.develfile)
+        develannots.load(io.read_annotations_file(args.develfile))
     else:
         develannots = None
 
+
     # Load exisiting model or create a new one
     if args.loadfile is not None:
-        _logger.info("Loading model from '%s'..." % args.loadfile)
-        with open(args.loadfile, 'rb') as fobj:
-            model = pickle.load(fobj)
-        _logger.info("Done.")
+        model = io.read_binary_model_file(args.loadfile)
+
         if annotations is not None:
             # Add annotated data to model
             model.set_annotations(annotations, args.annotationweight)
@@ -1497,7 +1543,7 @@ Interactive use (read corpus from user):
                               annotations = annotations,
                               annotatedcorpusweight = args.annotationweight,
                               use_skips = args.skips)
-        model.load_segmentations(args.loadsegfile)
+        model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
         _logger.info("Done.")
     else:
         model = BaselineModel(forcesplit_list = args.forcesplit,
@@ -1525,30 +1571,26 @@ Interactive use (read corpus from user):
         data = Corpus(args.separator)
         if args.trainmode == 'batch':
             for f in args.trainfiles:
-                if f == '-':
-                    _logger.info("Loading training data from standard input")
-                else:
-                    _logger.info("Loading training data file '%s'..." % f)
                 if args.list:
-                    data.load_from_list(f)
+                    data.load(io.read_corpus_list_file(f))
                 else:
-                    data.load(f, args.cseparator)
-                _logger.info("Done.")
+                    data.load(io.read_corpus_file(f))
             if len(model.get_compounds()) == 0:
                 model.batch_init(data, args.freqthreshold, dampfunc)
                 if args.splitprob is not None:
                     model.random_split_init(data, args.splitprob)
-            e, c = batch_train(model, args.algorithm, develannots = develannots)
+            e, c = batch_train(model, args.algorithm, develannots=develannots)
         elif args.trainmode == 'online':
-            dataiter = data.generator(args.trainfiles, args.cseparator)
+            data = Corpus(args.separator)
+            dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
             e, c = online_train(model, dataiter, args.algorithm, 
                                 args.epochinterval, dampfunc)
         elif args.trainmode == 'online+batch':
-            dataiter = data.generator(args.trainfiles, args.cseparator)
+            data = Corpus(args.separator)
+            dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
             e, c = online_train(model, dataiter, args.algorithm, 
                                 args.epochinterval, dampfunc)
-            e, c = batch_train(model, args.algorithm, 
-                               develannots = develannots)
+            e, c = batch_train(model, args.algorithm, develannots=develannots)
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
         te = time.time()
@@ -1558,56 +1600,35 @@ Interactive use (read corpus from user):
 
     # Save model
     if args.savefile is not None:
-        _logger.info("Saving model to '%s'..." % args.savefile)
-        with open(args.savefile, 'wb') as fobj:
-            pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
-        _logger.info("Done.")
+        io.write_binary_model_file(args.savefile, model)
 
     if args.savesegfile is not None:
-        _logger.info("Saving model segmentations to '%s'..." %
-                     args.savesegfile)
-        model.save_segmentations(args.savesegfile)
-        _logger.info("Done.")
+        io.write_segmentation_file(args.savesegfile, model.get_segmentations())
 
     # Output lexicon
     if args.lexfile is not None:
-        if args.lexfile == '-':
-            fobj = sys.stdout
-        elif args.lexfile[-3:] == '.gz':
-            fobj = gzip.open(args.lexfile, 'w')
-        else:
-            fobj = open(args.lexfile, 'w')
-        if args.lexfile != '-':
-            _logger.info("Saving model lexicon to '%s'..." % args.lexfile)
-        for construction in sorted(model.get_lexicon().get_constructions()):
-            fobj.write("%s %s\n" % (model.get_construction_count(construction), 
-                                    construction))
-        if args.lexfile != '-':
-            fobj.close()
-            _logger.info("Done.")
+        io.write_lexicon_file(args.lexfile, model.get_real_constructions())
 
     # Segment test data
     if len(args.testfiles) > 0:
         _logger.info("Segmenting test data...")
-        if args.outfile == '-':
-            fobj = sys.stdout
-        elif args.outfile[-3:] == '.gz':
-            fobj = gzip.open(args.outfile, 'w')
-        else:
-            fobj = open(args.outfile, 'w')
-        testdata = Corpus(args.separator)
-        testdataiter = testdata.generator(args.testfiles, args.cseparator)
-        i = 0
-        for compound in testdataiter:
-            constructions, logp = model.get_viterbi_segments(compound)
-            fobj.write("%s\n" % ' '.join(constructions))
-            i += 1
-            if i % 10000 == 0:
-                sys.stderr.write(".")
-        sys.stderr.write("\n")
-        if args.outfile != '-':
-            fobj.close()
+        with io._open_text_file_write(args.outfile) as fobj:
+            testdata = Corpus(args.separator)
+            testdataiter = \
+                testdata.load_gen(io.read_corpus_files(args.testfiles))
+            i = 0
+            for compound in testdataiter:
+                constructions, logp = model.get_viterbi_segments(compound)
+                fobj.write("%s\n" % ' '.join(constructions))
+                i += 1
+                if i % 10000 == 0:
+                    sys.stderr.write(".")
+            sys.stderr.write("\n")
         _logger.info("Done.")
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except Exception as e:
+        _logger.error("Fatal Error %s %s" % (type(e), str(e)))
+        raise
