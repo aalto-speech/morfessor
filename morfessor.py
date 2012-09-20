@@ -228,7 +228,8 @@ class Lexicon:
 
 # rcount = root count (from corpus)
 # count = total count of the node
-# splitloc = location of the split for virtual constructions; otherwise 0
+# splitloc = list of location of the possible splits for virtual
+# constructions; empty if real construction
 ConstrNode = collections.namedtuple('ConstrNode', 
                                     ['rcount', 'count', 'splitloc'])
 
@@ -427,7 +428,7 @@ class BaselineModel:
                 prefix = parts[p]
                 suffix = reduce(lambda x, y: x + y, parts[p+1:])
                 self.analyses[construction] = ConstrNode(rcount, count, 
-                                                         len(prefix))
+                                                         [len(prefix)])
                 self.modify_construction_count(prefix, count)
                 self.modify_construction_count(suffix, count)
                 construction = suffix
@@ -459,9 +460,9 @@ class BaselineModel:
         """Return a list containing the analysis of the construction."""
         rcount, count, splitloc = self.analyses[construction]
         constructions = []
-        if splitloc > 0:
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
+        if len(splitloc) > 0:
+            prefix = construction[:splitloc[0]]
+            suffix = construction[splitloc[0]:]
             constructions += self.expand_construction(prefix)
             constructions += self.expand_construction(suffix)
         else:
@@ -530,7 +531,7 @@ class BaselineModel:
                 self.annotatedtokens += c
         self.annotatedlogtokensum = 0.0
         for m, f in self.annotatedconstructions.items():
-            if m in self.analyses and self.analyses[m].splitloc == 0:
+            if m in self.analyses and len(self.analyses[m].splitloc) == 0:
                 self.annotatedlogtokensum += \
                     f * math.log(self.analyses[m].count)
             else:
@@ -552,7 +553,7 @@ class BaselineModel:
         for analysis in choices:
             cost = 0.0
             for m in analysis:
-                if m in self.analyses and self.analyses[m].splitloc == 0:
+                if m in self.analyses and len(self.analyses[m].splitloc) == 0:
                     cost += math.log(self.tokens) - \
                         math.log(self.analyses[m].count)
                 else:
@@ -579,7 +580,7 @@ class BaselineModel:
 
         if construction[0] in self.forcesplit_list:
             rcount, count = self.remove(construction)
-            self.analyses[construction] = ConstrNode(rcount, count, 1)
+            self.analyses[construction] = ConstrNode(rcount, count, [1])
             self.modify_construction_count(construction[:1], count)
             self.modify_construction_count(construction[1:], count)
             return [construction[0]] + self.recursive_optimize(construction[1:])
@@ -588,10 +589,10 @@ class BaselineModel:
         self.modify_construction_count(construction, count)
         mincost = self.get_cost()
         self.modify_construction_count(construction, -count)
-        splitloc = 0
+        splitloc = []
         for i in range(1, len(construction)):
             if construction[i] in self.forcesplit_list:
-                splitloc = i
+                splitloc = [i]
                 break
             prefix = construction[:i]
             suffix = construction[i:]
@@ -602,12 +603,12 @@ class BaselineModel:
             self.modify_construction_count(suffix, -count)
             if cost <= mincost:
                 mincost = cost
-                splitloc = i
-        if splitloc > 0:
+                splitloc = [i]
+        if len(splitloc) > 0:
             # Virtual construction
             self.analyses[construction] = ConstrNode(rcount, count, splitloc)
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
+            prefix = construction[:splitloc[0]]
+            suffix = construction[splitloc[0]:]
             self.modify_construction_count(prefix, count)
             self.modify_construction_count(suffix, count)
             lp = self.recursive_optimize(prefix)
@@ -617,7 +618,7 @@ class BaselineModel:
                 return lp + lp
         else:
             # Real construction
-            self.analyses[construction] = ConstrNode(rcount, 0, 0)
+            self.analyses[construction] = ConstrNode(rcount, 0, [])
             self.modify_construction_count(construction, count)
             return [construction]
 
@@ -672,17 +673,17 @@ class BaselineModel:
         if construction in self.analyses:
             rcount, count, splitloc = self.analyses[construction]
         else:
-            rcount, count, splitloc = 0, 0, 0
+            rcount, count, splitloc = 0, 0, []
         newcount = count + dcount
         if newcount == 0:
             del self.analyses[construction]
         else:
             self.analyses[construction] = ConstrNode(rcount, newcount,
                                                      splitloc)
-        if splitloc > 0:
+        if len(splitloc) > 0:
             # Virtual construction
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
+            prefix = construction[:splitloc[0]]
+            suffix = construction[splitloc[0]:]
             self.modify_construction_count(prefix, dcount)
             self.modify_construction_count(suffix, dcount)
         else:
@@ -781,7 +782,7 @@ class BaselineModel:
                 cost = grid[pt][0]
                 construction = compound[pt:t]
                 if construction in self.analyses and \
-                        self.analyses[construction].splitloc == 0:
+                        len(self.analyses[construction].splitloc) == 0:
                     if self.analyses[construction].count <= 0:
                         raise Error("Construction count of '%s' is %s" % 
                                     (construction, 
