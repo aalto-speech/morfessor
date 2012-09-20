@@ -158,12 +158,13 @@ def _catalan(n):
     return math.factorial(2*n) / math.factorial(n) / math.factorial(n+1)
 
 def _number_of_parses(n):
-    """Calculate the number of parses for a binary tree with n leaves"""
+    """Calculate the number of parses for a binary tree with n leaves."""
     return _catalan(n-1)
 
-def _subtree_ratio(k, n):
-    """Calculate the ratio of parses for k-leaf subtree in n-leaf tree"""
-    return _catalan(n-k) * _catalan(k-1) / _catalan(n-1)
+def _subtree_parses(k, n):
+    """Calculate the amount of parses that have a k-leaf subtree in a
+    binary n-leaf tree."""
+    return _catalan(n-k) * _catalan(k-1)
 
 class Lexicon:
     """Lexicon class for storing model constructions."""
@@ -406,26 +407,35 @@ class BaselineModel:
         parts.append(compound[startpos:len(compound)])
         return parts
 
-    def set_compound_analysis(self, compound, parts):
+    def set_compound_analysis(self, compound, parts, ptype='rbranch'):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
             compound -- compound to split
             parts -- desired constructions of the compound
+            ptype -- type of the parse tree to use 
 
-        The analysis is stored internally as a right-branching tree.
+        If ptype is 'rbranch', the analysis is stored internally as a
+        right-branching tree. If ptype is 'all', count of the compound
+        is divided equally to all possible parses.
 
         """
-        construction = compound
-        for p in range(len(parts)-1):
-            rcount, count = self.remove(construction)
-            prefix = parts[p]
-            suffix = reduce(lambda x, y: x + y, parts[p+1:])
-            self.analyses[construction] = ConstrNode(rcount, count, 
-                                                     len(prefix))
-            self.modify_construction_count(prefix, count)
-            self.modify_construction_count(suffix, count)
-            construction = suffix
+        if ptype == 'rbranch':
+            construction = compound
+            for p in range(len(parts)-1):
+                rcount, count = self.remove(construction)
+                prefix = parts[p]
+                suffix = reduce(lambda x, y: x + y, parts[p+1:])
+                self.analyses[construction] = ConstrNode(rcount, count, 
+                                                         len(prefix))
+                self.modify_construction_count(prefix, count)
+                self.modify_construction_count(suffix, count)
+                construction = suffix
+        elif ptype == 'all':
+            rcount, count = self.remove(compound)
+            # FIXME
+        else:
+            raise Error("Unknown parse type '%s'" % ptype)
 
     def add(self, compound, c):
         """Add compound with count c to data."""
