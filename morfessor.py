@@ -118,6 +118,26 @@ def _constructions_to_str(constructions):
         # Constructions are not strings (should be tuples of strings)
         return ' + '.join(map(lambda x: ' '.join(x), constructions))
 
+def _segmentation_to_splitloc(constructions):
+    """Return a list of split locations for a segmented compound."""
+    splitloc = []
+    i = 0
+    for c in constructions:
+        i += len(c)
+        splitloc.append(i)
+    return splitloc[:-1]
+
+def _splitloc_to_segmentation(compound, splitloc):
+    """Return segmentation corresponding to the list of split locations."""
+    parts = []
+    startpos = 0
+    for i in range(len(splitloc)):
+        endpos = splitloc[i]
+        parts.append(compound[startpos:endpos])
+        startpos = endpos
+    parts.append(compound[endpos:])
+    return parts
+
 def logfactorial(n):
     """Calculate logarithm of n!.
 
@@ -407,8 +427,9 @@ class Lexicon:
 
 # rcount = root count (from corpus)
 # count = total count of the node
-# splitloc = location of the split for virtual constructions; otherwise 0
-ConstrNode = collections.namedtuple('ConstrNode',
+# splitloc = list of location of the possible splits for virtual
+#            constructions; empty if real construction
+ConstrNode = collections.namedtuple('ConstrNode', 
                                     ['rcount', 'count', 'splitloc'])
 
 class BaselineModel:
@@ -469,7 +490,7 @@ class BaselineModel:
     def get_constructions(self):
         """Return a list of the present constructions and their counts."""
         return sorted((c, node.count) for c, node in self.analyses.items()
-                      if node.splitloc == 0)
+                      if len(node.splitloc) == 0)
 
     def add(self, compound, c):
         """Add compound with count c to data."""
@@ -493,11 +514,9 @@ class BaselineModel:
         """Expand a virtual construction to its parts."""
         rcount, count, splitloc = self.analyses[construction]
         constructions = []
-        if splitloc > 0:
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
-            constructions += self.expand_construction(prefix)
-            constructions += self.expand_construction(suffix)
+        if len(splitloc) > 0:
+            for child in _splitloc_to_segmentation(construction, splitloc):
+                constructions += self.expand_construction(child)
         else:
             constructions.append(construction)
         return constructions
@@ -527,8 +546,8 @@ class BaselineModel:
 
         The argument should be an iterator providing a count and a
         segmentation.
-        """
 
+        """
         for count, segmentation in segmentations:
             comp = "".join(segmentation)
             self.add(comp, count)
@@ -584,35 +603,50 @@ class BaselineModel:
             threshold -- probability of splitting at each position
 
         """
-        parts = []
-        startpos = 0
-        for i in range(1, len(compound)):
-            if random.random() < threshold:
-                parts.append(compound[startpos:i])
-                startpos = i
-        parts.append(compound[startpos:len(compound)])
-        return parts
+        splitloc = [i for i in range(1, len(compound)) 
+                    if random.random() < threshold]
+        return _splitloc_to_segmentation(splitloc)
 
-    def set_compound_analysis(self, compound, parts):
+    def set_compound_analysis(self, compound, parts, ptype='flat'):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
             compound -- compound to split
             parts -- desired constructions of the compound
+            ptype -- type of the parse tree to use 
 
-        The analysis is stored internally as a right-branching tree.
+        If ptype is 'rbranch', the analysis is stored internally as a
+        right-branching tree. If ptype is 'flat', the analysis is stored
+        directly to the compound's node.
 
         """
-        construction = compound
-        for p in range(len(parts)-1):
-            rcount, count = self.remove(construction)
-            prefix = parts[p]
-            suffix = reduce(lambda x, y: x + y, parts[p+1:])
-            self.analyses[construction] = ConstrNode(rcount, count,
-                                                     len(prefix))
-            self.modify_construction_count(prefix, count)
-            self.modify_construction_count(suffix, count)
-            construction = suffix
+        if len(parts) == 1:
+            rcount, count = self.remove(compound)
+            self.analyses[compound] = ConstrNode(rcount, 0, [])
+            self.modify_construction_count(compound, count)
+        elif ptype == 'flat':
+            rcount, count = self.remove(compound)
+            splitloc = _segmentation_to_splitloc(parts)
+            self.analyses[compound] = ConstrNode(rcount, count, splitloc)
+            for constr in parts:
+                self.modify_construction_count(constr, count)
+        elif ptype == 'rbranch':
+            construction = compound
+            for p in range(len(parts)):
+                rcount, count = self.remove(construction)
+                prefix = parts[p]
+                if p == len(parts) - 1:
+                    self.analyses[construction] = ConstrNode(rcount, 0, [])
+                    self.modify_construction_count(construction, count)
+                else:
+                    suffix = reduce(lambda x, y: x + y, parts[p+1:])
+                    self.analyses[construction] = ConstrNode(rcount, count, 
+                                                             [len(prefix)])
+                    self.modify_construction_count(prefix, count)
+                    self.modify_construction_count(suffix, count)
+                    construction = suffix
+        else:
+            raise Error("Unknown parse type '%s'" % ptype)
 
     def get_cost(self):
         """Return current model cost."""
@@ -672,7 +706,7 @@ class BaselineModel:
                 self.annotatedtokens += c
         self.annotatedlogtokensum = 0.0
         for m, f in self.annotatedconstructions.items():
-            if m in self.analyses and self.analyses[m].splitloc == 0:
+            if m in self.analyses and len(self.analyses[m].splitloc) == 0:
                 self.annotatedlogtokensum += \
                     f * math.log(self.analyses[m].count)
             else:
@@ -694,7 +728,7 @@ class BaselineModel:
         for analysis in choices:
             cost = 0.0
             for m in analysis:
-                if m in self.analyses and self.analyses[m].splitloc == 0:
+                if m in self.analyses and len(self.analyses[m].splitloc) == 0:
                     cost += math.log(self.tokens) - \
                         math.log(self.analyses[m].count)
                 else:
@@ -721,7 +755,7 @@ class BaselineModel:
 
         if construction[0] in self.forcesplit_list:
             rcount, count = self.remove(construction)
-            self.analyses[construction] = ConstrNode(rcount, count, 1)
+            self.analyses[construction] = ConstrNode(rcount, count, [1])
             self.modify_construction_count(construction[:1], count)
             self.modify_construction_count(construction[1:], count)
             return [construction[0]] + self.recursive_optimize(construction[1:])
@@ -730,10 +764,10 @@ class BaselineModel:
         self.modify_construction_count(construction, count)
         mincost = self.get_cost()
         self.modify_construction_count(construction, -count)
-        splitloc = 0
+        splitloc = []
         for i in range(1, len(construction)):
             if construction[i] in self.forcesplit_list:
-                splitloc = i
+                splitloc = [i]
                 break
             prefix = construction[:i]
             suffix = construction[i:]
@@ -744,12 +778,12 @@ class BaselineModel:
             self.modify_construction_count(suffix, -count)
             if cost <= mincost:
                 mincost = cost
-                splitloc = i
-        if splitloc > 0:
+                splitloc = [i]
+        if len(splitloc) > 0:
             # Virtual construction
             self.analyses[construction] = ConstrNode(rcount, count, splitloc)
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
+            prefix = construction[:splitloc[0]]
+            suffix = construction[splitloc[0]:]
             self.modify_construction_count(prefix, count)
             self.modify_construction_count(suffix, count)
             lp = self.recursive_optimize(prefix)
@@ -759,7 +793,7 @@ class BaselineModel:
                 return lp + lp
         else:
             # Real construction
-            self.analyses[construction] = ConstrNode(rcount, 0, 0)
+            self.analyses[construction] = ConstrNode(rcount, 0, [])
             self.modify_construction_count(construction, count)
             return [construction]
 
@@ -814,19 +848,18 @@ class BaselineModel:
         if construction in self.analyses:
             rcount, count, splitloc = self.analyses[construction]
         else:
-            rcount, count, splitloc = 0, 0, 0
+            rcount, count, splitloc = 0, 0, []
         newcount = count + dcount
         if newcount == 0:
             del self.analyses[construction]
         else:
             self.analyses[construction] = ConstrNode(rcount, newcount,
                                                      splitloc)
-        if splitloc > 0:
+        if len(splitloc) > 0:
             # Virtual construction
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
-            self.modify_construction_count(prefix, dcount)
-            self.modify_construction_count(suffix, dcount)
+            children = _splitloc_to_segmentation(construction, splitloc)
+            for child in children:
+                self.modify_construction_count(child, dcount)
         else:
             # Real construction
             self.tokens += dcount
@@ -923,7 +956,7 @@ class BaselineModel:
                 cost = grid[pt][0]
                 construction = compound[pt:t]
                 if construction in self.analyses and \
-                        self.analyses[construction].splitloc == 0:
+                        len(self.analyses[construction].splitloc) == 0:
                     if self.analyses[construction].count <= 0:
                         raise Error("Construction count of '%s' is %s" %
                                     (construction,
