@@ -738,64 +738,30 @@ class BaselineModel:
                 bestanalysis = analysis
         return bestanalysis, bestcost
 
-    def recursive_optimize(self, construction):
-        """Optimize segmentation of the construction by recursive splitting.
+    def force_split(self, compound):
+        """Return forced split of the compound."""
+        if len(self.forcesplit_list) == 0:
+            return [compound]
+        clen = len(compound)
+        j = 0
+        parts = []
+        for i in range(1, clen):
+            if compound[i] in self.forcesplit_list:
+                parts.append(compound[j:i])
+                parts.append(compound[i:i+1])
+                j = i + 1
+        if j < clen:
+            parts.append(compound[j:])
+        return parts
 
-        Returns list of segments.
-        """
-        if len(construction) == 1: # Single atom
-            return [construction]
-
-        if self.use_skips:
-            if construction in self.counter:
-                t = self.counter[construction]
-                if random.random() > 1.0/(max(1, t)):
-                    return self.expand_construction(construction)
-            self.counter[construction] += 1
-
-        if construction[0] in self.forcesplit_list:
-            rcount, count = self.remove(construction)
-            self.analyses[construction] = ConstrNode(rcount, count, [1])
-            self.modify_construction_count(construction[:1], count)
-            self.modify_construction_count(construction[1:], count)
-            return [construction[0]] + self.recursive_optimize(construction[1:])
-
-        rcount, count = self.remove(construction)
-        self.modify_construction_count(construction, count)
-        mincost = self.get_cost()
-        self.modify_construction_count(construction, -count)
-        splitloc = []
-        for i in range(1, len(construction)):
-            if construction[i] in self.forcesplit_list:
-                splitloc = [i]
-                break
-            prefix = construction[:i]
-            suffix = construction[i:]
-            self.modify_construction_count(prefix, count)
-            self.modify_construction_count(suffix, count)
-            cost = self.get_cost()
-            self.modify_construction_count(prefix, -count)
-            self.modify_construction_count(suffix, -count)
-            if cost <= mincost:
-                mincost = cost
-                splitloc = [i]
-        if len(splitloc) > 0:
-            # Virtual construction
-            self.analyses[construction] = ConstrNode(rcount, count, splitloc)
-            prefix = construction[:splitloc[0]]
-            suffix = construction[splitloc[0]:]
-            self.modify_construction_count(prefix, count)
-            self.modify_construction_count(suffix, count)
-            lp = self.recursive_optimize(prefix)
-            if suffix != prefix:
-                return lp + self.recursive_optimize(suffix)
-            else:
-                return lp + lp
-        else:
-            # Real construction
-            self.analyses[construction] = ConstrNode(rcount, 0, [])
-            self.modify_construction_count(construction, count)
-            return [construction]
+    def _test_skip(self, construction):
+        """Return true if construction should be skipped."""
+        if construction in self.counter:
+            t = self.counter[construction]
+            if random.random() > 1.0/(max(1, t)):
+                return True
+        self.counter[construction] += 1
+        return False
 
     def viterbi_optimize(self, compound, addcount=0, maxlen=30):
         """Optimize segmentation of the compound using the Viterbi algorithm.
@@ -810,32 +776,84 @@ class BaselineModel:
         clen = len(compound)
         if clen == 1: # Single atom
             return [compound]
-
-        if self.use_skips:
-            if compound in self.counter:
-                t = self.counter[compound]
-                if random.random() > 1.0/(max(1, t)):
-                    return self.expand_construction(compound)
-            self.counter[compound] += 1
-
+        if self.use_skips and self._test_skip(compound):
+            return self.expand_construction(compound)
         # Collect forced subsegments
-        mainparts = []
-        j = 0
-        for i in range(1, clen):
-            if compound[i] in self.forcesplit_list:
-                mainparts.append(compound[j:i])
-                mainparts.append(compound[i:i+1])
-                j = i + 1
-        if j < clen:
-            mainparts.append(compound[j:])
-
+        parts = self.force_split(compound)
         # Use Viterbi algorithm to optimize the subsegments
         constructions = []
-        for part in mainparts:
+        for part in parts:
             constructions += self.get_viterbi_segments(part, addcount=addcount, 
                                                        maxlen=maxlen)[0]
         self.set_compound_analysis(compound, constructions)
         return constructions
+
+    def recursive_optimize(self, compound):
+        """Optimize segmentation of the compound using recursive splitting.
+
+        Returns list of segments.
+        """
+        if len(compound) == 1: # Single atom
+            return [compound]
+        if self.use_skips and self._test_skip(compound):
+            return self.expand_construction(compound)
+        # Collect forced subsegments
+        parts = self.force_split(compound)
+        if len(parts) == 1:
+            # just one part
+            return self._recursive_split(compound)
+        self.set_compound_analysis(compound, parts)
+        # Use recursive algorithm to optimize the subsegments
+        constructions = []
+        for part in parts:
+            constructions += self._recursive_split(part)
+        return constructions
+
+    def _recursive_split(self, construction):
+        """Optimize segmentation of the construction by recursive splitting.
+
+        Returns list of segments.
+        """
+        if len(construction) == 1: # Single atom
+            return [construction]
+        if self.use_skips and self._test_skip(construction):
+            return self.expand_construction(construction)
+        rcount, count = self.remove(construction)
+
+        # Check all binary splits and no split
+        self.modify_construction_count(construction, count)
+        mincost = self.get_cost()
+        self.modify_construction_count(construction, -count)
+        splitloc = []
+        for i in range(1, len(construction)):
+            prefix = construction[:i]
+            suffix = construction[i:]
+            self.modify_construction_count(prefix, count)
+            self.modify_construction_count(suffix, count)
+            cost = self.get_cost()
+            self.modify_construction_count(prefix, -count)
+            self.modify_construction_count(suffix, -count)
+            if cost <= mincost:
+                mincost = cost
+                splitloc = [i]
+
+        if len(splitloc) > 0:
+            # Virtual construction
+            self.analyses[construction] = ConstrNode(rcount, count, splitloc)
+            prefix = construction[:splitloc[0]]
+            suffix = construction[splitloc[0]:]
+            self.modify_construction_count(prefix, count)
+            self.modify_construction_count(suffix, count)
+            lp = self._recursive_split(prefix)
+            if suffix != prefix:
+                return lp + self._recursive_split(suffix)
+            else:
+                return lp + lp
+        else:
+            # Real construction
+            self.analyses[construction] = ConstrNode(rcount, 0, [])
+            self.modify_construction_count(construction, count)
+            return [construction]
 
     def modify_construction_count(self, construction, dcount):
         """Modify the count of construction by dcount.
