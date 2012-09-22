@@ -199,11 +199,13 @@ class MorfessorIO:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
                            (__version__, d))
-
             for count, segmentation in segmentations:
-                file_obj.write(
-                    "%d %s\n" % 
-                    (count, self.construction_separator.join(segmentation)))
+                if atom_separator is None:
+                    s = self.construction_separator.join(segmentation)
+                else:
+                    s = self.construction_separator.join(
+                        map(lambda c: ' '.join(c), segmentation))
+                file_obj.write("%d %s\n" % (count, s))
         _logger.info("Done.")
 
     def read_corpus_files(self, file_names):
@@ -950,7 +952,7 @@ class BaselineModel:
                     bestpath = pt
             grid.append((bestcost, bestpath))
         constructions = []
-        path = grid[-1][1]
+        cost, path = grid[-1]
         lt = clen + 1
         while path is not None:
             t = path
@@ -958,7 +960,7 @@ class BaselineModel:
             path = grid[t][1]
             lt = t
         constructions.reverse()
-        return constructions, bestcost
+        return constructions, cost
 
 class Corpus:
     """Class for storing text corpus as a list of compound objects."""
