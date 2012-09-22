@@ -131,6 +131,7 @@ def _splitloc_to_segmentation(compound, splitloc):
     """Return segmentation corresponding to the list of split locations."""
     parts = []
     startpos = 0
+    endpos = 0
     for i in range(len(splitloc)):
         endpos = splitloc[i]
         parts.append(compound[startpos:endpos])
@@ -605,7 +606,7 @@ class BaselineModel:
         """
         splitloc = [i for i in range(1, len(compound)) 
                     if random.random() < threshold]
-        return _splitloc_to_segmentation(splitloc)
+        return _splitloc_to_segmentation(compound, splitloc)
 
     def set_compound_analysis(self, compound, parts, ptype='flat'):
         """Set analysis of compound to according to given segmentation.
