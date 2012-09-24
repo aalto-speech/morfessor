@@ -1537,12 +1537,10 @@ Interactive use (read corpus from user):
                     model.random_split_init(data, args.splitprob)
             e, c = model.train_batch(args.algorithm, develannots)
         elif args.trainmode == 'online':
-            data = Corpus(args.separator)
             dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
             e, c = model.train_online(dataiter, dampfunc, args.epochinterval,
                                       args.algorithm)
         elif args.trainmode == 'online+batch':
-            data = Corpus(args.separator)
             dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
             e, c = model.train_online(dataiter, dampfunc, args.epochinterval,
                                       args.algorithm)
