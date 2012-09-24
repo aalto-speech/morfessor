@@ -894,29 +894,26 @@ class BaselineModel:
         oldcost = 0.0
         newcost = self.get_cost()
         compounds = list(self.get_compounds())
-        ctypes = len(compounds)
         ctokens = self.get_compound_boundary_num()
         _logger.info("Compounds in training data: %s types / %s tokens" %
-                     (ctypes, ctokens))
+                     (len(compounds), ctokens))
         epochs = 0
         _logger.info("Starting batch training")
         _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
         forced_epochs = 1 # force this many epochs before stopping
         while True:
             # One epoch
-            indices = list(range(ctypes))
-            random.shuffle(indices)
+            random.shuffle(compounds)
 
-            for j in _progress(indices):
-                w = compounds[j]
+            for w in _progress(compounds):
                 if algorithm == 'recursive':
                     segments = self.recursive_optimize(w)
                 elif algorithm == 'viterbi':
                     segments = self.viterbi_optimize(w)
                 else:
                     raise Error("unknown algorithm '%s'" % algorithm)
-                _logger.debug("#%s: %s -> %s" %
-                              (j, w, _constructions_to_str(segments)))
+                _logger.debug("#%s -> %s" %
+                              (w, _constructions_to_str(segments)))
             epochs += 1
 
             _logger.debug("Cost before epoch update: %s" % self.get_cost())
