@@ -417,7 +417,6 @@ class BaselineModel:
     """Morfessor Baseline model class."""
 
     def __init__(self, forcesplit_list = [], corpusweight = 1.0,
-                 annotations = None, annotatedcorpusweight = None,
                  use_skips = False):
         """Initialize a new model instance.
 
@@ -425,9 +424,6 @@ class BaselineModel:
             forcesplit_list -- force segmentations on the characters in
                                the given list
             corpusweight -- weight for the corpus cost
-            annotations -- annotated data for semi-supervised training
-            annotatedcorpusweight -- weight for annotated corpus cost; if
-                                      None, determine based on data sizes
             use_skips -- randomly skip frequently occurring constructions
                          to speed up training
 
@@ -446,10 +442,8 @@ class BaselineModel:
         self.counter = collections.Counter() # Counter for random skipping
         self.corpuscostweight = corpusweight
         self.forcesplit_list = forcesplit_list
-        if annotations is not None:
-            self.set_annotations(annotations, annotatedcorpusweight)
-        else:
-            self.supervised = False
+
+        self.supervised = False
 
     def get_lexicon(self):
         """Return current lexicon instance."""
@@ -543,7 +537,7 @@ class BaselineModel:
             if c > 0:
                 yield c, self.expand_compound(w)
 
-    def batch_init(self, corpus, freqthreshold = 1, cfunc = lambda x: x):
+    def load_data(self, corpus, freqthreshold=1, cfunc=lambda x: x):
         """Initialize the model for batch training.
 
         Arguments:
@@ -894,6 +888,125 @@ class BaselineModel:
                     _logger.info("Corpus weight of annotated data set to %s"
                                  % self.annotatedcorpusweight)
 
+    def train_batch(self, algorithm='recursive', development_annotations=None,
+                    finish_threshold=0.005):
+        self.epoch_update(0)
+        oldcost = 0.0
+        newcost = self.get_cost()
+        compounds = list(self.get_compounds())
+        ctypes = len(compounds)
+        ctokens = self.get_compound_boundary_num()
+        _logger.info("Compounds in training data: %s types / %s tokens" %
+                     (ctypes, ctokens))
+        epochs = 0
+        _logger.info("Starting batch training")
+        _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
+        forced_epochs = 1 # force this many epochs before stopping
+        while True:
+            # One epoch
+            indices = list(range(ctypes))
+            random.shuffle(indices)
+
+            for j in _progress(indices):
+                w = compounds[j]
+                if algorithm == 'recursive':
+                    segments = self.recursive_optimize(w)
+                elif algorithm == 'viterbi':
+                    segments = self.viterbi_optimize(w)
+                else:
+                    raise Error("unknown algorithm '%s'" % algorithm)
+                _logger.debug("#%s: %s -> %s" %
+                              (j, w, _constructions_to_str(segments)))
+            epochs += 1
+
+            _logger.debug("Cost before epoch update: %s" % self.get_cost())
+            self.epoch_update(epochs)
+            oldcost = newcost
+            newcost = self.get_cost()
+
+            if development_annotations is not None:
+                # Tune corpus weight based on development data
+                tmp = development_annotations.get_data()
+                wlist, annotations = zip(*tmp)
+                segments = [self.get_viterbi_segments(w)[0] for w in wlist]
+                d = _estimate_segmentation_dir(segments, annotations)
+                if d != 0:
+                    if d > 0:
+                        self.update_corpus_weight(1 + 2.0 / epochs)
+                    else:
+                        self.update_corpus_weight(1.0 / (1 + 2.0 / epochs))
+                    _logger.info("Corpus weight set to %s" %
+                                 self.corpuscostweight)
+                    self.epoch_update(epochs)
+                    newcost = self.get_cost()
+                    # Prevent stopping on next epoch
+                    if forced_epochs < 2:
+                        forced_epochs = 2
+
+            _logger.info("Epochs: %s" % epochs)
+            _logger.info("Cost: %s" % newcost)
+            if forced_epochs == 0 and\
+               newcost >= oldcost - finish_threshold * ctokens:
+                break
+            if forced_epochs > 0:
+                forced_epochs -= 1
+        _logger.info("Done.")
+        return epochs, newcost
+
+
+    def train_online(self, data, count_modifier=None, epoch_interval=10000,
+                     algorithm='recursive'):
+        if count_modifier is not None:
+            counts = {}
+
+        _logger.info("Starting online training")
+
+        epochs = 0
+        i = 0
+        more_tokens = True
+        while more_tokens:
+            self.epoch_update(epochs)
+            newcost = self.get_cost()
+            _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
+
+            for _ in _progress(range(epoch_interval)):
+                try:
+                    w = next(data)
+                except StopIteration:
+                    more_tokens = False
+                    break
+
+                if count_modifier is not None:
+                    if not counts.has_key(w):
+                        c = 0
+                        counts[w] = 1
+                        addc = 1
+                    else:
+                        c = counts[w]
+                        counts[w] = c + 1
+                        addc = count_modifier(c + 1) - count_modifier(c)
+                    if addc > 0:
+                        self.add(w, addc)
+                else:
+                    self.add(w, 1)
+                if algorithm == 'recursive':
+                    segments = self.recursive_optimize(w)
+                elif algorithm == 'viterbi':
+                    segments = self.viterbi_optimize(w)
+                else:
+                    raise Error("unknown algorithm '%s'" % algorithm)
+                _logger.debug("#%s: %s -> %s" %
+                              (i, w, _constructions_to_str(segments)))
+                i += 1
+
+            epochs += 1
+
+        self.epoch_update(epochs)
+        newcost = self.get_cost()
+        _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
+        return epochs, newcost
+
+
     def get_viterbi_segments(self, compound, addcount=1.0, maxlen=30):
         """Find optimal segmentation using the Viterbi algorithm.
 
@@ -1172,147 +1285,7 @@ def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
     else:
         return -1
 
-def batch_train(model, algorithm='recursive', finishthreshold=0.005,
-                develannots=None):
-    """Do batch training for a Morfessor model.
 
-    Arguments:
-        model -- model instance
-        algorithm -- name of the training algorithm to use
-        finishthreshold -- finish training after the decrease in cost
-                           per compound token is smaller than the threshold
-                           (default 0.005)
-        develannots -- annotated development data for tuning corpus weight
-
-    The model should already include all the compounds in the corpus
-    (run model.batch_init(corpus) beforehand).
-
-    """
-    model.epoch_update(0)
-    oldcost = 0.0
-    newcost = model.get_cost()
-    compounds = list(model.get_compounds())
-    ctypes = len(compounds)
-    ctokens = model.get_compound_boundary_num()
-    _logger.info("Compounds in training data: %s types / %s tokens" %
-                 (ctypes, ctokens))
-    epochs = 0
-    _logger.info("Starting batch training")
-    _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
-    forced_epochs = 1 # force this many epochs before stopping
-    while True:
-        # One epoch
-        indices = list(range(ctypes))
-        random.shuffle(indices)
-
-        for j in _progress(indices):
-            w = compounds[j]
-            if algorithm == 'recursive':
-                segments = model.recursive_optimize(w)
-            elif algorithm == 'viterbi':
-                segments = model.viterbi_optimize(w)
-            else:
-                raise Error("unknown algorithm '%s'" % algorithm)
-            _logger.debug("#%s: %s -> %s" %
-                          (j, w, _constructions_to_str(segments)))
-        epochs += 1
-
-        _logger.debug("Cost before epoch update: %s" % model.get_cost())
-        model.epoch_update(epochs)
-        oldcost = newcost
-        newcost = model.get_cost()
-
-        if develannots is not None:
-            # Tune corpus weight based on development data
-            tmp = develannots.get_data()
-            wlist, annotations = zip(*tmp)
-            segments = [model.get_viterbi_segments(w)[0] for w in wlist]
-            d = _estimate_segmentation_dir(segments, annotations)
-            if d != 0:
-                if d > 0:
-                    model.update_corpus_weight(1+2.0/epochs)
-                else:
-                    model.update_corpus_weight(1.0/(1+2.0/epochs))
-                _logger.info("Corpus weight set to %s" %
-                             model.corpuscostweight)
-                model.epoch_update(epochs)
-                newcost = model.get_cost()
-                # Prevent stopping on next epoch
-                if forced_epochs < 2:
-                    forced_epochs = 2
-
-        _logger.info("Epochs: %s" % epochs)
-        _logger.info("Cost: %s" % newcost)
-        if forced_epochs == 0 and \
-                newcost >= oldcost - finishthreshold * ctokens:
-            break
-        if forced_epochs > 0:
-            forced_epochs -= 1
-    _logger.info("Done.")
-    return epochs, newcost
-
-def online_train(model, corpusiter, algorithm='recursive',
-                 epochinterval=10000, dampfunc=None):
-    """Do on-line training for a Morfessor model.
-
-    Arguments:
-        model -- model instance
-        corpusiter -- iterator over corpus
-        algorithm -- name of the training algorithm to use
-        epochinterval -- run model.epoch_update() after every n:th word
-                         (default 10000)
-        dampfunc -- function for dampening the compound frequencies
-
-    """
-    if dampfunc is not None:
-        counts = {}
-
-    _logger.info("Starting online training")
-
-    epochs = 0
-    i = 0
-    more_tokens = True
-    while more_tokens:
-        model.epoch_update(epochs)
-        newcost = model.get_cost()
-        _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
-
-        for _ in _progress(range(epochinterval)):
-            try:
-                w = next(corpusiter)
-            except StopIteration:
-                more_tokens = False
-                break
-
-            if dampfunc is not None:
-                if not counts.has_key(w):
-                    c = 0
-                    counts[w] = 1
-                    addc = 1
-                else:
-                    c = counts[w]
-                    counts[w] = c + 1
-                    addc = dampfunc(c+1) - dampfunc(c)
-                if addc > 0:
-                    model.add(w, addc)
-            else:
-                model.add(w, 1)
-            if algorithm == 'recursive':
-                segments = model.recursive_optimize(w)
-            elif algorithm == 'viterbi':
-                segments = model.viterbi_optimize(w)
-            else:
-                raise Error("unknown algorithm '%s'" % algorithm)
-            _logger.debug("#%s: %s -> %s" %
-                          (i, w, _constructions_to_str(segments)))
-            i += 1
-
-        epochs += 1
-
-    model.epoch_update(epochs)
-    newcost = model.get_cost()
-    _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
-    return epochs, newcost
 
 def main(argv):
     import argparse
@@ -1515,42 +1488,28 @@ Interactive use (read corpus from user):
                      compound_separator=args.cseparator,
                      atom_separator=args.separator)
 
-    # Load annotated data if specified
+    # Load exisiting model or create a new one
+    if args.loadfile is not None:
+        model = io.read_binary_model_file(args.loadfile)
+
+    else:
+        model = BaselineModel(forcesplit_list = args.forcesplit,
+                              corpusweight = args.corpusweight,
+                              use_skips = args.skips)
+
+    if args.loadsegfile is not None:
+        model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
+
     if args.annofile is not None:
         annotations = Annotations()
         annotations.load(io.read_annotations_file(args.annofile))
-    else:
-        annotations = None
+        model.set_annotations(annotations, args.annotationweight)
 
     if args.develfile is not None:
         develannots = Annotations()
         develannots.load(io.read_annotations_file(args.develfile))
     else:
         develannots = None
-
-
-    # Load exisiting model or create a new one
-    if args.loadfile is not None:
-        model = io.read_binary_model_file(args.loadfile)
-
-        if annotations is not None:
-            # Add annotated data to model
-            model.set_annotations(annotations, args.annotationweight)
-    elif args.loadsegfile is not None:
-        _logger.info("Loading model from '%s'..." % args.loadsegfile)
-        model = BaselineModel(forcesplit_list = args.forcesplit,
-                              corpusweight = args.corpusweight,
-                              annotations = annotations,
-                              annotatedcorpusweight = args.annotationweight,
-                              use_skips = args.skips)
-        model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
-        _logger.info("Done.")
-    else:
-        model = BaselineModel(forcesplit_list = args.forcesplit,
-                              corpusweight = args.corpusweight,
-                              annotations = annotations,
-                              annotatedcorpusweight = args.annotationweight,
-                              use_skips = args.skips)
 
     # Train model
     if len(args.trainfiles) > 0:
@@ -1576,21 +1535,21 @@ Interactive use (read corpus from user):
                 else:
                     data.load(io.read_corpus_file(f))
             if len(model.get_compounds()) == 0:
-                model.batch_init(data, args.freqthreshold, dampfunc)
+                model.load_data(data, args.freqthreshold, dampfunc)
                 if args.splitprob is not None:
                     model.random_split_init(data, args.splitprob)
-            e, c = batch_train(model, args.algorithm, develannots=develannots)
+            e, c = model.train_batch(args.algorithm, develannots)
         elif args.trainmode == 'online':
             data = Corpus(args.separator)
             dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
-            e, c = online_train(model, dataiter, args.algorithm,
-                                args.epochinterval, dampfunc)
+            e, c = model.train_online(dataiter, dampfunc, args.epochinterval,
+                                      args.algorithm)
         elif args.trainmode == 'online+batch':
             data = Corpus(args.separator)
             dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
-            e, c = online_train(model, dataiter, args.algorithm,
-                                args.epochinterval, dampfunc)
-            e, c = batch_train(model, args.algorithm, develannots=develannots)
+            e, c = model.train_online(dataiter, dampfunc, args.epochinterval,
+                                      args.algorithm)
+            e, c = model.train_batch(args.algorithm, develannots)
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
         te = time.time()
