@@ -6,7 +6,7 @@ import codecs
 import io
 import locale
 
-__all__ = ['InputFormatError', 'MorfessorIO', 
+__all__ = ['InputFormatError', 'MorfessorIO',
            'Lexicon', 'BaselineModel', 'Corpus', 'Annotations',
            'batch_train', 'online_train']
 
@@ -188,7 +188,7 @@ class MorfessorIO:
         _logger.info("Done.")
 
     def write_segmentation_file(self, file_name, segmentations, **kwargs):
-        """Write segmentation file. 
+        """Write segmentation file.
 
         File format:
         <count> <construction1><sep><construction2><sep>...<constructionN>
@@ -200,7 +200,7 @@ class MorfessorIO:
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
                            (__version__, d))
             for count, segmentation in segmentations:
-                if atom_separator is None:
+                if self.atom_separator is None:
                     s = self.construction_separator.join(segmentation)
                 else:
                     s = self.construction_separator.join(
@@ -219,7 +219,7 @@ class MorfessorIO:
                 yield item
 
     def read_corpus_file(self, file_name):
-        """Read one corpus file. 
+        """Read one corpus file.
 
         Yield for each compound found (1, compound, compound_atoms).
 
@@ -233,7 +233,7 @@ class MorfessorIO:
         _logger.info("Done.")
 
     def read_corpus_list_file(self, file_name):
-        """Read a corpus list file. 
+        """Read a corpus list file.
 
         Each line has the format:
         <count> <compound>
@@ -250,7 +250,7 @@ class MorfessorIO:
         _logger.info("Done.")
 
     def read_annotations_file(self, file_name):
-        """Read a annotations file. 
+        """Read a annotations file.
 
         Each line has the format:
         <compound> <constr1> <constr2> ... <constrN>, <constr1>...<constrN>, ...
@@ -800,7 +800,7 @@ class BaselineModel:
         # Use Viterbi algorithm to optimize the subsegments
         constructions = []
         for part in mainparts:
-            constructions += self.get_viterbi_segments(part, addcount=addcount, 
+            constructions += self.get_viterbi_segments(part, addcount=addcount,
                                                        maxlen=maxlen)[0]
         self.set_compound_analysis(compound, constructions)
         return constructions
@@ -934,7 +934,7 @@ class BaselineModel:
                         math.log(self.analyses[construction].count + addcount)
                 elif addcount > 0:
                     if self.tokens == 0:
-                        cost += (addcount * math.log(addcount) + 
+                        cost += (addcount * math.log(addcount) +
                                  self.lexicon.get_codelength(construction)) \
                                  / self.corpuscostweight
                     else:
@@ -1172,7 +1172,7 @@ def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
     else:
         return -1
 
-def batch_train(model, algorithm='recursive', finishthreshold=0.005, 
+def batch_train(model, algorithm='recursive', finishthreshold=0.005,
                 develannots=None):
     """Do batch training for a Morfessor model.
 
@@ -1213,7 +1213,7 @@ def batch_train(model, algorithm='recursive', finishthreshold=0.005,
                 segments = model.viterbi_optimize(w)
             else:
                 raise Error("unknown algorithm '%s'" % algorithm)
-            _logger.debug("#%s: %s -> %s" % 
+            _logger.debug("#%s: %s -> %s" %
                           (j, w, _constructions_to_str(segments)))
         epochs += 1
 
@@ -1251,7 +1251,7 @@ def batch_train(model, algorithm='recursive', finishthreshold=0.005,
     _logger.info("Done.")
     return epochs, newcost
 
-def online_train(model, corpusiter, algorithm='recursive', 
+def online_train(model, corpusiter, algorithm='recursive',
                  epochinterval=10000, dampfunc=None):
     """Do on-line training for a Morfessor model.
 
@@ -1303,7 +1303,7 @@ def online_train(model, corpusiter, algorithm='recursive',
                 segments = model.viterbi_optimize(w)
             else:
                 raise Error("unknown algorithm '%s'" % algorithm)
-            _logger.debug("#%s: %s -> %s" % 
+            _logger.debug("#%s: %s -> %s" %
                           (i, w, _constructions_to_str(segments)))
             i += 1
 
@@ -1362,7 +1362,7 @@ Interactive use (read corpus from user):
 
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-a', '--algorithm', dest="algorithm", 
+    parser.add_argument('-a', '--algorithm', dest="algorithm",
                         default='recursive',
                         help="algorithm type ('recursive', 'viterbi'; "+
                         "default '%(default)s')",
@@ -1511,10 +1511,10 @@ Interactive use (read corpus from user):
     if args.randseed is not None:
         random.seed(args.randseed)
 
-    io = MorfessorIO(encoding=args.encoding, 
-                     compound_separator=args.cseparator, 
+    io = MorfessorIO(encoding=args.encoding,
+                     compound_separator=args.cseparator,
                      atom_separator=args.separator)
-    
+
     # Load annotated data if specified
     if args.annofile is not None:
         annotations = Annotations()
@@ -1583,12 +1583,12 @@ Interactive use (read corpus from user):
         elif args.trainmode == 'online':
             data = Corpus(args.separator)
             dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
-            e, c = online_train(model, dataiter, args.algorithm, 
+            e, c = online_train(model, dataiter, args.algorithm,
                                 args.epochinterval, dampfunc)
         elif args.trainmode == 'online+batch':
             data = Corpus(args.separator)
             dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
-            e, c = online_train(model, dataiter, args.algorithm, 
+            e, c = online_train(model, dataiter, args.algorithm,
                                 args.epochinterval, dampfunc)
             e, c = batch_train(model, args.algorithm, develannots=develannots)
         else:
