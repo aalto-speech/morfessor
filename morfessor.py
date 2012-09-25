@@ -68,12 +68,12 @@ def _progress(iter_func):
             def __call__(self, it):
                 self.it = iter(it)
                 self.i = 0
-                if len(it) <= self.NUM_DOTS:
+
+                # Dot frequency is determined as ceil(len(it) / NUM_DOTS)
+                self.dotfreq = len(it) + self.NUM_DOTS - 1 // self.NUM_DOTS
+                if self.dotfreq < 1:
                     self.dotfreq = 1
-                elif len(it) <= 2 * self.NUM_DOTS:
-                    self.dotfreq = 2
-                else:
-                    self.dotfreq = len(it) // self.NUM_DOTS
+
                 return self
 
             def __iter__(self):
@@ -148,6 +148,7 @@ def logfactorial(n):
     """Calculate logarithm of n!.
 
     For large n (n > 20), use Stirling's approximation.
+
     """
     if n < 2:
         return 0.0
@@ -160,6 +161,7 @@ def logfactorial(n):
 def frequency_distribution_cost(types, tokens):
     """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
     tokens.
+
     """
     if types < 2:
         return 0.0
@@ -178,6 +180,7 @@ class InputFormatError(Error):
     Attributes:
         file -- input file in which the error occurred
         line -- line that caused the error
+
     """
     def __init__(self, filename, line):
         self.file = filename
@@ -190,6 +193,7 @@ class InputFormatError(Error):
 class MorfessorIO:
     """Definition for all input and output files. Also handles all
     encoding issues.
+
     """
 
     def __init__(self, encoding=None, construction_separator=' + ',
@@ -208,6 +212,7 @@ class MorfessorIO:
 
         File format:
         <count> <construction1><sep><construction2><sep>...<constructionN>
+
         """
         _logger.info("Reading segmentations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
@@ -220,6 +225,7 @@ class MorfessorIO:
 
         File format:
         <count> <construction1><sep><construction2><sep>...<constructionN>
+
         """
         _logger.info("Saving segmentations to '%s'..." % file_name)
         with self._open_text_file_write(file_name) as file_obj:
@@ -266,6 +272,7 @@ class MorfessorIO:
         <count> <compound>
 
         Yield tuples (count, compound, compound_atoms) for each compound.
+
         """
         _logger.info("Reading corpus from list '%s'..." % file_name)
         for line in self._read_text_file(file_name):
@@ -283,6 +290,7 @@ class MorfessorIO:
         <compound> <constr1> <constr2>... <constrN>, <constr1>...<constrN>, ...
 
         Yield tuples (compound, list(analyses)).
+
         """
         _logger.info("Reading annotations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
@@ -533,6 +541,7 @@ class BaselineModel:
     def set_annotations(self, annotations, annotatedcorpusweight):
         """Prepare model for semi-supervised learning with given
          annotations.
+
          """
         self.supervised = True
         self.annotations = annotations
@@ -594,6 +603,7 @@ class BaselineModel:
             corpus -- Corpus object for loading compounds
             threshold -- probability of splitting at each position (default
                          0.5)
+
         """
         for i in range(corpus.get_type_count()):
             w = corpus.get_compound_atoms(i)
@@ -780,6 +790,7 @@ class BaselineModel:
           maxlen -- maximum length for a construction
 
         Returns list of segments.
+
         """
         clen = len(compound)
         if clen == 1:  # Single atom
@@ -800,6 +811,7 @@ class BaselineModel:
         """Optimize segmentation of the compound using recursive splitting.
 
         Returns list of segments.
+
         """
         if len(compound) == 1:  # Single atom
             return [compound]
@@ -821,6 +833,7 @@ class BaselineModel:
         """Optimize segmentation of the construction by recursive splitting.
 
         Returns list of segments.
+
         """
         if len(construction) == 1:  # Single atom
             return [construction]
