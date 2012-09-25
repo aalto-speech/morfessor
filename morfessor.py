@@ -6,9 +6,8 @@ import codecs
 import io
 import locale
 
-__all__ = ['InputFormatError', 'MorfessorIO',
-           'Lexicon', 'BaselineModel', 'Corpus', 'Annotations',
-           'batch_train', 'online_train']
+__all__ = ['InputFormatError', 'MorfessorIO', 'Lexicon', 'BaselineModel',
+           'Corpus', 'Annotations']
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
