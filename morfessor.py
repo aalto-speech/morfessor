@@ -173,22 +173,6 @@ class Error(Exception):
     pass
 
 
-class InputFormatError(Error):
-    """Exception raised for problems in reading input files.
-
-    Attributes:
-        file -- input file in which the error occurred
-        line -- line that caused the error
-
-    """
-    def __init__(self, filename, line):
-        self.file = filename
-        self.line = line
-
-    def __str__(self):
-        return "illegal format in file '%s'" % self.file
-
-
 class MorfessorIO:
     """Definition for all input and output files. Also handles all
     encoding issues.
