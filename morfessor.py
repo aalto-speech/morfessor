@@ -113,8 +113,8 @@ _log2pi = math.log(2 * math.pi)
 
 def _constructions_to_str(constructions):
     """Return a readable string for a list of constructions."""
-    if isinstance(constructions[0], str) or \
-            isinstance(constructions[0], unicode):
+    if (isinstance(constructions[0], str) or
+            isinstance(constructions[0], unicode)):
         # Constructions are strings
         return ' + '.join(constructions)
     else:
@@ -664,9 +664,9 @@ class BaselineModel:
         self.freqdistrcost = frequency_distribution_cost(self.types,
                                                          self.tokens)
         n = self.tokens + self.boundaries
-        self.corpuscost = self.corpuscostweight * \
-            (n * math.log(n) - self.logtokensum -
-             self.boundaries * math.log(self.boundaries))
+        self.corpuscost = (self.corpuscostweight *
+                           (n * math.log(n) - self.logtokensum -
+                            self.boundaries * math.log(self.boundaries)))
         self.lexiconcost = self.lexicon.get_cost()
         if self.supervised:
             b = self.annotations.get_types()
@@ -677,11 +677,12 @@ class BaselineModel:
                      b * math.log(self.boundaries))
             else:
                 self.annotatedcorpuscost = 0.0
-            return self.permutationcost + self.freqdistrcost + \
-                self.lexiconcost + self.corpuscost + self.annotatedcorpuscost
+            return (self.permutationcost + self.freqdistrcost +
+                    self.lexiconcost + self.corpuscost +
+                    self.annotatedcorpuscost)
         else:
-            return self.permutationcost + self.freqdistrcost + \
-                self.lexiconcost + self.corpuscost
+            return (self.permutationcost + self.freqdistrcost +
+                    self.lexiconcost + self.corpuscost)
 
     def updated_annotation_choices(self):
         """Update the selection of alternative analyses in annotations.
@@ -737,8 +738,8 @@ class BaselineModel:
             cost = 0.0
             for m in analysis:
                 if m in self.analyses and len(self.analyses[m].splitloc) == 0:
-                    cost += math.log(self.tokens) - \
-                        math.log(self.analyses[m].count)
+                    cost += (math.log(self.tokens) -
+                        math.log(self.analyses[m].count))
                 else:
                     cost -= self.penaltylogprob  # penaltylogprob is negative
             if bestcost is None or cost < bestcost:
@@ -894,31 +895,31 @@ class BaselineModel:
                 if (self.supervised and
                         construction in self.annotatedconstructions):
                     self.annotatedlogtokensum -= \
-                        self.annotatedconstructions[construction] * \
-                        math.log(count)
+                        (self.annotatedconstructions[construction] *
+                         math.log(count))
             if newcount > 1:
                 self.logtokensum += newcount * math.log(newcount)
                 if (self.supervised and
                         construction in self.annotatedconstructions):
                     self.annotatedlogtokensum += \
-                        self.annotatedconstructions[construction] * \
-                        math.log(newcount)
+                        (self.annotatedconstructions[construction] *
+                         math.log(newcount))
             if count == 0 and newcount > 0:
                 self.lexicon.add(construction)
                 self.types += 1
                 if self.supervised and \
                         construction in self.annotatedconstructions:
                     self.annotatedlogtokensum -= \
-                        self.annotatedconstructions[construction] * \
-                        self.penaltylogprob
+                        (self.annotatedconstructions[construction] *
+                         self.penaltylogprob)
             elif count > 0 and newcount == 0:
                 self.lexicon.remove(construction)
                 self.types -= 1
                 if self.supervised and \
                         construction in self.annotatedconstructions:
                     self.annotatedlogtokensum += \
-                        self.annotatedconstructions[construction] * \
-                        self.penaltylogprob
+                        (self.annotatedconstructions[construction] *
+                         self.penaltylogprob)
 
     def epoch_update(self, epoch_num):
         """Do model updates that are necessary between training epochs.
@@ -945,8 +946,9 @@ class BaselineModel:
                 # according to the ratio of compound tokens in the
                 # data sets
                 old = self.annotatedcorpusweight
-                self.annotatedcorpusweight = self.corpuscostweight * \
-                    float(self.boundaries) / self.annotations.get_types()
+                self.annotatedcorpusweight = (self.corpuscostweight *
+                                              float(self.boundaries) /
+                                              self.annotations.get_types())
                 if self.annotatedcorpusweight != old:
                     _logger.info("Corpus weight of annotated data set to %s"
                                  % self.annotatedcorpusweight)
@@ -1095,14 +1097,15 @@ class BaselineModel:
                     continue
                 cost = grid[pt][0]
                 construction = compound[pt:t]
-                if construction in self.analyses and \
-                        len(self.analyses[construction].splitloc) == 0:
+                if (construction in self.analyses and
+                        len(self.analyses[construction].splitloc) == 0):
                     if self.analyses[construction].count <= 0:
                         raise Error("Construction count of '%s' is %s" %
                                     (construction,
                                      self.analyses[construction].count))
-                    cost += logtokens - \
-                        math.log(self.analyses[construction].count + addcount)
+                    cost += (logtokens -
+                             math.log(self.analyses[construction].count +
+                             addcount))
                 elif addcount > 0:
                     if self.tokens == 0:
                         cost += ((addcount * math.log(addcount) +
@@ -1535,12 +1538,13 @@ Interactive use (read corpus from user):
     # If debug messages are printed to screen or if stderr is not a tty (but
     # a pipe or a file), don't show the progressbar
     global show_progress_bar
-    if ch.level > logging.INFO or \
-            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty()):
+    if (ch.level > logging.INFO or
+          (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
         show_progress_bar = False
 
-    if args.loadfile is None and args.loadsegfile is None and \
-            len(args.trainfiles) == 0:
+    if (args.loadfile is None and
+          args.loadsegfile is None and
+          len(args.trainfiles) == 0):
         parser.error("either model file or training data should be defined")
 
     if args.randseed is not None:
