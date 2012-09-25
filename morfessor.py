@@ -751,7 +751,7 @@ class BaselineModel:
             for m in analysis:
                 if m in self.analyses and len(self.analyses[m].splitloc) == 0:
                     cost += (math.log(self.tokens) -
-                        math.log(self.analyses[m].count))
+                             math.log(self.analyses[m].count))
                 else:
                     cost -= self.penaltylogprob  # penaltylogprob is negative
             if bestcost is None or cost < bestcost:
@@ -1446,12 +1446,12 @@ Interactive use (read corpus from user):
     # a pipe or a file), don't show the progressbar
     global show_progress_bar
     if (ch.level > logging.INFO or
-          (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
+            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
         show_progress_bar = False
 
     if (args.loadfile is None and
-          args.loadsegfile is None and
-          len(args.trainfiles) == 0):
+            args.loadsegfile is None and
+            len(args.trainfiles) == 0):
         parser.error("either model file or training data should be defined")
 
     if args.randseed is not None:
@@ -1549,7 +1549,7 @@ Interactive use (read corpus from user):
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
-            for _,_,compound in testdata:
+            for _, _, compound in testdata:
                 constructions, logp = model.get_viterbi_segments(compound)
                 fobj.write("%s\n" % ' '.join(constructions))
                 i += 1
