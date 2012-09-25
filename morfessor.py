@@ -468,7 +468,10 @@ class BaselineModel:
         self.use_skips = use_skips  # Random skips for frequent constructions
         self.counter = collections.Counter()  # Counter for random skipping
         self.corpuscostweight = corpusweight
-        self.forcesplit_list = forcesplit_list if not None else []
+        if self.forcesplit_list is None:
+            self.forcesplit_list = []
+        else:
+            self.forcesplit_list = forcesplit_list
 
         self.supervised = False
 
