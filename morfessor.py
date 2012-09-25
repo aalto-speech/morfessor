@@ -120,27 +120,7 @@ def _constructions_to_str(constructions):
         return ' + '.join(map(lambda x: ' '.join(x), constructions))
 
 
-def _segmentation_to_splitloc(constructions):
-    """Return a list of split locations for a segmented compound."""
-    splitloc = []
-    i = 0
-    for c in constructions:
-        i += len(c)
-        splitloc.append(i)
-    return splitloc[:-1]
 
-
-def _splitloc_to_segmentation(compound, splitloc):
-    """Return segmentation corresponding to the list of split locations."""
-    parts = []
-    startpos = 0
-    endpos = 0
-    for i in range(len(splitloc)):
-        endpos = splitloc[i]
-        parts.append(compound[startpos:endpos])
-        startpos = endpos
-    parts.append(compound[endpos:])
-    return parts
 
 
 def logfactorial(n):
@@ -457,23 +437,29 @@ class BaselineModel:
         """
         self.analyses = {}
         self.lexicon = Lexicon()
+
+        # Counters
         self.tokens = 0             # Num. of construction tokens (in corpus)
         self.types = 0              # Num. of construction types (in lexicon)
         self.boundaries = 0         # Compound boundary tokens in corpus
+
+        # Cost variables
         self.logtokensum = 0.0      # Unnormalized coding length of the corpus
         self.freqdistrcost = 0.0    # Coding cost of frequencies
         self.corpuscost = 0.0       # Code length of pointers in corpus
         self.permutationcost = 0.0  # Code length reduction from permutations
         self.lexiconcost = 0.0      # Code length of construction lexicon
-        self.use_skips = use_skips  # Random skips for frequent constructions
-        self.counter = collections.Counter()  # Counter for random skipping
+
+        # Configuration variables
         self.corpuscostweight = corpusweight
+        self.use_skips = use_skips  # Random skips for frequent constructions
+        self.supervised = False
+
+        self.counter = collections.Counter()  # Counter for random skipping
         if forcesplit_list is None:
             self.forcesplit_list = []
         else:
             self.forcesplit_list = forcesplit_list
-
-        self.supervised = False
 
     def _get_compounds(self):
         """Return the compound types stored by the model."""
@@ -485,7 +471,7 @@ class BaselineModel:
         return sorted((c, node.count) for c, node in self.analyses.items()
                       if len(node.splitloc) == 0)
 
-    def _add(self, compound, c):
+    def _add_compound(self, compound, c):
         """Add compound with count c to data."""
         self._modify_construction_count(compound, c)
         oldrc = self.analyses[compound].rcount
@@ -504,7 +490,8 @@ class BaselineModel:
         rcount, count, splitloc = self.analyses[construction]
         constructions = []
         if len(splitloc) > 0:
-            for child in _splitloc_to_segmentation(construction, splitloc):
+            for child in self._splitloc_to_segmentation(construction,
+                                                        splitloc):
                 constructions += self._expand_construction(child)
         else:
             constructions.append(construction)
@@ -520,7 +507,7 @@ class BaselineModel:
         """
         splitloc = [i for i in range(1, len(compound))
                     if random.random() < threshold]
-        return _splitloc_to_segmentation(compound, splitloc)
+        return self._splitloc_to_segmentation(compound, splitloc)
 
     def _set_compound_analysis(self, compound, parts, ptype='flat'):
         """Set analysis of compound to according to given segmentation.
@@ -541,7 +528,7 @@ class BaselineModel:
             self._modify_construction_count(compound, count)
         elif ptype == 'flat':
             rcount, count = self._remove(compound)
-            splitloc = _segmentation_to_splitloc(parts)
+            splitloc = self._segmentation_to_splitloc(parts)
             self.analyses[compound] = ConstrNode(rcount, count, splitloc)
             for constr in parts:
                 self._modify_construction_count(constr, count)
@@ -563,7 +550,7 @@ class BaselineModel:
         else:
             raise Error("Unknown parse type '%s'" % ptype)
 
-    def _updated_annotation_choices(self):
+    def _update_annotation_choices(self):
         """Update the selection of alternative analyses in annotations.
 
         For semi-supervised models, select the most likely alternative
@@ -583,7 +570,7 @@ class BaselineModel:
                 c = self.analyses[w].rcount
             else:
                 # Add compound also to the unannotated data
-                self._add(w, 1)
+                self._add_compound(w, 1)
                 c = 1
             analysis, cost = self._best_analysis(alternatives)
             for m in analysis:
@@ -766,7 +753,7 @@ class BaselineModel:
                                                      splitloc)
         if len(splitloc) > 0:
             # Virtual construction
-            children = _splitloc_to_segmentation(construction, splitloc)
+            children = self._splitloc_to_segmentation(construction, splitloc)
             for child in children:
                 self._modify_construction_count(child, dcount)
         else:
@@ -822,7 +809,7 @@ class BaselineModel:
         if self.use_skips:
             self.counter = collections.Counter()
         if self.supervised:
-            self._updated_annotation_choices()
+            self._update_annotation_choices()
             if self.sweightbalance:
                 # Set the corpus cost weight of annotated data
                 # according to the ratio of compound tokens in the
@@ -834,6 +821,29 @@ class BaselineModel:
                 if self.annotatedcorpusweight != old:
                     _logger.info("Corpus weight of annotated data set to %s"
                                  % self.annotatedcorpusweight)
+
+    @staticmethod
+    def _segmentation_to_splitloc(constructions):
+        """Return a list of split locations for a segmented compound."""
+        splitloc = []
+        i = 0
+        for c in constructions:
+            i += len(c)
+            splitloc.append(i)
+        return splitloc[:-1]
+
+    @staticmethod
+    def _splitloc_to_segmentation(compound, splitloc):
+        """Return segmentation corresponding to the list of split locations."""
+        parts = []
+        startpos = 0
+        endpos = 0
+        for i in range(len(splitloc)):
+            endpos = splitloc[i]
+            parts.append(compound[startpos:endpos])
+            startpos = endpos
+        parts.append(compound[endpos:])
+        return parts
 
     def get_cost(self):
         """Return current model cost."""
@@ -890,7 +900,7 @@ class BaselineModel:
         for count, _, atoms in corpus:
             if count < freqthreshold:
                 continue
-            self._add(atoms, cfunc(count))
+            self._add_compound(atoms, cfunc(count))
 
             if init_rand_split is not None:
                 parts = self._random_split(atoms, init_rand_split)
@@ -905,7 +915,7 @@ class BaselineModel:
         """
         for count, segmentation in segmentations:
             comp = "".join(segmentation)
-            self._add(comp, count)
+            self._add_compound(comp, count)
             self._set_compound_analysis(comp, segmentation)
 
     def set_annotations(self, annotations, annotatedcorpusweight):
@@ -1020,9 +1030,9 @@ class BaselineModel:
                         counts[w] = c + 1
                         addc = count_modifier(c + 1) - count_modifier(c)
                     if addc > 0:
-                        self._add(w, addc)
+                        self._add_compound(w, addc)
                 else:
-                    self._add(w, 1)
+                    self._add_compound(w, 1)
                 if algorithm == 'recursive':
                     segments = self._recursive_optimize(w)
                 elif algorithm == 'viterbi':
