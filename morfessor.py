@@ -4,7 +4,7 @@ Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
 __all__ = ['InputFormatError', 'MorfessorIO', 'Lexicon', 'BaselineModel',
-           'Corpus', 'Annotations']
+           'Annotations']
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
@@ -594,12 +594,10 @@ class BaselineModel:
         Adds the compounds in the corpus to the model lexicon.
 
         """
-        for i in range(corpus.get_type_count()):
-            c = corpus.get_count(i)
-            if c < freqthreshold:
+        for count, compound, atoms in corpus:
+            if count < freqthreshold:
                 continue
-            w = corpus.get_compound_atoms(i)
-            self.add(w, cfunc(c))
+            self.add(atoms, cfunc(count))
 
     def random_split_init(self, corpus, threshold=0.5):
         """Initialize the model with random splits.
@@ -1049,7 +1047,7 @@ class BaselineModel:
 
             for _ in _progress(range(epoch_interval)):
                 try:
-                    w = next(data)
+                    _, _, w = next(data)
                 except StopIteration:
                     more_tokens = False
                     break
@@ -1152,114 +1150,6 @@ class BaselineModel:
             lt = t
         constructions.reverse()
         return constructions, cost
-
-
-class Corpus:
-    """Class for storing text corpus as a list of compound objects."""
-
-    def __init__(self, atom_sep=None):
-        """Initialize a new corpus instance.
-
-        Arguments:
-            atom_sep -- regular expression for splitting a compound
-                        (e.g. word or sentence) to its atoms (e.g. characters
-                        or words). If None (default), split to letters.
-
-        """
-        self.files = []
-        self.atom_sep = atom_sep
-        self.types = 0
-        self.tokens = 0
-        self.compounds = []
-        self.counts = []
-        self.strdict = {}
-        self.text = []
-        self.max_clen = 0
-
-    def get_token_count(self):
-        """Return the total number of compounds in the corpus."""
-        return self.tokens
-
-    def get_type_count(self):
-        """Return the number of compound types in the corpus."""
-        return self.types
-
-    def get_compound_str(self, i):
-        """Return the string representation of the compound at index i."""
-        return self.compounds[i]
-
-    def get_compound_atoms(self, i):
-        """Return the atom representation of the compound at index i."""
-        if self.atom_sep is None:
-            return self.compounds[i]  # string
-        else:
-            return tuple(re.split(self.atom_sep, self.compounds[i]))  # tuple
-
-    def get_count(self, i):
-        """Return the count of of the compound at index i."""
-        return self.counts[i]
-
-    def get_counts(self):
-        """Return the list of counts of the compounds."""
-        return self.counts
-
-    def has_compound(self, c):
-        """Check whether the corpus has given compound.
-
-        The input can be either a string or a list/tuple of strings.
-
-        """
-        if type(c) == str:
-            return (c in self.strdict)
-        else:
-            return (reduce(lambda x, y: x + y, c) in self.strdict)
-
-    def get_text(self):
-        """Return the compound indices of the text of the corpus."""
-        return self.text
-
-    def get_max_compound_len(self):
-        """Return the maximum of the lengths of the compounds in the corpus."""
-        return self.max_clen
-
-    def get_compound_len(self, c):
-        """Return the number of atoms in the compound."""
-        if self.atom_sep is None:
-            return len(c)
-        else:
-            return len(re.split(self.atom_sep, c))
-
-    def load(self, data_iter):
-        for count, compound, atoms in data_iter:
-            if compound in self.strdict:
-                i = self.strdict[compound]
-                self.counts[i] += count
-            else:
-                i = self.types
-                self.strdict[compound] = i
-                self.compounds.append(compound)
-                self.counts.append(count)
-                self.types += 1
-                self.max_clen = max(self.max_clen, len(atoms))
-
-            self.tokens += count
-
-    def load_gen(self, data_iter):
-        for count, compound, atoms in data_iter:
-            if compound in self.strdict:
-                i = self.strdict[compound]
-                self.counts[i] += count
-            else:
-                i = self.types
-                self.strdict[compound] = i
-                self.compounds.append(compound)
-                self.counts.append(count)
-                self.types += 1
-                self.max_clen = max(self.max_clen, len(atoms))
-
-            for _ in range(count):
-                self.tokens += 1
-                yield atoms
 
 
 class Annotations:
@@ -1610,25 +1500,29 @@ Interactive use (read corpus from user):
         else:
             parser.error("unknown dampening type '%s'" % args.dampening)
         ts = time.time()
-        data = Corpus(args.separator)
+
         if args.trainmode == 'batch':
-            for f in args.trainfiles:
-                if args.list:
-                    data.load(io.read_corpus_list_file(f))
-                else:
-                    data.load(io.read_corpus_file(f))
             if len(model.get_compounds()) == 0:
-                model.load_data(data, args.freqthreshold, dampfunc)
-                if args.splitprob is not None:
-                    model.random_split_init(data, args.splitprob)
+                for f in args.trainfiles:
+                    if args.list:
+                        data = io.read_corpus_list_file(f)
+                    else:
+                        data = io.read_corpus_file(f)
+
+                    model.load_data(data, args.freqthreshold, dampfunc)
+
+#TODO: Make sure random split still works
+#                if args.splitprob is not None:
+#                    model.random_split_init(data, args.splitprob)
+
             e, c = model.train_batch(args.algorithm, develannots)
         elif args.trainmode == 'online':
-            dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
-            e, c = model.train_online(dataiter, dampfunc, args.epochinterval,
+            data = io.read_corpus_files(args.trainfiles)
+            e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm)
         elif args.trainmode == 'online+batch':
-            dataiter = data.load_gen(io.read_corpus_files(args.trainfiles))
-            e, c = model.train_online(dataiter, dampfunc, args.epochinterval,
+            data = io.read_corpus_files(args.trainfiles)
+            e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm)
             e, c = model.train_batch(args.algorithm, develannots)
         else:
@@ -1653,11 +1547,9 @@ Interactive use (read corpus from user):
     if len(args.testfiles) > 0:
         _logger.info("Segmenting test data...")
         with io._open_text_file_write(args.outfile) as fobj:
-            testdata = Corpus(args.separator)
-            testdataiter = \
-                testdata.load_gen(io.read_corpus_files(args.testfiles))
+            testdata = io.read_corpus_files(args.testfiles)
             i = 0
-            for compound in testdataiter:
+            for _,_,compound in testdata:
                 constructions, logp = model.get_viterbi_segments(compound)
                 fobj.write("%s\n" % ' '.join(constructions))
                 i += 1
