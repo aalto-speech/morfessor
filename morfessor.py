@@ -41,6 +41,7 @@ _logger = logging.getLogger(__name__)
 
 show_progress_bar = True
 
+
 def _progress(iter_func):
     """Decorator/function for displaying a progress bar when iterating
     through a list.
@@ -64,6 +65,7 @@ def _progress(iter_func):
     except ImportError:
         class SimpleProgressBar:
             NUM_DOTS = 60
+
             def __call__(self, it):
                 self.it = iter(it)
                 self.i = 0
@@ -91,7 +93,7 @@ def _progress(iter_func):
 
     # In case of a decorator (argument is a function),
     # wrap the functions result is a ProgressBar and return the new function
-    if isinstance(iter_func,types.FunctionType):
+    if isinstance(iter_func, types.FunctionType):
         def i(*args, **kwargs):
             if logging.getLogger(__name__).isEnabledFor(logging.INFO):
                 return ProgressBar()(iter_func(*args, **kwargs))
@@ -100,13 +102,14 @@ def _progress(iter_func):
         return i
 
     #In case of an iterator, wrap it in a ProgressBar and return it.
-    elif hasattr(iter_func,'__iter__'):
+    elif hasattr(iter_func, '__iter__'):
         return ProgressBar()(iter_func)
 
     #If all else fails, just return the original.
     return iter_func
 
-_log2pi = math.log(2*math.pi)
+_log2pi = math.log(2 * math.pi)
+
 
 def _constructions_to_str(constructions):
     """Return a readable string for a list of constructions."""
@@ -118,6 +121,7 @@ def _constructions_to_str(constructions):
         # Constructions are not strings (should be tuples of strings)
         return ' + '.join(map(lambda x: ' '.join(x), constructions))
 
+
 def _segmentation_to_splitloc(constructions):
     """Return a list of split locations for a segmented compound."""
     splitloc = []
@@ -126,6 +130,7 @@ def _segmentation_to_splitloc(constructions):
         i += len(c)
         splitloc.append(i)
     return splitloc[:-1]
+
 
 def _splitloc_to_segmentation(compound, splitloc):
     """Return segmentation corresponding to the list of split locations."""
@@ -139,11 +144,11 @@ def _splitloc_to_segmentation(compound, splitloc):
     parts.append(compound[endpos:])
     return parts
 
+
 def logfactorial(n):
     """Calculate logarithm of n!.
 
     For large n (n > 20), use Stirling's approximation.
-
     """
     if n < 2:
         return 0.0
@@ -152,16 +157,21 @@ def logfactorial(n):
     logn = math.log(n)
     return n * logn - n + 0.5 * (logn + _log2pi)
 
+
 def frequency_distribution_cost(types, tokens):
-    """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N tokens."""
+    """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
+    tokens.
+    """
     if types < 2:
         return 0.0
-    return logfactorial(tokens-1) - logfactorial(types-1) - \
-        logfactorial(tokens-types)
+    return (logfactorial(tokens - 1) - logfactorial(types - 1) -
+            logfactorial(tokens - types))
+
 
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
+
 
 class InputFormatError(Error):
     """Exception raised for problems in reading input files.
@@ -169,7 +179,6 @@ class InputFormatError(Error):
     Attributes:
         file -- input file in which the error occurred
         line -- line that caused the error
-
     """
     def __init__(self, filename, line):
         self.file = filename
@@ -178,10 +187,10 @@ class InputFormatError(Error):
     def __str__(self):
         return "illegal format in file '%s'" % self.file
 
+
 class MorfessorIO:
     """Definition for all input and output files. Also handles all
     encoding issues.
-
     """
 
     def __init__(self, encoding=None, construction_separator=' + ',
@@ -200,7 +209,6 @@ class MorfessorIO:
 
         File format:
         <count> <construction1><sep><construction2><sep>...<constructionN>
-
         """
         _logger.info("Reading segmentations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
@@ -213,7 +221,6 @@ class MorfessorIO:
 
         File format:
         <count> <construction1><sep><construction2><sep>...<constructionN>
-
         """
         _logger.info("Saving segmentations to '%s'..." % file_name)
         with self._open_text_file_write(file_name) as file_obj:
@@ -274,7 +281,7 @@ class MorfessorIO:
         """Read a annotations file.
 
         Each line has the format:
-        <compound> <constr1> <constr2> ... <constrN>, <constr1>...<constrN>, ...
+        <compound> <constr1> <constr2>... <constrN>, <constr1>...<constrN>, ...
 
         Yield tuples (compound, list(analyses)).
         """
@@ -375,6 +382,7 @@ class MorfessorIO:
 
         raise UnicodeError("Can not determine encoding of input files")
 
+
 class Lexicon:
     """Lexicon class for storing model constructions."""
 
@@ -388,7 +396,7 @@ class Lexicon:
         """Add construction to the lexicon (with optional data)."""
         for atom in itertools.chain(construction, [None]):
             oldc = self.atoms[atom]
-            self.logtokensum += (oldc+1) * math.log(oldc+1)
+            self.logtokensum += (oldc + 1) * math.log(oldc + 1)
             if oldc > 0:
                 self.logtokensum -= oldc * math.log(oldc)
             self.atoms[atom] += 1
@@ -401,7 +409,7 @@ class Lexicon:
             oldc = self.atoms[atom]
             self.logtokensum -= oldc * math.log(oldc)
             if oldc > 1:
-                self.logtokensum += (oldc-1) * math.log(oldc-1)
+                self.logtokensum += (oldc - 1) * math.log(oldc - 1)
             self.atoms[atom] -= 1
             if self.atoms[atom] == 0:
                 del self.atoms[atom]
@@ -413,7 +421,8 @@ class Lexicon:
         if self.atoms_total < 2:
             return 0.0
         cost = frequency_distribution_cost(len(self.atoms), self.atoms_total)
-        cost += self.atoms_total * math.log(self.atoms_total) - self.logtokensum
+        cost += (self.atoms_total * math.log(self.atoms_total) -
+                 self.logtokensum)
         return cost
 
     def get_codelength(self, construction):
@@ -432,14 +441,14 @@ class Lexicon:
 # count = total count of the node
 # splitloc = list of location of the possible splits for virtual
 #            constructions; empty if real construction
-ConstrNode = collections.namedtuple('ConstrNode', 
+ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
+
 
 class BaselineModel:
     """Morfessor Baseline model class."""
 
-    def __init__(self, forcesplit_list = [], corpusweight = 1.0,
-                 use_skips = False):
+    def __init__(self, forcesplit_list=[], corpusweight=1.0, use_skips=False):
         """Initialize a new model instance.
 
         Arguments:
@@ -452,16 +461,16 @@ class BaselineModel:
         """
         self.analyses = {}
         self.lexicon = Lexicon()
-        self.tokens = 0            # Num. of construction tokens (in corpus)
-        self.types = 0             # Num. of construction types (in lexicon)
-        self.boundaries = 0        # Compound boundary tokens in corpus
-        self.logtokensum = 0.0     # Unnormalized coding length of the corpus
-        self.freqdistrcost = 0.0   # Coding cost of frequencies
-        self.corpuscost = 0.0      # Code length of pointers in corpus
-        self.permutationcost = 0.0 # Code length reduction from permutations
-        self.lexiconcost = 0.0     # Code length of construction lexicon
-        self.use_skips = use_skips # Random skips for frequent constructions
-        self.counter = collections.Counter() # Counter for random skipping
+        self.tokens = 0             # Num. of construction tokens (in corpus)
+        self.types = 0              # Num. of construction types (in lexicon)
+        self.boundaries = 0         # Compound boundary tokens in corpus
+        self.logtokensum = 0.0      # Unnormalized coding length of the corpus
+        self.freqdistrcost = 0.0    # Coding cost of frequencies
+        self.corpuscost = 0.0       # Code length of pointers in corpus
+        self.permutationcost = 0.0  # Code length reduction from permutations
+        self.lexiconcost = 0.0      # Code length of construction lexicon
+        self.use_skips = use_skips  # Random skips for frequent constructions
+        self.counter = collections.Counter()  # Counter for random skipping
         self.corpuscostweight = corpusweight
         self.forcesplit_list = forcesplit_list
 
@@ -494,7 +503,7 @@ class BaselineModel:
         self.modify_construction_count(compound, c)
         oldrc = self.analyses[compound].rcount
         self.analyses[compound] = \
-            self.analyses[compound]._replace(rcount=oldrc+c)
+            self.analyses[compound]._replace(rcount=oldrc + c)
         self.boundaries += c
 
     def remove(self, construction):
@@ -523,10 +532,12 @@ class BaselineModel:
         self.corpuscostweight *= factor
 
     def set_annotations(self, annotations, annotatedcorpusweight):
-        """Prepare model for semi-supervised learning with given annotations."""
+        """Prepare model for semi-supervised learning with given
+         annotations.
+         """
         self.supervised = True
         self.annotations = annotations
-        self.annotatedconstructions = {} # {construction: count}
+        self.annotatedconstructions = {}  # {construction: count}
         self.annotatedtokens = 0
         self.annotatedlogtokensum = 0.0
         self.annotatedcorpuscost = 0.0
@@ -536,7 +547,7 @@ class BaselineModel:
         else:
             self.annotatedcorpusweight = annotatedcorpusweight
             self.sweightbalance = False
-        self.penaltylogprob = -9999.9 # cost for missing a known construction
+        self.penaltylogprob = -9999.9  # cost for missing a known construction
 
     def load_segmentations(self, segmentations):
         """Load model from existing segmentations.
@@ -577,13 +588,13 @@ class BaselineModel:
             w = corpus.get_compound_atoms(i)
             self.add(w, cfunc(c))
 
-    def random_split_init(self, corpus, threshold = 0.5):
+    def random_split_init(self, corpus, threshold=0.5):
         """Initialize the model with random splits.
 
         Arguments:
             corpus -- Corpus object for loading compounds
-            threshold -- probability of splitting at each position (default 0.5)
-
+            threshold -- probability of splitting at each position (default
+                         0.5)
         """
         for i in range(corpus.get_type_count()):
             w = corpus.get_compound_atoms(i)
@@ -600,7 +611,7 @@ class BaselineModel:
             threshold -- probability of splitting at each position
 
         """
-        splitloc = [i for i in range(1, len(compound)) 
+        splitloc = [i for i in range(1, len(compound))
                     if random.random() < threshold]
         return _splitloc_to_segmentation(compound, splitloc)
 
@@ -610,7 +621,7 @@ class BaselineModel:
         Arguments:
             compound -- compound to split
             parts -- desired constructions of the compound
-            ptype -- type of the parse tree to use 
+            ptype -- type of the parse tree to use
 
         If ptype is 'rbranch', the analysis is stored internally as a
         right-branching tree. If ptype is 'flat', the analysis is stored
@@ -636,8 +647,8 @@ class BaselineModel:
                     self.analyses[construction] = ConstrNode(rcount, 0, [])
                     self.modify_construction_count(construction, count)
                 else:
-                    suffix = reduce(lambda x, y: x + y, parts[p+1:])
-                    self.analyses[construction] = ConstrNode(rcount, count, 
+                    suffix = reduce(lambda x, y: x + y, parts[p + 1:])
+                    self.analyses[construction] = ConstrNode(rcount, count,
                                                              [len(prefix)])
                     self.modify_construction_count(prefix, count)
                     self.modify_construction_count(suffix, count)
@@ -696,7 +707,7 @@ class BaselineModel:
                 c = 1
             analysis, cost = self.best_analysis(alternatives)
             for m in analysis:
-                if self.annotatedconstructions.has_key(m):
+                if m in self.annotatedconstructions:
                     self.annotatedconstructions[m] += c
                 else:
                     self.annotatedconstructions[m] = c
@@ -710,7 +721,7 @@ class BaselineModel:
                 self.annotatedlogtokensum += f * self.penaltylogprob
         if self.tokens > 0:
             n = self.tokens + self.boundaries
-            b = self.annotations.get_types() # boundaries in annotated data
+            b = self.annotations.get_types()  # boundaries in annotated data
             self.annotatedcorpuscost = self.annotatedcorpusweight * \
                 ((self.annotatedtokens + b) * math.log(n) -
                  self.annotatedlogtokensum -
@@ -729,7 +740,7 @@ class BaselineModel:
                     cost += math.log(self.tokens) - \
                         math.log(self.analyses[m].count)
                 else:
-                    cost -= self.penaltylogprob # penaltylogprob is negative
+                    cost -= self.penaltylogprob  # penaltylogprob is negative
             if bestcost is None or cost < bestcost:
                 bestcost = cost
                 bestanalysis = analysis
@@ -745,7 +756,7 @@ class BaselineModel:
         for i in range(1, clen):
             if compound[i] in self.forcesplit_list:
                 parts.append(compound[j:i])
-                parts.append(compound[i:i+1])
+                parts.append(compound[i:i + 1])
                 j = i + 1
         if j < clen:
             parts.append(compound[j:])
@@ -755,7 +766,7 @@ class BaselineModel:
         """Return true if construction should be skipped."""
         if construction in self.counter:
             t = self.counter[construction]
-            if random.random() > 1.0/(max(1, t)):
+            if random.random() > 1.0 / max(1, t):
                 return True
         self.counter[construction] += 1
         return False
@@ -771,7 +782,7 @@ class BaselineModel:
         Returns list of segments.
         """
         clen = len(compound)
-        if clen == 1: # Single atom
+        if clen == 1:  # Single atom
             return [compound]
         if self.use_skips and self._test_skip(compound):
             return self.expand_construction(compound)
@@ -780,7 +791,7 @@ class BaselineModel:
         # Use Viterbi algorithm to optimize the subsegments
         constructions = []
         for part in parts:
-            constructions += self.get_viterbi_segments(part, addcount=addcount, 
+            constructions += self.get_viterbi_segments(part, addcount=addcount,
                                                        maxlen=maxlen)[0]
         self.set_compound_analysis(compound, constructions)
         return constructions
@@ -790,7 +801,7 @@ class BaselineModel:
 
         Returns list of segments.
         """
-        if len(compound) == 1: # Single atom
+        if len(compound) == 1:  # Single atom
             return [compound]
         if self.use_skips and self._test_skip(compound):
             return self.expand_construction(compound)
@@ -811,7 +822,7 @@ class BaselineModel:
 
         Returns list of segments.
         """
-        if len(construction) == 1: # Single atom
+        if len(construction) == 1:  # Single atom
             return [construction]
         if self.use_skips and self._test_skip(construction):
             return self.expand_construction(construction)
@@ -880,15 +891,15 @@ class BaselineModel:
             self.tokens += dcount
             if count > 1:
                 self.logtokensum -= count * math.log(count)
-                if self.supervised and \
-                        self.annotatedconstructions.has_key(construction):
+                if (self.supervised and
+                        construction in self.annotatedconstructions):
                     self.annotatedlogtokensum -= \
                         self.annotatedconstructions[construction] * \
                         math.log(count)
             if newcount > 1:
                 self.logtokensum += newcount * math.log(newcount)
-                if self.supervised and \
-                        self.annotatedconstructions.has_key(construction):
+                if (self.supervised and
+                        construction in self.annotatedconstructions):
                     self.annotatedlogtokensum += \
                         self.annotatedconstructions[construction] * \
                         math.log(newcount)
@@ -896,7 +907,7 @@ class BaselineModel:
                 self.lexicon.add(construction)
                 self.types += 1
                 if self.supervised and \
-                        self.annotatedconstructions.has_key(construction):
+                        construction in self.annotatedconstructions:
                     self.annotatedlogtokensum -= \
                         self.annotatedconstructions[construction] * \
                         self.penaltylogprob
@@ -904,7 +915,7 @@ class BaselineModel:
                 self.lexicon.remove(construction)
                 self.types -= 1
                 if self.supervised and \
-                        self.annotatedconstructions.has_key(construction):
+                        construction in self.annotatedconstructions:
                     self.annotatedlogtokensum += \
                         self.annotatedconstructions[construction] * \
                         self.penaltylogprob
@@ -952,7 +963,7 @@ class BaselineModel:
         epochs = 0
         _logger.info("Starting batch training")
         _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
-        forced_epochs = 1 # force this many epochs before stopping
+        forced_epochs = 1  # force this many epochs before stopping
         while True:
             # One epoch
             random.shuffle(compounds)
@@ -994,14 +1005,13 @@ class BaselineModel:
 
             _logger.info("Epochs: %s" % epochs)
             _logger.info("Cost: %s" % newcost)
-            if forced_epochs == 0 and\
-               newcost >= oldcost - finish_threshold * ctokens:
+            if (forced_epochs == 0 and
+                    newcost >= oldcost - finish_threshold * ctokens):
                 break
             if forced_epochs > 0:
                 forced_epochs -= 1
         _logger.info("Done.")
         return epochs, newcost
-
 
     def train_online(self, data, count_modifier=None, epoch_interval=10000,
                      algorithm='recursive'):
@@ -1026,7 +1036,7 @@ class BaselineModel:
                     break
 
                 if count_modifier is not None:
-                    if not counts.has_key(w):
+                    if not w in counts:
                         c = 0
                         counts[w] = 1
                         addc = 1
@@ -1055,7 +1065,6 @@ class BaselineModel:
         _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
         return epochs, newcost
 
-
     def get_viterbi_segments(self, compound, addcount=1.0, maxlen=30):
         """Find optimal segmentation using the Viterbi algorithm.
 
@@ -1076,12 +1085,12 @@ class BaselineModel:
         logtokens = math.log(self.tokens + addcount)
         badlikelihood = clen * logtokens
         # Viterbi main loop
-        for t in range(1, clen+1):
+        for t in range(1, clen + 1):
             # Select the best path to current node.
             # Note that we can come from any node in history.
             bestpath = None
             bestcost = None
-            for pt in range(max(0, t-maxlen), t):
+            for pt in range(max(0, t - maxlen), t):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
@@ -1096,15 +1105,15 @@ class BaselineModel:
                         math.log(self.analyses[construction].count + addcount)
                 elif addcount > 0:
                     if self.tokens == 0:
-                        cost += (addcount * math.log(addcount) +
-                                 self.lexicon.get_codelength(construction)) \
-                                 / self.corpuscostweight
+                        cost += ((addcount * math.log(addcount) +
+                                  self.lexicon.get_codelength(construction))
+                                 / self.corpuscostweight)
                     else:
-                        cost += ((self.types+addcount) *
-                                 math.log(self.tokens+addcount)
-                                 - self.types * math.log(self.tokens)
-                                 + self.lexicon.get_codelength(construction)) \
-                                 / self.corpuscostweight
+                        cost += (((self.types + addcount) *
+                                  math.log(self.tokens + addcount)
+                                  - self.types * math.log(self.tokens)
+                                  + self.lexicon.get_codelength(construction))
+                                 / self.corpuscostweight)
                 elif len(construction) == 1:
                     cost += badlikelihood
                 else:
@@ -1124,10 +1133,11 @@ class BaselineModel:
         constructions.reverse()
         return constructions, cost
 
+
 class Corpus:
     """Class for storing text corpus as a list of compound objects."""
 
-    def __init__(self, atom_sep = None):
+    def __init__(self, atom_sep=None):
         """Initialize a new corpus instance.
 
         Arguments:
@@ -1161,9 +1171,9 @@ class Corpus:
     def get_compound_atoms(self, i):
         """Return the atom representation of the compound at index i."""
         if self.atom_sep is None:
-            return self.compounds[i] # string
+            return self.compounds[i]  # string
         else:
-            return tuple(re.split(self.atom_sep, self.compounds[i])) # tuple
+            return tuple(re.split(self.atom_sep, self.compounds[i]))  # tuple
 
     def get_count(self, i):
         """Return the count of of the compound at index i."""
@@ -1182,7 +1192,7 @@ class Corpus:
         if type(c) == str:
             return (c in self.strdict)
         else:
-            return (reduce(lambda x,y: x+y, c) in self.strdict)
+            return (reduce(lambda x, y: x + y, c) in self.strdict)
 
     def get_text(self):
         """Return the compound indices of the text of the corpus."""
@@ -1275,6 +1285,7 @@ class Annotations:
 
         self.types = len(self.analyses)
 
+
 def _boundary_recall(prediction, reference):
     """Calculate average boundary recall for given segmentations."""
     rec_total = 0
@@ -1283,13 +1294,13 @@ def _boundary_recall(prediction, reference):
         best = -1
         for ref in ref_list:
             # list of internal boundary positions
-            ref_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))],
+            ref_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
                                ref, [0])[1:-1])
             if len(ref_b) == 0:
                 best = 1.0
                 break
             for pre in pre_list:
-                pre_b = set(reduce(lambda x, y: x+[(x[-1]+len(y))],
+                pre_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
                                    pre, [0])[1:-1])
                 r = len(ref_b.intersection(pre_b)) / float(len(ref_b))
                 if r > best:
@@ -1299,16 +1310,18 @@ def _boundary_recall(prediction, reference):
             rec_total += 1
     return rec_sum, rec_total
 
+
 def _bpr_evaluation(prediction, reference):
     """Return boundary precision, recall, and F-score for segmentations."""
     rec_s, rec_t = _boundary_recall(prediction, reference)
     pre_s, pre_t = _boundary_recall(reference, prediction)
     rec = rec_s / rec_t
     pre = pre_s / pre_t
-    f = 2.0*pre*rec/(pre+rec)
+    f = 2.0 * pre * rec / (pre + rec)
     return pre, rec, f
 
-def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
+
+def _estimate_segmentation_dir(segments, annotations, threshold=0.01):
     """Estimate if the given compounds are under- or oversegmented.
 
     The decision is based on the difference between boundary precision
@@ -1335,12 +1348,11 @@ def _estimate_segmentation_dir(segments, annotations, threshold = 0.01):
         return -1
 
 
-
 def main(argv):
     import argparse
 
     parser = argparse.ArgumentParser(
-        prog = 'morfessor.py',
+        prog='morfessor.py',
         description="""
 Morfessor %s
 
@@ -1371,8 +1383,8 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
-""" %  __version__,
-        epilog = """
+""" % __version__,
+        epilog="""
 Simple usage examples (training and testing):
 
   %(prog)s -t training_corpus.txt -s model.pickled
@@ -1386,101 +1398,102 @@ Interactive use (read corpus from user):
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-a', '--algorithm', dest="algorithm",
                         default='recursive',
-                        help="algorithm type ('recursive', 'viterbi'; "+
+                        help="algorithm type ('recursive', 'viterbi'; "
                         "default '%(default)s')",
                         metavar='<algorithm>')
     parser.add_argument('-A', '--annotations', dest="annofile", default=None,
-                        help="load annotated data for semi-supervised "+
+                        help="load annotated data for semi-supervised "
                         "learning", metavar='<file>')
     parser.add_argument('-b', '--break', dest="separator", type=str,
                         default=None, metavar='<regexp>',
                         help="atom separator regexp (default %(default)s)")
     parser.add_argument('-c', '--compbreak', dest="cseparator", type=str,
                         default='\W+', metavar='<regexp>',
-                        help="compound separator regexp "+
+                        help="compound separator regexp "
                         "(default '%(default)s')")
     parser.add_argument('-C', '--compoundlistdata', dest="list", default=False,
                         action='store_true',
-                        help="input file(s) for batch training are lists "+
+                        help="input file(s) for batch training are lists "
                         "(one compound per line, optionally count as prefix)")
     parser.add_argument('-d', '--dampening', dest="dampening", type=str,
                         default='none', metavar='<type>',
-                        help="frequency dampening for training data ("+
+                        help="frequency dampening for training data ("
                         "'none', 'log', or 'ones'; default '%(default)s')")
     parser.add_argument('-D', '--develset', dest="develfile", default=None,
-                        help="load annotated data for parameter "+
+                        help="load annotated data for parameter "
                         "tuning", metavar='<file>')
-    parser.add_argument('-e', '--epochinterval', dest="epochinterval", type=int,
-                        default=10000, metavar='<int>',
-                        help="epoch interval for online training ("+
+    parser.add_argument('-e', '--epochinterval', dest="epochinterval",
+                        type=int, default=10000, metavar='<int>',
+                        help="epoch interval for online training ("
                         "default %(default)s)")
     parser.add_argument('-E', '--encoding', dest='encoding',
                         help="Specify encoding of input and output files. By "
                         "default the local encoding and utf-8 are tried")
     parser.add_argument('-f', '--forcesplit', dest="forcesplit", type=list,
                         default=['-'], metavar='<list>',
-                        help="force split on given atoms (default %(default)s)")
-    parser.add_argument('-F', '--freqthreshold', dest="freqthreshold", type=int,
-                        default=1, metavar='<int>',
-                        help="frequency threshold for batch training ("+
+                        help="force split on given atoms "
+                             "(default %(default)s)")
+    parser.add_argument('-F', '--freqthreshold', dest="freqthreshold",
+                        type=int, default=1, metavar='<int>',
+                        help="frequency threshold for batch training ("
                         "default %(default)s)")
     parser.add_argument('-l', '--load', dest="loadfile", default=None,
                         help="load existing model from file (pickled object)",
                         metavar='<file>')
     parser.add_argument('-L', '--loadsegmentation', dest="loadsegfile",
                         default=None,
-                        help="load existing model from segmentation file "+
+                        help="load existing model from segmentation file "
                         "(Morfessor 1.0 format)", metavar='<file>')
-    parser.add_argument('--logfile',dest='log_file', metavar='<file>'),
+    parser.add_argument('--logfile', dest='log_file', metavar='<file>'),
     parser.add_argument('-m', '--mode', dest="trainmode", default='batch',
-                        help="training mode ('batch', 'online', or "+
+                        help="training mode ('batch', 'online', or "
                         "'online+batch'; default '%(default)s')",
                         metavar='<mode>')
     parser.add_argument('-o', '--output', dest="outfile", default='-',
-                        help="output file for test data results "+
-                        "(for standard output, use '-'; default "+
+                        help="output file for test data results "
+                        "(for standard output, use '-'; default "
                         "'%(default)s')",  metavar='<file>')
     parser.add_argument('-q', '--skips', dest="skips", default=False,
                         action='store_true',
-                        help="use random skips for frequently seen "+
+                        help="use random skips for frequently seen "
                         "compounds to speed up training")
     parser.add_argument('-r', '--randseed', dest="randseed", default=None,
                         help="seed for random number generator",
                         metavar='<seed>')
     parser.add_argument('-R', '--randsplit', dest="splitprob", default=None,
-                        type = float, metavar = '<float>',
-                        help="initialize model by random splitting using "+
+                        type=float, metavar='<float>',
+                        help="initialize model by random splitting using "
                         "the given split probability (default no splitting)")
     parser.add_argument('-s', '--save', dest="savefile", default=None,
                         help="save final model to file (pickled object)",
                         metavar='<file>')
     parser.add_argument('-S', '--savesegmentation', dest="savesegfile",
                         default=None,
-                        help="save model segmentations to file "+
+                        help="save model segmentations to file "
                         "(Morfessor 1.0 format)", metavar='<file>')
     parser.add_argument('-t', '--traindata', dest='trainfiles',
-                        action='append', default = [],
-                        help="input corpus file(s) for training (text or "+
-                        "gzipped text; use '-' for standard input; "+
+                        action='append', default=[],
+                        help="input corpus file(s) for training (text or "
+                        "gzipped text; use '-' for standard input; "
                         "add several times in order to append multiple files)",
                         metavar='<file>')
     parser.add_argument('-T', '--testdata', dest='testfiles',
-                        action='append', default = [],
-                        help="input corpus file(s) for testing (text or "+
-                        "gzipped text;  use '-' for standard input; "+
+                        action='append', default=[],
+                        help="input corpus file(s) for testing (text or "
+                        "gzipped text;  use '-' for standard input; "
                         "add several times in order to append multiple files)",
                         metavar='<file>')
     parser.add_argument('-v', '--verbose', dest="verbose", type=int,
-                        default=1, help="verbose level; controls what is "+
-                        "written to the standard error stream "+
+                        default=1, help="verbose level; controls what is "
+                        "written to the standard error stream "
                         "(default %(default)s)", metavar='<int>')
     parser.add_argument('-w', '--corpusweight', dest="corpusweight",
                         type=float, default=1.0, metavar='<float>',
                         help="corpus weight parameter (default %(default)s)")
     parser.add_argument('-W', '--annotationweight', dest="annotationweight",
                         type=float, default=None, metavar='<float>',
-                        help="corpus weight parameter for annotated data "+
-                        "(if unset, the weight is set to balance the "+
+                        help="corpus weight parameter for annotated data "
+                        "(if unset, the weight is set to balance the "
                         "costs of annotated and unannotated data sets)")
     parser.add_argument('-x', '--lexicon', dest="lexfile", default=None,
                         help="output final lexicon to given file",
@@ -1499,7 +1512,7 @@ Interactive use (read corpus from user):
     default_formatter = logging.Formatter(logging_format, date_format)
     plain_formatter = logging.Formatter('%(message)s')
     logging.basicConfig(level=loglevel)
-    _logger.propagate = False # do not forward messages to the root logger
+    _logger.propagate = False  # do not forward messages to the root logger
 
     # Basic settings for logging to the error stream
     ch = logging.StreamHandler()
@@ -1542,9 +1555,9 @@ Interactive use (read corpus from user):
         model = io.read_binary_model_file(args.loadfile)
 
     else:
-        model = BaselineModel(forcesplit_list = args.forcesplit,
-                              corpusweight = args.corpusweight,
-                              use_skips = args.skips)
+        model = BaselineModel(forcesplit_list=args.forcesplit,
+                              corpusweight=args.corpusweight,
+                              use_skips=args.skips)
 
     if args.loadsegfile is not None:
         model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
@@ -1570,7 +1583,7 @@ Interactive use (read corpus from user):
         if args.dampening == 'none':
             dampfunc = lambda x: x
         elif args.dampening == 'log':
-            dampfunc = lambda x: int(round(math.log(x+1, 2)))
+            dampfunc = lambda x: int(round(math.log(x + 1, 2)))
         elif args.dampening == 'ones':
             dampfunc = lambda x: 1
         else:
@@ -1602,7 +1615,7 @@ Interactive use (read corpus from user):
         te = time.time()
         _logger.info("Epochs: %s" % e)
         _logger.info("Final cost: %s" % c)
-        _logger.info("Training time: %.3fs" % (te-ts))
+        _logger.info("Training time: %.3fs" % (te - ts))
 
     # Save model
     if args.savefile is not None:
