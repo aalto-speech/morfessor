@@ -2,9 +2,6 @@
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
-import codecs
-import io
-import locale
 
 __all__ = ['InputFormatError', 'MorfessorIO', 'Lexicon', 'BaselineModel',
            'Corpus', 'Annotations']
@@ -13,10 +10,12 @@ __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
 __author_email__ = "sami.virpioja@aalto.fi"
 
+import codecs
 import collections
 import datetime
 import gzip
 import itertools
+import locale
 import logging
 import math
 import random
@@ -378,7 +377,12 @@ class MorfessorIO:
                 if f == '-':
                     continue
                 try:
-                    for _ in io.open(f, encoding=encoding):
+                    if f.endswith('.gz'):
+                        file_obj = gzip.open(f, 'rb')
+                    else:
+                        file_obj = open(f, 'rb')
+
+                    for _ in codecs.getreader(self.encoding)(file_obj):
                         pass
                 except UnicodeDecodeError:
                     ok = False
@@ -455,7 +459,8 @@ ConstrNode = collections.namedtuple('ConstrNode',
 class BaselineModel:
     """Morfessor Baseline model class."""
 
-    def __init__(self, forcesplit_list=[], corpusweight=1.0, use_skips=False):
+    def __init__(self, forcesplit_list=None, corpusweight=1.0,
+                 use_skips=False):
         """Initialize a new model instance.
 
         Arguments:
@@ -479,7 +484,7 @@ class BaselineModel:
         self.use_skips = use_skips  # Random skips for frequent constructions
         self.counter = collections.Counter()  # Counter for random skipping
         self.corpuscostweight = corpusweight
-        self.forcesplit_list = forcesplit_list
+        self.forcesplit_list = forcesplit_list if not None else []
 
         self.supervised = False
 
