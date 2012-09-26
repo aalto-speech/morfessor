@@ -1275,143 +1275,118 @@ Interactive use (read corpus from user):
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    # Options for data files
+    # Options for input data files
     add_arg = parser.add_argument_group('input data files').add_argument
-
     add_arg('-l', '--load', dest="loadfile", default=None, metavar='<file>',
-            help="load existing model from file (pickled object)")
-
+            help="load existing model from file (pickled model object)")
     add_arg('-L', '--load-segmentation', dest="loadsegfile", default=None,
             metavar='<file>',
             help="load existing model from segmentation "
                  "file (Morfessor 1.0 format)")
-
     add_arg('-t', '--traindata', dest='trainfiles', action='append',
             default=[], metavar='<file>',
             help="input corpus file(s) for training (text or gzipped text; "
                  "use '-' for standard input; add several times in order to "
                  "append multiple files)")
-
     add_arg('-T', '--testdata', dest='testfiles', action='append',
             default=[], metavar='<file>',
             help="input corpus file(s) to analyze (text or gzipped text;  "
                  "use '-' for standard input; add several times in order to "
                  "append multiple files)")
-
     add_arg('-o', '--output', dest="outfile", default='-', metavar='<file>',
             help="output file for test data results (for standard output, "
                  "use '-'; default '%(default)s')")
 
+    # Options for output data files
     add_arg = parser.add_argument_group('output data files').add_argument
-
     add_arg('-s', '--save', dest="savefile", default=None, metavar='<file>',
-            help="save final model to file (pickled object)")
-
+            help="save final model to file (pickled model object)")
     add_arg('-S', '--save-segmentation', dest="savesegfile", default=None,
             metavar='<file>',
             help="save model segmentations to file (Morfessor 1.0 format)")
-
     add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
             help="output final lexicon to given file")
 
+    # Options for data formats
     add_arg = parser.add_argument_group(
         'data format options').add_argument
-
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
-            help="Specify encoding of input and output files. By default the "
-                 "local encoding and utf-8 are tried")
-
+            help="encoding of input and output files (if none is given, "
+            "both the local encoding and UTF-8 are tried)")
     add_arg('--traindata-list', dest="list", default=False,
             action='store_true',
             help="input file(s) for batch training are lists "
                  "(one compound per line, optionally count as a prefix)")
-
     add_arg('--atom-separator', dest="separator", type=str, default=None,
             metavar='<regexp>',
             help="atom separator regexp (default %(default)s)")
-
     add_arg('--compound-separator', dest="cseparator", type=str, default='\W+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
 
-    # General settings (weights and flags)
+    # Options for model training
     add_arg = parser.add_argument_group('training options').add_argument
-
     add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
-            metavar='<algorithm>',
+            metavar='<algorithm>', choices=['recursive', 'viterbi'],
             help="algorithm type ('recursive', 'viterbi'; default "
                  "'%(default)s')")
-
     add_arg('-m', '--mode', dest="trainmode", default='batch',
-            metavar='<mode>',
+            metavar='<mode>', choices=['batch', 'online', 'online+batch'],
             help="training mode ('batch', 'online', or 'online+batch'; "
                  "default '%(default)s')")
-
     add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
-            metavar='<type>',
+            metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
                  "'ones'; default '%(default)s')")
-
     add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
             metavar='<list>',
             help="force split on given atoms (default %(default)s)")
-
     add_arg('-r', '--randseed', dest="randseed", default=None,
             metavar='<seed>',
             help="seed for random number generator")
-
     add_arg('-R', '--randsplit', dest="splitprob", default=None, type=float,
             metavar='<float>',
             help="initialize model by random splitting using the given split "
                  "probability (default no splitting)")
-
     add_arg('--skips', dest="skips", default=False, action='store_true',
             help="use random skips for frequently seen compounds to speed up "
                  "training")
-
     add_arg('--batch-minfreq', dest="freqthreshold", type=int, default=1,
             metavar='<int>',
             help="compound frequency threshold for batch training (default "
                  "%(default)s)")
-
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
 
-
+    # Options for semi-supervised model training
     add_arg = parser.add_argument_group(
         'semi-supervised training options').add_argument
-
     add_arg('-A', '--annotations', dest="annofile", default=None,
             metavar='<file>',
             help="load annotated data for semi-supervised learning")
-
     add_arg('-D', '--develset', dest="develfile", default=None,
             metavar='<file>',
             help="load annotated data for tuning the corpus weight parameter")
-
     add_arg('-w', '--corpusweight', dest="corpusweight", type=float,
             default=1.0, metavar='<float>',
             help="corpus weight parameter (default %(default)s); "
-            "if --develset is used, this is the initial value")
-
+            "sets the initial value if --develset is used")
     add_arg('-W', '--annotationweight', dest="annotationweight",
             type=float, default=None, metavar='<float>',
             help="corpus weight parameter for annotated data (if unset, the "
-                 "weight is set to balance the costs of annotated and "
-                 "unannotated data sets)")
+                 "weight is set to balance the number of tokens in annotated "
+                 "and unannotated data sets)")
 
-    # Log settings (weights and flags)
+    # Options for logging
     add_arg = parser.add_argument_group('logging options').add_argument
-
     add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
             metavar='<int>',
             help="verbose level; controls what is written to the standard "
                  "error stream (default %(default)s)")
-
     add_arg('--logfile', dest='log_file', metavar='<file>',
-            help="write log messages to file (in addition to standard "
-            "error stream)")
+            help="write log messages to file in addition to standard "
+            "error stream")
 
     args = parser.parse_args(argv)
 
@@ -1490,11 +1465,7 @@ Interactive use (read corpus from user):
         develannots = None
 
     # Train model
-    if len(args.trainfiles) > 0:
-        # Check that the algorithm exists
-        if not args.algorithm in ['recursive', 'viterbi']:
-            parser.error("unknown algorithm '%s'" % args.algorithm)
-
+    if len(args.trainfiles) > 0 or args.trainmode == 'batch':
         # Set frequency dampening function
         if args.dampening == 'none':
             dampfunc = lambda x: x
@@ -1504,8 +1475,8 @@ Interactive use (read corpus from user):
             dampfunc = lambda x: 1
         else:
             parser.error("unknown dampening type '%s'" % args.dampening)
-        ts = time.time()
 
+        ts = time.time()
         if args.trainmode == 'batch':
             if len(model._get_compounds()) == 0:
                 for f in args.trainfiles:
@@ -1516,7 +1487,10 @@ Interactive use (read corpus from user):
 
                     model.load_data(data, args.freqthreshold, dampfunc,
                                     args.splitprob)
-
+            elif len(args.trainfiles) > 0:
+                _logger.warning("New data files ignored because model "
+                                "already contains compounds. Use on-line "
+                                "training to add new compounds.")
             e, c = model.train_batch(args.algorithm, develannots)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
