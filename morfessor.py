@@ -937,8 +937,8 @@ class BaselineModel:
             self.sweightbalance = False
         self.penaltylogprob = -9999.9  # cost for missing a known construction
 
-    def train_batch(self, algorithm='recursive', development_annotations=None,
-                    finish_threshold=0.005):
+    def train_batch(self, algorithm='recursive', algorithm_params=(), 
+                    devel_annotations=None, finish_threshold=0.005):
         self._epoch_update(0)
         oldcost = 0.0
         newcost = self.get_cost()
@@ -955,9 +955,9 @@ class BaselineModel:
 
             for w in _progress(compounds):
                 if algorithm == 'recursive':
-                    segments = self._recursive_optimize(w)
+                    segments = self._recursive_optimize(w, *algorithm_params)
                 elif algorithm == 'viterbi':
-                    segments = self._viterbi_optimize(w)
+                    segments = self._viterbi_optimize(w, *algorithm_params)
                 else:
                     raise Error("unknown algorithm '%s'" % algorithm)
                 _logger.debug("#%s -> %s" %
@@ -969,7 +969,7 @@ class BaselineModel:
             oldcost = newcost
             newcost = self.get_cost()
 
-            if development_annotations is not None:
+            if devel_annotations is not None:
                 # Tune corpus weight based on development data
                 tmp = development_annotations.get_data()
                 wlist, annotations = zip(*tmp)
@@ -999,7 +999,7 @@ class BaselineModel:
         return epochs, newcost
 
     def train_online(self, data, count_modifier=None, epoch_interval=10000,
-                     algorithm='recursive'):
+                     algorithm='recursive', algorithm_params=()):
         if count_modifier is not None:
             counts = {}
 
@@ -1034,9 +1034,9 @@ class BaselineModel:
                 else:
                     self._add_compound(w, 1)
                 if algorithm == 'recursive':
-                    segments = self._recursive_optimize(w)
+                    segments = self._recursive_optimize(w, *algorithm_params)
                 elif algorithm == 'viterbi':
-                    segments = self._viterbi_optimize(w)
+                    segments = self._viterbi_optimize(w, *algorithm_params)
                 else:
                     raise Error("unknown algorithm '%s'" % algorithm)
                 _logger.debug("#%s: %s -> %s" %
@@ -1068,7 +1068,7 @@ class BaselineModel:
         clen = len(compound)
         grid = [(0.0, None)]
         logtokens = math.log(self.tokens + addcount)
-        badlikelihood = clen * logtokens
+        badlikelihood = clen * logtokens + 1.0
         # Viterbi main loop
         for t in range(1, clen + 1):
             # Select the best path to current node.
@@ -1088,16 +1088,17 @@ class BaselineModel:
                                      self.analyses[construction].count))
                     cost += (logtokens -
                              math.log(self.analyses[construction].count +
-                             addcount))
+                                      addcount))
                 elif addcount > 0:
                     if self.tokens == 0:
-                        cost += ((addcount * math.log(addcount) +
-                                  self.lexicon.get_codelength(construction))
+                        cost += ((addcount * math.log(addcount) 
+                                  + self.lexicon.get_codelength(construction))
                                  / self.corpuscostweight)
                     else:
-                        cost += (((self.types + addcount) *
-                                  math.log(self.tokens + addcount)
-                                  - self.types * math.log(self.tokens)
+                        cost += ((logtokens - math.log(addcount)  
+                                  + ((self.types + addcount) *
+                                     math.log(self.tokens + addcount))
+                                  - self.types * math.log(self.tokens) 
                                   + self.lexicon.get_codelength(construction))
                                  / self.corpuscostweight)
                 elif len(construction) == 1:
@@ -1325,7 +1326,8 @@ Interactive use (read corpus from user):
             help="compound separator regexp (default '%(default)s')")
 
     # Options for model training
-    add_arg = parser.add_argument_group('training options').add_argument
+    add_arg = parser.add_argument_group(
+        'training and segmentation options').add_argument
     add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
             metavar='<algorithm>', choices=['recursive', 'viterbi'],
             help="algorithm type ('recursive', 'viterbi'; default "
@@ -1358,6 +1360,14 @@ Interactive use (read corpus from user):
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
+    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0, 
+            type=float, metavar='<float>',
+            help="additive smoothing parameter for Viterbi training "
+            "and segmentation (default %(default)s)")
+    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30, 
+            type=int, metavar='<int>',
+            help="maximum construction length in Viterbi training "
+            "and segmentation (default %(default)s)")
 
     # Options for semi-supervised model training
     add_arg = parser.add_argument_group(
@@ -1410,16 +1420,16 @@ Interactive use (read corpus from user):
     ch.setFormatter(default_formatter)
     _logger.addHandler(ch)
 
-    #Settings for when log_file is present
+    # Settings for when log_file is present
     if args.log_file is not None:
         fh = logging.FileHandler(args.log_file, 'w')
         fh.setLevel(loglevel)
         fh.setFormatter(default_formatter)
         _logger.addHandler(fh)
-
-        #If logging to a file, make INFO the highest level for the error stream
+        # If logging to a file, make INFO the highest level for the
+        # error stream
         ch.setLevel(max(loglevel, logging.INFO))
-        #Also, don't print timestamps to the error stream
+        # Also, don't print timestamps to the error stream
         ch.setFormatter(plain_formatter)
 
     # If debug messages are printed to screen or if stderr is not a tty (but
@@ -1476,6 +1486,12 @@ Interactive use (read corpus from user):
         else:
             parser.error("unknown dampening type '%s'" % args.dampening)
 
+        # Set algorithm parameters
+        if args.algorithm == 'viterbi':
+            algparams = (args.viterbismooth, args.viterbimaxlen)
+        else:
+            algparams = ()
+
         ts = time.time()
         if args.trainmode == 'batch':
             if len(model._get_compounds()) == 0:
@@ -1491,16 +1507,16 @@ Interactive use (read corpus from user):
                 _logger.warning("New data files ignored because model "
                                 "already contains compounds. Use on-line "
                                 "training to add new compounds.")
-            e, c = model.train_batch(args.algorithm, develannots)
+            e, c = model.train_batch(args.algorithm, algparams, develannots)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm)
+                                      args.algorithm, algparams)
         elif args.trainmode == 'online+batch':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm)
-            e, c = model.train_batch(args.algorithm, develannots)
+                                      args.algorithm, algparams)
+            e, c = model.train_batch(args.algorithm, algparams, develannots)
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
         te = time.time()
@@ -1526,7 +1542,8 @@ Interactive use (read corpus from user):
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
             for _, _, compound in testdata:
-                constructions, logp = model.viterbi_segment(compound)
+                constructions, logp = model.viterbi_segment(
+                    compound, args.viterbismooth, args.viterbimaxlen)
                 fobj.write("%s\n" % ' '.join(constructions))
                 i += 1
                 if i % 10000 == 0:
