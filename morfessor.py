@@ -902,7 +902,7 @@ class BaselineModel:
                 continue
             self._add_compound(atoms, cfunc(count))
 
-            if init_rand_split is not None:
+            if init_rand_split is not None and init_rand_split > 0:
                 parts = self._random_split(atoms, init_rand_split)
                 self._set_compound_analysis(atoms, parts)
 
@@ -1409,7 +1409,7 @@ Interactive use (read corpus from user):
             help="verbose level; controls what is written to the standard "
                  "error stream (default %(default)s)")
 
-    add_arg('--logfile', dest='log_file', metavar='<file>', 
+    add_arg('--logfile', dest='log_file', metavar='<file>',
             help="write log messages to file (in addition to standard "
             "error stream)")
 
