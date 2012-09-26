@@ -1275,9 +1275,6 @@ Interactive use (read corpus from user):
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    # Options for separators
-    #add_arg = parser.add_argument_group('Separators').add_argument
-
     # Options for data files
     add_arg = parser.add_argument_group('input data files').add_argument
 
