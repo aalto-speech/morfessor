@@ -1275,115 +1275,134 @@ Interactive use (read corpus from user):
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    sepg = parser.add_argument_group('Separators')
-    sepg.add_argument('-b', '--break', dest="separator", type=str,
-                        default=None, metavar='<regexp>',
-                        help="atom separator regexp (default %(default)s)")
-    sepg.add_argument('-c', '--compbreak', dest="cseparator", type=str,
-                        default='\W+', metavar='<regexp>',
-                        help="compound separator regexp "
-                        "(default '%(default)s')")
+    # Options for separators
+    add_arg = parser.add_argument_group('Separators').add_argument
 
-    datg = parser.add_argument_group('Data files')
-    datg.add_argument('-A', '--annotations', dest="annofile", default=None,
-                        help="load annotated data for semi-supervised "
-                        "learning", metavar='<file>')
-    datg.add_argument('-C', '--compoundlistdata', dest="list", default=False,
-                        action='store_true',
-                        help="input file(s) for batch training are lists "
-                        "(one compound per line, optionally count as prefix)")
-    datg.add_argument('-D', '--develset', dest="develfile", default=None,
-                        help="load annotated data for parameter "
-                        "tuning", metavar='<file>')
-    datg.add_argument('-l', '--load', dest="loadfile", default=None,
-                        help="load existing model from file (pickled object)",
-                        metavar='<file>')
-    datg.add_argument('-L', '--loadsegmentation', dest="loadsegfile",
-                        default=None,
-                        help="load existing model from segmentation file "
-                        "(Morfessor 1.0 format)", metavar='<file>')
-    datg.add_argument('-o', '--output', dest="outfile", default='-',
-                        help="output file for test data results "
-                        "(for standard output, use '-'; default "
-                        "'%(default)s')",  metavar='<file>')
-    datg.add_argument('-s', '--save', dest="savefile", default=None,
-                        help="save final model to file (pickled object)",
-                        metavar='<file>')
-    datg.add_argument('-S', '--savesegmentation', dest="savesegfile",
-                        default=None,
-                        help="save model segmentations to file "
-                        "(Morfessor 1.0 format)", metavar='<file>')
-    datg.add_argument('-t', '--traindata', dest='trainfiles',
-                        action='append', default=[],
-                        help="input corpus file(s) for training (text or "
-                        "gzipped text; use '-' for standard input; "
-                        "add several times in order to append multiple files)",
-                        metavar='<file>')
-    datg.add_argument('-T', '--testdata', dest='testfiles',
-                        action='append', default=[],
-                        help="input corpus file(s) for testing (text or "
-                        "gzipped text;  use '-' for standard input; "
-                        "add several times in order to append multiple files)",
-                        metavar='<file>')
-    datg.add_argument('-x', '--lexicon', dest="lexfile", default=None,
-                        help="output final lexicon to given file",
-                        metavar='<file>')
+    add_arg('-b', '--break', dest="separator", type=str, default=None,
+            metavar='<regexp>',
+            help="atom separator regexp (default %(default)s)")
 
-    setg = parser.add_argument_group('Settings')
-    setg.add_argument('-a', '--algorithm', dest="algorithm",
-                        default='recursive',
-                        help="algorithm type ('recursive', 'viterbi'; "
-                        "default '%(default)s')",
-                        metavar='<algorithm>')
-    setg.add_argument('-d', '--dampening', dest="dampening", type=str,
-                        default='none', metavar='<type>',
-                        help="frequency dampening for training data ("
-                        "'none', 'log', or 'ones'; default '%(default)s')")
-    setg.add_argument('-e', '--epochinterval', dest="epochinterval",
-                        type=int, default=10000, metavar='<int>',
-                        help="epoch interval for online training ("
-                        "default %(default)s)")
-    setg.add_argument('-E', '--encoding', dest='encoding',
-                        help="Specify encoding of input and output files. By "
-                        "default the local encoding and utf-8 are tried")
-    setg.add_argument('-f', '--forcesplit', dest="forcesplit", type=list,
-                        default=['-'], metavar='<list>',
-                        help="force split on given atoms "
-                             "(default %(default)s)")
-    setg.add_argument('-F', '--freqthreshold', dest="freqthreshold",
-                        type=int, default=1, metavar='<int>',
-                        help="frequency threshold for batch training ("
-                        "default %(default)s)")
-    setg.add_argument('-m', '--mode', dest="trainmode", default='batch',
-                        help="training mode ('batch', 'online', or "
-                        "'online+batch'; default '%(default)s')",
-                        metavar='<mode>')
-    setg.add_argument('-q', '--skips', dest="skips", default=False,
-                        action='store_true',
-                        help="use random skips for frequently seen "
-                        "compounds to speed up training")
-    setg.add_argument('-r', '--randseed', dest="randseed", default=None,
-                        help="seed for random number generator",
-                        metavar='<seed>')
-    setg.add_argument('-R', '--randsplit', dest="splitprob", default=None,
-                        type=float, metavar='<float>',
-                        help="initialize model by random splitting using "
-                        "the given split probability (default no splitting)")
-    setg.add_argument('-w', '--corpusweight', dest="corpusweight",
-                        type=float, default=1.0, metavar='<float>',
-                        help="corpus weight parameter (default %(default)s)")
-    setg.add_argument('-W', '--annotationweight', dest="annotationweight",
-                        type=float, default=None, metavar='<float>',
-                        help="corpus weight parameter for annotated data "
-                        "(if unset, the weight is set to balance the "
-                        "costs of annotated and unannotated data sets)")
+    add_arg('-c', '--compbreak', dest="cseparator", type=str, default='\W+',
+            metavar='<regexp>',
+            help="compound separator regexp (default '%(default)s')")
 
-    logg = parser.add_argument_group('Log Settings')
-    logg.add_argument('--logfile', dest='log_file', metavar='<file>'),
-    logg.add_argument('-v', '--verbose', dest="verbose", type=int,
-                        default=1, help="verbose level; controls what is "
-                        "written to the standard error stream "
-                        "(default %(default)s)", metavar='<int>')
+    # Options for data files
+    add_arg = parser.add_argument_group('Data files').add_argument
+
+    add_arg('-A', '--annotations', dest="annofile", default=None,
+            metavar='<file>',
+            help="load annotated data for semi-supervised learning")
+
+    add_arg('-C', '--compoundlistdata', dest="list", default=False,
+            action='store_true',
+            help="input file(s) for batch training are lists "
+                 "(one compound per line, optionally count as prefix)")
+
+    add_arg('-D', '--develset', dest="develfile", default=None,
+            metavar='<file>',
+            help="load annotated data for parameter tuning")
+
+    add_arg('-l', '--load', dest="loadfile", default=None, metavar='<file>',
+            help="load existing model from file (pickled object)")
+
+    add_arg('-L', '--loadsegmentation', dest="loadsegfile", default=None,
+            metavar='<file>',
+            help="load existing model from segmentation "
+                 "file (Morfessor 1.0 format)")
+
+    add_arg('-o', '--output', dest="outfile", default='-', metavar='<file>',
+            help="output file for test data results (for standard output, "
+                 "use '-'; default '%(default)s')")
+
+    add_arg('-s', '--save', dest="savefile", default=None, metavar='<file>',
+            help="save final model to file (pickled object)")
+
+    add_arg('-S', '--savesegmentation', dest="savesegfile", default=None,
+            metavar='<file>',
+            help="save model segmentations to file (Morfessor 1.0 format)")
+
+    add_arg('-t', '--traindata', dest='trainfiles', action='append',
+            default=[], metavar='<file>',
+            help="input corpus file(s) for training (text or gzipped text; "
+                 "use '-' for standard input; add several times in order to "
+                 "append multiple files)")
+
+    add_arg('-T', '--testdata', dest='testfiles', action='append',
+            default=[], metavar='<file>',
+            help="input corpus file(s) for testing (text or gzipped text;  "
+                 "use '-' for standard input; add several times in order to "
+                 "append multiple files)")
+
+    add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
+            help="output final lexicon to given file")
+
+    # General settings (weights and flags)
+    add_arg = parser.add_argument_group('Settings').add_argument
+
+    add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
+            metavar='<algorithm>',
+            help="algorithm type ('recursive', 'viterbi'; default "
+                 "'%(default)s')")
+
+    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
+            metavar='<type>',
+            help="frequency dampening for training data ('none', 'log', or "
+                 "'ones'; default '%(default)s')")
+
+    add_arg('-e', '--epochinterval', dest="epochinterval", type=int,
+            default=10000, metavar='<int>',
+            help="epoch interval for online training (default %(default)s)")
+
+    add_arg('-E', '--encoding', dest='encoding',
+            help="Specify encoding of input and output files. By default the "
+                 "local encoding and utf-8 are tried")
+
+    add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
+            metavar='<list>',
+            help="force split on given atoms (default %(default)s)")
+
+    add_arg('-F', '--freqthreshold', dest="freqthreshold", type=int, default=1,
+            metavar='<int>',
+            help="frequency threshold for batch training (default "
+                 "%(default)s)")
+
+    add_arg('-m', '--mode', dest="trainmode", default='batch',
+            metavar='<mode>',
+            help="training mode ('batch', 'online', or 'online+batch'; "
+                 "default '%(default)s')")
+
+    add_arg('-q', '--skips', dest="skips", default=False, action='store_true',
+            help="use random skips for frequently seen compounds to speed up "
+                 "training")
+
+    add_arg('-r', '--randseed', dest="randseed", default=None,
+            metavar='<seed>',
+            help="seed for random number generator")
+
+    add_arg('-R', '--randsplit', dest="splitprob", default=None, type=float,
+            metavar='<float>',
+            help="initialize model by random splitting using the given split "
+                 "probability (default no splitting)")
+
+    add_arg('-w', '--corpusweight', dest="corpusweight", type=float,
+            default=1.0, metavar='<float>',
+            help="corpus weight parameter (default %(default)s)")
+
+    add_arg('-W', '--annotationweight', dest="annotationweight",
+            type=float, default=None, metavar='<float>',
+            help="corpus weight parameter for annotated data (if unset, the "
+                 "weight is set to balance the costs of annotated and "
+                 "unannotated data sets)")
+
+    # Log settings (weights and flags)
+    add_arg = parser.add_argument_group('Log Settings').add_argument
+
+    add_arg('--logfile', dest='log_file', metavar='<file>', help="")
+
+    add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
+            metavar='<int>',
+            help="verbose level; controls what is written to the standard "
+                 "error stream (default %(default)s)")
 
     args = parser.parse_args(argv)
 
