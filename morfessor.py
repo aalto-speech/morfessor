@@ -1276,50 +1276,18 @@ Interactive use (read corpus from user):
         formatter_class=argparse.RawDescriptionHelpFormatter)
 
     # Options for separators
-    add_arg = parser.add_argument_group('Separators').add_argument
-
-    add_arg('-b', '--break', dest="separator", type=str, default=None,
-            metavar='<regexp>',
-            help="atom separator regexp (default %(default)s)")
-
-    add_arg('-c', '--compbreak', dest="cseparator", type=str, default='\W+',
-            metavar='<regexp>',
-            help="compound separator regexp (default '%(default)s')")
+    #add_arg = parser.add_argument_group('Separators').add_argument
 
     # Options for data files
-    add_arg = parser.add_argument_group('Data files').add_argument
-
-    add_arg('-A', '--annotations', dest="annofile", default=None,
-            metavar='<file>',
-            help="load annotated data for semi-supervised learning")
-
-    add_arg('-C', '--compoundlistdata', dest="list", default=False,
-            action='store_true',
-            help="input file(s) for batch training are lists "
-                 "(one compound per line, optionally count as prefix)")
-
-    add_arg('-D', '--develset', dest="develfile", default=None,
-            metavar='<file>',
-            help="load annotated data for parameter tuning")
+    add_arg = parser.add_argument_group('input data files').add_argument
 
     add_arg('-l', '--load', dest="loadfile", default=None, metavar='<file>',
             help="load existing model from file (pickled object)")
 
-    add_arg('-L', '--loadsegmentation', dest="loadsegfile", default=None,
+    add_arg('-L', '--load-segmentation', dest="loadsegfile", default=None,
             metavar='<file>',
             help="load existing model from segmentation "
                  "file (Morfessor 1.0 format)")
-
-    add_arg('-o', '--output', dest="outfile", default='-', metavar='<file>',
-            help="output file for test data results (for standard output, "
-                 "use '-'; default '%(default)s')")
-
-    add_arg('-s', '--save', dest="savefile", default=None, metavar='<file>',
-            help="save final model to file (pickled object)")
-
-    add_arg('-S', '--savesegmentation', dest="savesegfile", default=None,
-            metavar='<file>',
-            help="save model segmentations to file (Morfessor 1.0 format)")
 
     add_arg('-t', '--traindata', dest='trainfiles', action='append',
             default=[], metavar='<file>',
@@ -1329,51 +1297,67 @@ Interactive use (read corpus from user):
 
     add_arg('-T', '--testdata', dest='testfiles', action='append',
             default=[], metavar='<file>',
-            help="input corpus file(s) for testing (text or gzipped text;  "
+            help="input corpus file(s) to analyze (text or gzipped text;  "
                  "use '-' for standard input; add several times in order to "
                  "append multiple files)")
+
+    add_arg('-o', '--output', dest="outfile", default='-', metavar='<file>',
+            help="output file for test data results (for standard output, "
+                 "use '-'; default '%(default)s')")
+
+    add_arg = parser.add_argument_group('output data files').add_argument
+
+    add_arg('-s', '--save', dest="savefile", default=None, metavar='<file>',
+            help="save final model to file (pickled object)")
+
+    add_arg('-S', '--save-segmentation', dest="savesegfile", default=None,
+            metavar='<file>',
+            help="save model segmentations to file (Morfessor 1.0 format)")
 
     add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
             help="output final lexicon to given file")
 
+    add_arg = parser.add_argument_group(
+        'data format options').add_argument
+
+    add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
+            help="Specify encoding of input and output files. By default the "
+                 "local encoding and utf-8 are tried")
+
+    add_arg('--traindata-list', dest="list", default=False,
+            action='store_true',
+            help="input file(s) for batch training are lists "
+                 "(one compound per line, optionally count as a prefix)")
+
+    add_arg('--atom-separator', dest="separator", type=str, default=None,
+            metavar='<regexp>',
+            help="atom separator regexp (default %(default)s)")
+
+    add_arg('--compound-separator', dest="cseparator", type=str, default='\W+',
+            metavar='<regexp>',
+            help="compound separator regexp (default '%(default)s')")
+
     # General settings (weights and flags)
-    add_arg = parser.add_argument_group('Settings').add_argument
+    add_arg = parser.add_argument_group('training options').add_argument
 
     add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
             metavar='<algorithm>',
             help="algorithm type ('recursive', 'viterbi'; default "
                  "'%(default)s')")
 
-    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
-            metavar='<type>',
-            help="frequency dampening for training data ('none', 'log', or "
-                 "'ones'; default '%(default)s')")
-
-    add_arg('-e', '--epochinterval', dest="epochinterval", type=int,
-            default=10000, metavar='<int>',
-            help="epoch interval for online training (default %(default)s)")
-
-    add_arg('-E', '--encoding', dest='encoding',
-            help="Specify encoding of input and output files. By default the "
-                 "local encoding and utf-8 are tried")
-
-    add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
-            metavar='<list>',
-            help="force split on given atoms (default %(default)s)")
-
-    add_arg('-F', '--freqthreshold', dest="freqthreshold", type=int, default=1,
-            metavar='<int>',
-            help="frequency threshold for batch training (default "
-                 "%(default)s)")
-
     add_arg('-m', '--mode', dest="trainmode", default='batch',
             metavar='<mode>',
             help="training mode ('batch', 'online', or 'online+batch'; "
                  "default '%(default)s')")
 
-    add_arg('-q', '--skips', dest="skips", default=False, action='store_true',
-            help="use random skips for frequently seen compounds to speed up "
-                 "training")
+    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
+            metavar='<type>',
+            help="frequency dampening for training data ('none', 'log', or "
+                 "'ones'; default '%(default)s')")
+
+    add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
+            metavar='<list>',
+            help="force split on given atoms (default %(default)s)")
 
     add_arg('-r', '--randseed', dest="randseed", default=None,
             metavar='<seed>',
@@ -1384,9 +1368,35 @@ Interactive use (read corpus from user):
             help="initialize model by random splitting using the given split "
                  "probability (default no splitting)")
 
+    add_arg('--skips', dest="skips", default=False, action='store_true',
+            help="use random skips for frequently seen compounds to speed up "
+                 "training")
+
+    add_arg('--batch-minfreq', dest="freqthreshold", type=int, default=1,
+            metavar='<int>',
+            help="compound frequency threshold for batch training (default "
+                 "%(default)s)")
+
+    add_arg('--online-epochint', dest="epochinterval", type=int,
+            default=10000, metavar='<int>',
+            help="epoch interval for online training (default %(default)s)")
+
+
+    add_arg = parser.add_argument_group(
+        'semi-supervised training options').add_argument
+
+    add_arg('-A', '--annotations', dest="annofile", default=None,
+            metavar='<file>',
+            help="load annotated data for semi-supervised learning")
+
+    add_arg('-D', '--develset', dest="develfile", default=None,
+            metavar='<file>',
+            help="load annotated data for tuning the corpus weight parameter")
+
     add_arg('-w', '--corpusweight', dest="corpusweight", type=float,
             default=1.0, metavar='<float>',
-            help="corpus weight parameter (default %(default)s)")
+            help="corpus weight parameter (default %(default)s); "
+            "if --develset is used, this is the initial value")
 
     add_arg('-W', '--annotationweight', dest="annotationweight",
             type=float, default=None, metavar='<float>',
@@ -1395,14 +1405,16 @@ Interactive use (read corpus from user):
                  "unannotated data sets)")
 
     # Log settings (weights and flags)
-    add_arg = parser.add_argument_group('Log Settings').add_argument
-
-    add_arg('--logfile', dest='log_file', metavar='<file>', help="")
+    add_arg = parser.add_argument_group('logging options').add_argument
 
     add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
             metavar='<int>',
             help="verbose level; controls what is written to the standard "
                  "error stream (default %(default)s)")
+
+    add_arg('--logfile', dest='log_file', metavar='<file>', 
+            help="write log messages to file (in addition to standard "
+            "error stream)")
 
     args = parser.parse_args(argv)
 
