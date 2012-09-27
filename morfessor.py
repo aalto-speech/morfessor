@@ -35,6 +35,12 @@ try:
 except ImportError:
     pass
 
+try:
+    unicode
+except NameError:
+    # Python 3
+    basestring = unicode = str
+
 _logger = logging.getLogger(__name__)
 
 show_progress_bar = True
