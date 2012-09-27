@@ -882,7 +882,7 @@ class BaselineModel:
 
     def load_data(self, corpus, freqthreshold=1, cfunc=lambda x: x,
                   init_rand_split=None):
-        """Initialize the model for batch training.
+        """Load data to initialize the model for batch training.
 
         Arguments:
             corpus -- corpus instance
@@ -894,7 +894,8 @@ class BaselineModel:
                                init_rand_split as the probability for each
                                split
 
-        Adds the compounds in the corpus to the model lexicon.
+        Adds the compounds in the corpus to the model lexicon. Returns
+        the total cost.
 
         """
         for count, _, atoms in corpus:
@@ -905,6 +906,8 @@ class BaselineModel:
             if init_rand_split is not None and init_rand_split > 0:
                 parts = self._random_split(atoms, init_rand_split)
                 self._set_compound_analysis(atoms, parts)
+
+        return self.get_cost()
 
     def load_segmentations(self, segmentations):
         """Load model from existing segmentations.
@@ -1328,14 +1331,16 @@ Interactive use (read corpus from user):
     # Options for model training
     add_arg = parser.add_argument_group(
         'training and segmentation options').add_argument
+    add_arg('-m', '--mode', dest="trainmode", default='init+batch',
+            metavar='<mode>', 
+            choices=['none', 'batch', 'init', 'init+batch', 'online', 
+                     'online+batch'],
+            help="training mode ('none', 'init', 'batch', 'init+batch', "
+            "'online', or 'online+batch'; default '%(default)s')")
     add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
             metavar='<algorithm>', choices=['recursive', 'viterbi'],
             help="algorithm type ('recursive', 'viterbi'; default "
                  "'%(default)s')")
-    add_arg('-m', '--mode', dest="trainmode", default='batch',
-            metavar='<mode>', choices=['batch', 'online', 'online+batch'],
-            help="training mode ('batch', 'online', or 'online+batch'; "
-                 "default '%(default)s')")
     add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
@@ -1474,55 +1479,77 @@ Interactive use (read corpus from user):
     else:
         develannots = None
 
+    # Set frequency dampening function
+    if args.dampening == 'none':
+        dampfunc = lambda x: x
+    elif args.dampening == 'log':
+        dampfunc = lambda x: int(round(math.log(x + 1, 2)))
+    elif args.dampening == 'ones':
+        dampfunc = lambda x: 1
+    else:
+        parser.error("unknown dampening type '%s'" % args.dampening)
+
+    # Set algorithm parameters
+    if args.algorithm == 'viterbi':
+        algparams = (args.viterbismooth, args.viterbimaxlen)
+    else:
+        algparams = ()
+
     # Train model
-    if len(args.trainfiles) > 0 or args.trainmode == 'batch':
-        # Set frequency dampening function
-        if args.dampening == 'none':
-            dampfunc = lambda x: x
-        elif args.dampening == 'log':
-            dampfunc = lambda x: int(round(math.log(x + 1, 2)))
-        elif args.dampening == 'ones':
-            dampfunc = lambda x: 1
+    if args.trainmode == 'none':
+        pass
+    elif args.trainmode == 'batch':
+        if len(model._get_compounds()) == 0:
+            _logger.warning("Model contains no compounds for batch training."
+                            " Use 'init+batch' mode to add new data.")
         else:
-            parser.error("unknown dampening type '%s'" % args.dampening)
-
-        # Set algorithm parameters
-        if args.algorithm == 'viterbi':
-            algparams = (args.viterbismooth, args.viterbimaxlen)
-        else:
-            algparams = ()
-
-        ts = time.time()
-        if args.trainmode == 'batch':
-            if len(model._get_compounds()) == 0:
-                for f in args.trainfiles:
-                    if args.list:
-                        data = io.read_corpus_list_file(f)
-                    else:
-                        data = io.read_corpus_file(f)
-
-                    model.load_data(data, args.freqthreshold, dampfunc,
-                                    args.splitprob)
-            elif len(args.trainfiles) > 0:
-                _logger.warning("New data files ignored because model "
-                                "already contains compounds. Use on-line "
-                                "training to add new compounds.")
+            if len(args.trainfiles) > 0:
+                _logger.warning("Training mode 'batch' ignores new data "
+                                "files. Use 'init+batch' or 'online' to "
+                                "add new compounds.")
+            ts = time.time()
             e, c = model.train_batch(args.algorithm, algparams, develannots)
+            te = time.time()
+            _logger.info("Epochs: %s" % e)
+            _logger.info("Final cost: %s" % c)
+            _logger.info("Training time: %.3fs" % (te - ts))
+    elif len(args.trainfiles) > 0:
+        ts = time.time()
+        if args.trainmode == 'init':
+            for f in args.trainfiles:
+                if args.list:
+                    data = io.read_corpus_list_file(f)
+                else:
+                    data = io.read_corpus_file(f)
+            c = model.load_data(data, args.freqthreshold, dampfunc, 
+                                args.splitprob)
+        elif args.trainmode == 'init+batch':
+            for f in args.trainfiles:
+                if args.list:
+                    data = io.read_corpus_list_file(f)
+                else:
+                    data = io.read_corpus_file(f)
+            model.load_data(data, args.freqthreshold, dampfunc, args.splitprob)
+            e, c = model.train_batch(args.algorithm, algparams, develannots)
+            _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams)
+            _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online+batch':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams)
             e, c = model.train_batch(args.algorithm, algparams, develannots)
+            _logger.info("Epochs: %s" % e)
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
         te = time.time()
-        _logger.info("Epochs: %s" % e)
         _logger.info("Final cost: %s" % c)
         _logger.info("Training time: %.3fs" % (te - ts))
+    else:
+        _logger.warning("No training data files specified.")
 
     # Save model
     if args.savefile is not None:
