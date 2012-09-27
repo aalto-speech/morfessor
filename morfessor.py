@@ -304,7 +304,9 @@ class MorfessorIO:
             file_obj = gzip.open(file_name, 'wb')
         else:
             file_obj = open(file_name, 'wb')
-
+        if self.encoding is None:
+            # Take encoding from locale if not set so far
+            self.encoding = locale.getpreferredencoding()
         return codecs.getwriter(self.encoding)(file_obj)
 
     def _read_text_file(self, file_name):
@@ -1070,7 +1072,10 @@ class BaselineModel:
         """
         clen = len(compound)
         grid = [(0.0, None)]
-        logtokens = math.log(self.tokens + addcount)
+        if self.tokens + addcount > 0:
+            logtokens = math.log(self.tokens + addcount)
+        else:
+            logtokens = 0
         badlikelihood = clen * logtokens + 1.0
         # Viterbi main loop
         for t in range(1, clen + 1):
