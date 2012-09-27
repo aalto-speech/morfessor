@@ -977,7 +977,7 @@ class BaselineModel:
 
             if devel_annotations is not None:
                 # Tune corpus weight based on development data
-                tmp = development_annotations.get_data()
+                tmp = devel_annotations.get_data()
                 wlist, annotations = zip(*tmp)
                 segments = [self.viterbi_segment(w)[0] for w in wlist]
                 d = _estimate_segmentation_dir(segments, annotations)
