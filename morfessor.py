@@ -1270,6 +1270,8 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
+
+Command-line arguments:
 """ % __version__,
         epilog="""
 Simple usage examples (training and testing):
@@ -1282,7 +1284,8 @@ Interactive use (read corpus from user):
   %(prog)s -m online -v 2 -t -
 
 """,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False)
 
     # Options for input data files
     add_arg = parser.add_argument_group('input data files').add_argument
@@ -1403,10 +1406,17 @@ Interactive use (read corpus from user):
     add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
             metavar='<int>',
             help="verbose level; controls what is written to the standard "
-                 "error stream (default %(default)s)")
+                 "error stream or log file (default %(default)s)")
     add_arg('--logfile', dest='log_file', metavar='<file>',
             help="write log messages to file in addition to standard "
             "error stream")
+
+    add_arg = parser.add_argument_group('other options').add_argument
+    add_arg('-h', '--help', action='help',
+            help="show this help message and exit")
+    add_arg('--version', action='version', 
+            version='%(prog)s ' + __version__,
+            help="show version number and exit")
 
     args = parser.parse_args(argv)
 
