@@ -106,8 +106,6 @@ def _progress(iter_func):
     #If all else fails, just return the original.
     return iter_func
 
-_log2pi = math.log(2 * math.pi)
-
 
 def _constructions_to_str(constructions):
     """Return a readable string for a list of constructions."""
@@ -118,34 +116,6 @@ def _constructions_to_str(constructions):
     else:
         # Constructions are not strings (should be tuples of strings)
         return ' + '.join(map(lambda x: ' '.join(x), constructions))
-
-
-
-
-
-def logfactorial(n):
-    """Calculate logarithm of n!.
-
-    For large n (n > 20), use Stirling's approximation.
-
-    """
-    if n < 2:
-        return 0.0
-    if n < 20:
-        return math.log(math.factorial(n))
-    logn = math.log(n)
-    return n * logn - n + 0.5 * (logn + _log2pi)
-
-
-def frequency_distribution_cost(types, tokens):
-    """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
-    tokens.
-
-    """
-    if types < 2:
-        return 0.0
-    return (logfactorial(tokens - 1) - logfactorial(types - 1) -
-            logfactorial(tokens - types))
 
 
 class Error(Exception):
@@ -359,61 +329,6 @@ class MorfessorIO:
 
         raise UnicodeError("Can not determine encoding of input files")
 
-
-class Lexicon:
-    """Lexicon class for storing model constructions."""
-
-    def __init__(self):
-        """Initialize a new lexicon instance."""
-        self.atoms = collections.Counter()
-        self.atoms_total = 0
-        self.logtokensum = 0.0
-
-    def add(self, construction):
-        """Add construction to the lexicon (with optional data)."""
-        for atom in itertools.chain(construction, [None]):
-            oldc = self.atoms[atom]
-            self.logtokensum += (oldc + 1) * math.log(oldc + 1)
-            if oldc > 0:
-                self.logtokensum -= oldc * math.log(oldc)
-            self.atoms[atom] += 1
-
-        self.atoms_total += len(construction) + 1
-
-    def remove(self, construction):
-        """Remove construction from the lexicon."""
-        for atom in itertools.chain(construction, [None]):
-            oldc = self.atoms[atom]
-            self.logtokensum -= oldc * math.log(oldc)
-            if oldc > 1:
-                self.logtokensum += (oldc - 1) * math.log(oldc - 1)
-            self.atoms[atom] -= 1
-            if self.atoms[atom] == 0:
-                del self.atoms[atom]
-
-        self.atoms_total -= len(construction) + 1
-
-    def get_cost(self):
-        """Return the current coding cost of the lexicon."""
-        if self.atoms_total < 2:
-            return 0.0
-        cost = frequency_distribution_cost(len(self.atoms), self.atoms_total)
-        cost += (self.atoms_total * math.log(self.atoms_total) -
-                 self.logtokensum)
-        return cost
-
-    def get_codelength(self, construction):
-        """Return an approximate codelength for new construction."""
-        l = len(construction) + 1
-        cost = l * math.log(self.atoms_total + l)
-        for atom in itertools.chain(construction, [None]):
-            if atom in self.atoms:
-                c = self.atoms[atom]
-            else:
-                c = 1
-            cost -= math.log(c)
-        return cost
-
 # rcount = root count (from corpus)
 # count = total count of the node
 # splitloc = list of location of the possible splits for virtual
@@ -438,22 +353,13 @@ class BaselineModel:
 
         """
         self.analyses = {}
-        self.lexicon = Lexicon()
-
-        # Counters
-        self.tokens = 0             # Num. of construction tokens (in corpus)
-        self.types = 0              # Num. of construction types (in lexicon)
-        self.boundaries = 0         # Compound boundary tokens in corpus
 
         # Cost variables
-        self.logtokensum = 0.0      # Unnormalized coding length of the corpus
-        self.freqdistrcost = 0.0    # Coding cost of frequencies
-        self.corpuscost = 0.0       # Code length of pointers in corpus
-        self.permutationcost = 0.0  # Code length reduction from permutations
-        self.lexiconcost = 0.0      # Code length of construction lexicon
+        self.corpus_cost = CorpusCost(corpusweight)
+        self.atom_cost = AtomCost()
+        self.annot_cost = None
 
         # Configuration variables
-        self.corpuscostweight = corpusweight
         self.use_skips = use_skips  # Random skips for frequent constructions
         self.supervised = False
 
@@ -462,6 +368,8 @@ class BaselineModel:
             self.forcesplit_list = []
         else:
             self.forcesplit_list = forcesplit_list
+
+        self.penalty = -9999.9
 
     def _get_compounds(self):
         """Return the compound types stored by the model."""
@@ -479,7 +387,8 @@ class BaselineModel:
         oldrc = self.analyses[compound].rcount
         self.analyses[compound] = \
             self.analyses[compound]._replace(rcount=oldrc + c)
-        self.boundaries += c
+
+        self.corpus_cost.boundaries += c
 
     def _remove(self, construction):
         """Remove construction from model."""
@@ -561,42 +470,22 @@ class BaselineModel:
         """
         if not self.supervised:
             return
-        # Clean up everything just to be safe
-        self.annotatedconstructions = {}
-        self.annotatedtokens = 0
-        self.annotatedlogtokensum = 0.0
-        self.annotatedcorpuscost = 0.0
+
         # Add data to self.annotatedconstructions
+        constructions = collections.Counter()
         for w, alternatives in self.annotations.get_data():
-            if w in self.analyses:
-                c = self.analyses[w].rcount
-            else:
-                # Add compound also to the unannotated data
-                self._add_compound(w, 1)
-                c = 1
             analysis, cost = self._best_analysis(alternatives)
+
             for m in analysis:
-                if m in self.annotatedconstructions:
-                    self.annotatedconstructions[m] += c
-                else:
-                    self.annotatedconstructions[m] = c
-                self.annotatedtokens += c
-        self.annotatedlogtokensum = 0.0
-        for m, f in self.annotatedconstructions.items():
+                constructions[m] += self.analyses[w].rcount
+
+        self.annot_cost.set_constructions(constructions)
+
+        for m, f in constructions.items():
+            count = 0
             if m in self.analyses and len(self.analyses[m].splitloc) == 0:
-                self.annotatedlogtokensum += \
-                    f * math.log(self.analyses[m].count)
-            else:
-                self.annotatedlogtokensum += f * self.penaltylogprob
-        if self.tokens > 0:
-            n = self.tokens + self.boundaries
-            b = self.annotations.get_types()  # boundaries in annotated data
-            self.annotatedcorpuscost = self.annotatedcorpusweight * \
-                ((self.annotatedtokens + b) * math.log(n) -
-                 self.annotatedlogtokensum -
-                 b * math.log(self.boundaries))
-        else:
-            self.annotatedcorpuscost = 0.0
+                count = self.analyses[m].count
+            self.annot_cost.update_count(m, -1, count)
 
     def _best_analysis(self, choices):
         """Select the best analysis out of the given choices."""
@@ -606,10 +495,11 @@ class BaselineModel:
             cost = 0.0
             for m in analysis:
                 if m in self.analyses and len(self.analyses[m].splitloc) == 0:
-                    cost += (math.log(self.tokens) -
+                    cost += (math.log(self.corpus_cost.tokens) -
                              math.log(self.analyses[m].count))
                 else:
-                    cost -= self.penaltylogprob  # penaltylogprob is negative
+                    cost -= self.penalty  # penaltylogprob is
+                    # negative
             if bestcost is None or cost < bestcost:
                 bestcost = cost
                 bestanalysis = analysis
@@ -760,37 +650,13 @@ class BaselineModel:
                 self._modify_construction_count(child, dcount)
         else:
             # Real construction
-            self.tokens += dcount
-            if count > 1:
-                self.logtokensum -= count * math.log(count)
-                if (self.supervised and
-                        construction in self.annotatedconstructions):
-                    self.annotatedlogtokensum -= \
-                        (self.annotatedconstructions[construction] *
-                         math.log(count))
-            if newcount > 1:
-                self.logtokensum += newcount * math.log(newcount)
-                if (self.supervised and
-                        construction in self.annotatedconstructions):
-                    self.annotatedlogtokensum += \
-                        (self.annotatedconstructions[construction] *
-                         math.log(newcount))
+            self.corpus_cost.update_count(construction, count, newcount)
+            self.annot_cost.update_count(construction, count, newcount)
+
             if count == 0 and newcount > 0:
-                self.lexicon.add(construction)
-                self.types += 1
-                if self.supervised and \
-                        construction in self.annotatedconstructions:
-                    self.annotatedlogtokensum -= \
-                        (self.annotatedconstructions[construction] *
-                         self.penaltylogprob)
+                self.atom_cost.update_count(construction, 0, 1)
             elif count > 0 and newcount == 0:
-                self.lexicon.remove(construction)
-                self.types -= 1
-                if self.supervised and \
-                        construction in self.annotatedconstructions:
-                    self.annotatedlogtokensum += \
-                        (self.annotatedconstructions[construction] *
-                         self.penaltylogprob)
+                self.atom_cost.update_count(construction, 1, 0)
 
     def _epoch_update(self, epoch_num):
         """Do model updates that are necessary between training epochs.
@@ -812,17 +678,7 @@ class BaselineModel:
             self.counter = collections.Counter()
         if self.supervised:
             self._update_annotation_choices()
-            if self.sweightbalance:
-                # Set the corpus cost weight of annotated data
-                # according to the ratio of compound tokens in the
-                # data sets
-                old = self.annotatedcorpusweight
-                self.annotatedcorpusweight = (self.corpuscostweight *
-                                              float(self.boundaries) /
-                                              self.annotations.get_types())
-                if self.annotatedcorpusweight != old:
-                    _logger.info("Corpus weight of annotated data set to %s"
-                                 % self.annotatedcorpusweight)
+            self.annot_cost.update_weight()
 
     @staticmethod
     def _segmentation_to_splitloc(constructions):
@@ -849,31 +705,21 @@ class BaselineModel:
 
     def get_cost(self):
         """Return current model cost."""
-        if self.types == 0:
+        if self.corpus_cost.types == 0:
             return 0.0
-        self.permutationcost = -logfactorial(self.types)
-        self.freqdistrcost = frequency_distribution_cost(self.types,
-                                                         self.tokens)
-        n = self.tokens + self.boundaries
-        self.corpuscost = (self.corpuscostweight *
-                           (n * math.log(n) - self.logtokensum -
-                            self.boundaries * math.log(self.boundaries)))
-        self.lexiconcost = self.lexicon.get_cost()
-        if self.supervised:
-            b = self.annotations.get_types()
-            if b > 0:
-                self.annotatedcorpuscost = self.annotatedcorpusweight * \
-                    ((self.annotatedtokens + b) * math.log(n) -
-                     self.annotatedlogtokensum -
-                     b * math.log(self.boundaries))
-            else:
-                self.annotatedcorpuscost = 0.0
-            return (self.permutationcost + self.freqdistrcost +
-                    self.lexiconcost + self.corpuscost +
-                    self.annotatedcorpuscost)
+
+        if not self.supervised:
+            return (self.corpus_cost.permutations_cost() +
+                    self.corpus_cost.frequency_distribution_cost() +
+                    self.corpus_cost.get_cost() +
+                    self.atom_cost.get_cost())
+
         else:
-            return (self.permutationcost + self.freqdistrcost +
-                    self.lexiconcost + self.corpuscost)
+            return (self.corpus_cost.permutations_cost() +
+                    self.corpus_cost.frequency_distribution_cost() +
+                    self.corpus_cost.get_cost() +
+                    self.atom_cost.get_cost() +
+                    self.annot_cost.get_cost())
 
     def get_segmentations(self):
         """Retrieve segmentations for all compounds encoded by the model."""
@@ -930,26 +776,18 @@ class BaselineModel:
          """
         self.supervised = True
         self.annotations = annotations
-        self.annotatedconstructions = {}  # {construction: count}
-        self.annotatedtokens = 0
-        self.annotatedlogtokensum = 0.0
-        self.annotatedcorpuscost = 0.0
-        if annotatedcorpusweight is None:
-            self.annotatedcorpusweight = 1.0
-            self.sweightbalance = True
-        else:
-            self.annotatedcorpusweight = annotatedcorpusweight
-            self.sweightbalance = False
-        self.penaltylogprob = -9999.9  # cost for missing a known construction
+        self.annot_cost = AnnotationCorpusCost(self.corpus_cost,
+                                               annotated_corpus_weight=
+                                               annotatedcorpusweight)
 
-    def train_batch(self, algorithm='recursive', algorithm_params=(), 
+    def train_batch(self, algorithm='recursive', algorithm_params=(),
                     devel_annotations=None, finish_threshold=0.005):
         self._epoch_update(0)
         oldcost = 0.0
         newcost = self.get_cost()
         compounds = list(self._get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
-                     (len(compounds), self.boundaries))
+                     (len(compounds), self.corpus_cost.boundaries))
         epochs = 0
         _logger.info("Starting batch training")
         _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
@@ -982,11 +820,11 @@ class BaselineModel:
                 d = _estimate_segmentation_dir(segments, annotations)
                 if d != 0:
                     if d > 0:
-                        self.corpuscostweight *= 1 + 2.0 / epochs
+                        self.corpus_cost.weight *= 1 + 2.0 / epochs
                     else:
-                        self.corpuscostweight *= 1.0 / (1 + 2.0 / epochs)
+                        self.corpus_cost.weight *= 1.0 / (1 + 2.0 / epochs)
                     _logger.info("Corpus weight set to %s" %
-                                 self.corpuscostweight)
+                                 self.corpus_cost.weight)
                     self._epoch_update(epochs)
                     newcost = self.get_cost()
                     # Prevent stopping on next epoch
@@ -996,7 +834,8 @@ class BaselineModel:
             _logger.info("Epochs: %s" % epochs)
             _logger.info("Cost: %s" % newcost)
             if (forced_epochs == 0 and
-                    newcost >= oldcost - finish_threshold * self.boundaries):
+                    newcost >= oldcost - finish_threshold *
+                    self.corpus_cost.boundaries):
                 break
             if forced_epochs > 0:
                 forced_epochs -= 1
@@ -1072,8 +911,8 @@ class BaselineModel:
         """
         clen = len(compound)
         grid = [(0.0, None)]
-        if self.tokens + addcount > 0:
-            logtokens = math.log(self.tokens + addcount)
+        if self.corpus_cost.tokens + addcount > 0:
+            logtokens = math.log(self.corpus_cost.tokens + addcount)
         else:
             logtokens = 0
         badlikelihood = clen * logtokens + 1.0
@@ -1098,17 +937,19 @@ class BaselineModel:
                              math.log(self.analyses[construction].count +
                                       addcount))
                 elif addcount > 0:
-                    if self.tokens == 0:
-                        cost += ((addcount * math.log(addcount) 
-                                  + self.lexicon.get_codelength(construction))
-                                 / self.corpuscostweight)
+                    if self.corpus_cost.tokens == 0:
+                        cost += ((addcount * math.log(addcount)
+                                 + self.atom_cost.get_codelength(construction))
+                                 / self.corpus_cost.weight)
                     else:
-                        cost += ((logtokens - math.log(addcount)  
-                                  + ((self.types + addcount) *
-                                     math.log(self.tokens + addcount))
-                                  - self.types * math.log(self.tokens) 
-                                  + self.lexicon.get_codelength(construction))
-                                 / self.corpuscostweight)
+                        cost += ((logtokens - math.log(addcount)
+                                  + ((self.corpus_cost.types + addcount) *
+                                     math.log(self.corpus_cost.tokens
+                                              + addcount))
+                                  - self.corpus_cost.types
+                                  * math.log(self.corpus_cost.tokens)
+                                 + self.atom_cost.get_codelength(construction))
+                                 / self.corpus_cost.weight)
                 elif len(construction) == 1:
                     cost += badlikelihood
                 else:
@@ -1171,6 +1012,161 @@ class Annotations:
             self.analyses[compound] = analyses
 
         self.types = len(self.analyses)
+
+
+class Cost(object):
+    def __init__(self):
+        self.logtokensum = 0.0
+        self.tokens = 0
+        self.types = 0
+        self.boundaries = 0
+        self.weight = 1.0
+
+    _log2pi = math.log(2 * math.pi)
+
+    @classmethod
+    def _logfactorial(cls, n):
+        """Calculate logarithm of n!.
+
+        For large n (n > 20), use Stirling's approximation.
+
+        """
+        if n < 2:
+            return 0.0
+        if n < 20:
+            return math.log(math.factorial(n))
+        logn = math.log(n)
+        return n * logn - n + 0.5 * (logn + cls._log2pi)
+
+    def permutations_cost(self):
+        return -self._logfactorial(self.types)
+
+    def frequency_distribution_cost(self):
+        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
+        tokens.
+
+        """
+        if types < 2:
+            return 0.0
+        return (self._logfactorial(self.tokens - 1) -
+                self._logfactorial(self.types - 1) -
+                self._logfactorial(self.tokens - self.types))
+
+    def update_count(self, construction, old_count, new_count):
+        pass
+
+    def get_cost(self):
+        return self.weight * ((self.tokens + self.types) *
+                              math.log(self.tokens + self.types) -
+                              self.logtokensum -
+                              self.boundaries * math.log(self.boundaries))
+
+
+class CorpusCost(Cost):
+    def __init__(self, weight):
+        super(CorpusCost, self).__init__()
+        self.weight = weight
+
+    def update_count(self, construction, old_count, new_count):
+        if old_count > 1:
+            self.logtokensum -= old_count * math.log(old_count)
+        if new_count > 1:
+            self.logtokensum += new_count * math.log(new_count)
+
+
+class AnnotationCorpusCost(Cost):
+    def __init__(self, corpus, annotated_corpus_weight=None, penalty=-9999.9):
+        super(AnnotationCorpusCost, self).__init__()
+
+        self.do_update_weight = True
+        self.weight = None
+
+        if annotated_corpus_weight is None:
+            self.do_update_weight = False
+            self.weight = annotated_corpus_weight
+
+        self.penalty = penalty
+
+        self.constructions = collections.Counter()
+        self.corpus = corpus
+
+    def set_constructions(self, constructions):
+        self.constructions = collections.Counter(constructions)
+        self.tokens = 0
+        self.logtokensum = 0.0
+
+    def update_count(self, construction, old_count, new_count):
+        if construction in self.constructions:
+            annot_count = self.constructions[construction]
+            if old_count > 1:
+                self.logtokensum -= annot_count * math.log(old_count)
+            if new_count > 1:
+                self.logtokensum += annot_count * math.log(new_count)
+
+            if old_count == 0:
+                self.logtokensum -= annot_count * self.penalty
+            if new_count == 0:
+                self.logtokensum += annot_count * self.penalty
+
+    def update_weight(self):
+        if not self.do_update_weight:
+            return
+
+        old = self.weight
+        self.weight = (self.corpus.weight * float(self.corpus.boundaries) /
+                       self.types)
+
+        if self.weight != old:
+            _logger.info("Corpus weight of annotated data set to %s"
+                         % self.weight)
+
+    def get_cost(self):
+        return self.weight * ((self.tokens + self.types) *
+                              math.log(self.corpus.tokens
+                              + self.corpus.types) -
+                              self.logtokensum -
+                              self.boundaries *
+                              math.log(self.corpus.boundaries))
+
+
+class AtomCost(Cost):
+    def __init__(self):
+        super(AtomCost, self).__init__()
+        self.atoms = collections.Counter()
+        self.types = property(fget=lambda: len(self.atoms))
+
+    def update_count(self, construction, old_count, new_count):
+        dcount = 0
+        if old_count == 0:
+            dcount = 1  # add
+        if new_count == 0:
+            dcount = -1  # remove
+
+        for atom in itertools.chain(construction, [None]):
+            c = self.atoms[atom]
+            if c + dcount > 0:
+                self.logtokensum += (c + dcount) * math.log(c + dcount)
+            if c - dcount > 0:
+                self.logtokensum -= (c - dcount) * math.log(c - dcount)
+
+            self.atoms[atom] += dcount
+
+        self.tokens += dcount * (len(construction) + 1)
+
+    def get_cost(self):
+        return self.tokens * math.log(self.tokens) - self.logtokensum
+
+    def get_codelength(self, construction):
+        """Return an approximate codelength for new construction."""
+        l = len(construction) + 1
+        cost = l * math.log(self.tokens + l)
+        for atom in itertools.chain(construction, [None]):
+            if atom in self.atoms:
+                c = self.atoms[atom]
+            else:
+                c = 1
+            cost -= math.log(c)
+        return cost
 
 
 def _boundary_recall(prediction, reference):
@@ -1340,8 +1336,8 @@ Interactive use (read corpus from user):
     add_arg = parser.add_argument_group(
         'training and segmentation options').add_argument
     add_arg('-m', '--mode', dest="trainmode", default='init+batch',
-            metavar='<mode>', 
-            choices=['none', 'batch', 'init', 'init+batch', 'online', 
+            metavar='<mode>',
+            choices=['none', 'batch', 'init', 'init+batch', 'online',
                      'online+batch'],
             help="training mode ('none', 'init', 'batch', 'init+batch', "
             "'online', or 'online+batch'; default '%(default)s')")
@@ -1373,11 +1369,11 @@ Interactive use (read corpus from user):
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
-    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0, 
+    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
             type=float, metavar='<float>',
             help="additive smoothing parameter for Viterbi training "
             "and segmentation (default %(default)s)")
-    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30, 
+    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
             type=int, metavar='<int>',
             help="maximum construction length in Viterbi training "
             "and segmentation (default %(default)s)")
@@ -1414,7 +1410,7 @@ Interactive use (read corpus from user):
     add_arg = parser.add_argument_group('other options').add_argument
     add_arg('-h', '--help', action='help',
             help="show this help message and exit")
-    add_arg('--version', action='version', 
+    add_arg('--version', action='version',
             version='%(prog)s ' + __version__,
             help="show version number and exit")
 
@@ -1536,7 +1532,7 @@ Interactive use (read corpus from user):
                     data = io.read_corpus_list_file(f)
                 else:
                     data = io.read_corpus_file(f)
-            c = model.load_data(data, args.freqthreshold, dampfunc, 
+            c = model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
         elif args.trainmode == 'init+batch':
             for f in args.trainfiles:
