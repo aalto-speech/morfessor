@@ -246,7 +246,8 @@ class MorfessorIO:
                 yield 1, line, self._split_atoms(line)
         _logger.info("Done.")
 
-    def read_annotations_file(self, file_name):
+    def read_annotations_file(self, file_name, construction_separator=' ',
+                              analysis_sep=','):
         """Read a annotations file.
 
         Each line has the format:
@@ -255,15 +256,26 @@ class MorfessorIO:
         Yield tuples (compound, list(analyses)).
 
         """
+        annotations = {}
         _logger.info("Reading annotations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
             analyses = []
             compound, analyses_line = line.split(None, 1)
 
-            for analysis in analyses_line.split(','):
-                analyses.append(analysis.split(' '))
+            if compound not in annotations:
+                annotations[compound] = []
 
+            if analysis_sep is not None:
+                for analysis in analyses_line.split(analysis_sep):
+                    annotations[compound].append(
+                        analysis.split(construction_separator))
+            else:
+                annotations[compound].append(
+                    analyses_line.split(construction_separator))
+
+        for compound, analyses in annotations.items():
             yield compound, analyses
+
         _logger.info("Done.")
 
     def write_lexicon_file(self, file_name, lexicon):
@@ -942,7 +954,7 @@ class BaselineModel:
             self.sweightbalance = False
         self.penaltylogprob = -9999.9  # cost for missing a known construction
 
-    def train_batch(self, algorithm='recursive', algorithm_params=(), 
+    def train_batch(self, algorithm='recursive', algorithm_params=(),
                     devel_annotations=None, finish_threshold=0.005):
         self._epoch_update(0)
         oldcost = 0.0
@@ -1099,14 +1111,14 @@ class BaselineModel:
                                       addcount))
                 elif addcount > 0:
                     if self.tokens == 0:
-                        cost += ((addcount * math.log(addcount) 
+                        cost += ((addcount * math.log(addcount)
                                   + self.lexicon.get_codelength(construction))
                                  / self.corpuscostweight)
                     else:
-                        cost += ((logtokens - math.log(addcount)  
+                        cost += ((logtokens - math.log(addcount)
                                   + ((self.types + addcount) *
                                      math.log(self.tokens + addcount))
-                                  - self.types * math.log(self.tokens) 
+                                  - self.types * math.log(self.tokens)
                                   + self.lexicon.get_codelength(construction))
                                  / self.corpuscostweight)
                 elif len(construction) == 1:
@@ -1127,6 +1139,13 @@ class BaselineModel:
             lt = t
         constructions.reverse()
         return constructions, cost
+
+class AnnotationsModelUpdate:
+    def __init__(self, data, model):
+        pass
+
+    def update_model(self):
+        pass
 
 
 class Annotations:
@@ -1335,13 +1354,17 @@ Interactive use (read corpus from user):
     add_arg('--compound-separator', dest="cseparator", type=str, default='\W+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
+    add_arg('--analysis-separator', dest='analysisseparator', type=str,
+            default=',', metavar='<regexp>',
+            help="separator for different analyses in an annotation file. Use"
+                 "  NONE for only allowing one analysis per line")
 
     # Options for model training
     add_arg = parser.add_argument_group(
         'training and segmentation options').add_argument
     add_arg('-m', '--mode', dest="trainmode", default='init+batch',
-            metavar='<mode>', 
-            choices=['none', 'batch', 'init', 'init+batch', 'online', 
+            metavar='<mode>',
+            choices=['none', 'batch', 'init', 'init+batch', 'online',
                      'online+batch'],
             help="training mode ('none', 'init', 'batch', 'init+batch', "
             "'online', or 'online+batch'; default '%(default)s')")
@@ -1373,11 +1396,11 @@ Interactive use (read corpus from user):
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
-    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0, 
+    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
             type=float, metavar='<float>',
             help="additive smoothing parameter for Viterbi training "
             "and segmentation (default %(default)s)")
-    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30, 
+    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
             type=int, metavar='<int>',
             help="maximum construction length in Viterbi training "
             "and segmentation (default %(default)s)")
@@ -1414,7 +1437,7 @@ Interactive use (read corpus from user):
     add_arg = parser.add_argument_group('other options').add_argument
     add_arg('-h', '--help', action='help',
             help="show this help message and exit")
-    add_arg('--version', action='version', 
+    add_arg('--version', action='version',
             version='%(prog)s ' + __version__,
             help="show version number and exit")
 
@@ -1483,14 +1506,19 @@ Interactive use (read corpus from user):
     if args.loadsegfile is not None:
         model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
 
+    analysis_sep = (args.analysisseparator
+                    if args.analysisseparator != 'NONE' else None)
+
     if args.annofile is not None:
         annotations = Annotations()
-        annotations.load(io.read_annotations_file(args.annofile))
+        annotations.load(io.read_annotations_file(args.annofile,
+                                                  analysis_sep=analysis_sep))
         model.set_annotations(annotations, args.annotationweight)
 
     if args.develfile is not None:
         develannots = Annotations()
-        develannots.load(io.read_annotations_file(args.develfile))
+        develannots.load(io.read_annotations_file(args.develfile,
+                                                  analysis_sep=analysis_sep))
     else:
         develannots = None
 
@@ -1536,7 +1564,7 @@ Interactive use (read corpus from user):
                     data = io.read_corpus_list_file(f)
                 else:
                     data = io.read_corpus_file(f)
-            c = model.load_data(data, args.freqthreshold, dampfunc, 
+            c = model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
         elif args.trainmode == 'init+batch':
             for f in args.trainfiles:
