@@ -679,17 +679,6 @@ class BaselineModel:
         if self.supervised:
             self._update_annotation_choices()
             self.annot_coding.update_weight()
-        _logger.info("%s %s" % (self.corpus_coding.boundaries, 
-                                self.corpus_coding.tokens))
-        _logger.info("%s %s" % (self.lexicon_coding.boundaries, 
-                                self.lexicon_coding.tokens))
-        costs = (self.corpus_coding.get_cost(),
-                 self.lexicon_coding.frequency_distribution_cost(
-                self.lexicon_coding.boundaries, self.corpus_coding.tokens),
-                 self.lexicon_coding.get_cost())
-        _logger.info("%s + %s + %s = %s" % (costs[0], costs[1], costs[2], 
-                                            self.get_cost()))
-
 
     @staticmethod
     def _segmentation_to_splitloc(constructions):
