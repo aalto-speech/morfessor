@@ -706,8 +706,7 @@ class BaselineModel:
 
     def get_cost(self):
         """Return current model cost."""
-        cost = (self.corpus_coding.get_cost() +
-                self.lexicon_coding.get_cost())
+        cost = self.corpus_coding.get_cost() + self.lexicon_coding.get_cost()
         if self.supervised:
             return cost + self.annot_coding.get_cost()
         else:
@@ -1016,10 +1015,11 @@ class Encoding(object):
         self.boundaries = 0
         self.weight = weight
 
-    def get_types(self):
-        return 0
-
     _log2pi = math.log(2 * math.pi)
+
+    @property
+    def types(self):
+        return 0
 
     @classmethod
     def _logfactorial(cls, n):
@@ -1040,14 +1040,12 @@ class Encoding(object):
         tokens.
 
         """
-        types = self.get_types()
-        tokens = self.tokens + self.boundaries
-        if types < 2:
+        if self.types < 2:
             return 0.0
+        tokens = self.tokens + self.boundaries
         return (self._logfactorial(tokens - 1) -
-                self._logfactorial(types - 1) -
-                self._logfactorial(tokens - types))
-
+                self._logfactorial(self.types - 1) -
+                self._logfactorial(tokens - self.types))
 
     def permutations_cost(self):
         return -self._logfactorial(self.boundaries)
@@ -1064,10 +1062,10 @@ class Encoding(object):
             return 0.0
 
         n = self.tokens + self.boundaries
-        return  ((n * math.log(n) -
-                  self.boundaries * math.log(self.boundaries) -
-                  self.logtokensum) * self.weight
-                 + self.permutations_cost()
+        return  ((n * math.log(n)
+                  - self.boundaries * math.log(self.boundaries)
+                  - self.logtokensum
+                  + self.permutations_cost()) * self.weight
                  + self.frequency_distribution_cost())
 
 class CorpusEncoding(Encoding):
@@ -1076,9 +1074,9 @@ class CorpusEncoding(Encoding):
         super(CorpusEncoding, self).__init__(weight)
         self.lexicon_encoding = lexicon_encoding
 
-    def get_types(self):
-        return self.lexicon_encoding.boundaries
-
+    @property
+    def types(self):
+        return self.lexicon_encoding.boundaries + 1
 
 class AnnotatedCorpusEncoding(CorpusEncoding):
 
@@ -1133,7 +1131,8 @@ class LexiconEncoding(Encoding):
         super(LexiconEncoding, self).__init__()
         self.atoms = collections.Counter()
 
-    def get_types(self):
+    @property
+    def types(self):
         return len(self.atoms) + 1
 
     def add(self, construction):
