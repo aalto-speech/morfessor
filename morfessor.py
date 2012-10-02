@@ -355,8 +355,9 @@ class BaselineModel:
         self.analyses = {}
 
         # Cost variables
-        self.corpus_coding = CorpusEncoding(corpusweight)
         self.lexicon_coding = LexiconEncoding()
+        self.corpus_coding = CorpusEncoding(self.lexicon_coding,
+                                            corpusweight)
         self.annot_coding = None
 
         # Configuration variables
@@ -706,8 +707,6 @@ class BaselineModel:
     def get_cost(self):
         """Return current model cost."""
         cost = (self.corpus_coding.get_cost() +
-                self.lexicon_coding.frequency_distribution_cost(
-                self.lexicon_coding.boundaries, self.corpus_coding.tokens) +
                 self.lexicon_coding.get_cost())
         if self.supervised:
             return cost + self.annot_coding.get_cost()
@@ -1017,6 +1016,9 @@ class Encoding(object):
         self.boundaries = 0
         self.weight = weight
 
+    def get_types(self):
+        return 0
+
     _log2pi = math.log(2 * math.pi)
 
     @classmethod
@@ -1033,17 +1035,19 @@ class Encoding(object):
         logn = math.log(n)
         return n * logn - n + 0.5 * (logn + cls._log2pi)
 
-    @classmethod
-    def frequency_distribution_cost(cls, types, tokens):
+    def frequency_distribution_cost(self):
         """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
         tokens.
 
         """
+        types = self.get_types()
+        tokens = self.tokens + self.boundaries
         if types < 2:
             return 0.0
-        return (cls._logfactorial(tokens - 1) -
-                cls._logfactorial(types - 1) -
-                cls._logfactorial(tokens - types))
+        return (self._logfactorial(tokens - 1) -
+                self._logfactorial(types - 1) -
+                self._logfactorial(tokens - types))
+
 
     def permutations_cost(self):
         return -self._logfactorial(self.boundaries)
@@ -1058,28 +1062,28 @@ class Encoding(object):
     def get_cost(self):
         if self.boundaries == 0:
             return 0.0
-        return self.weight * ((self.tokens + self.boundaries) *
-                              math.log(self.tokens + self.boundaries) -
-                              self.boundaries * math.log(self.boundaries) -
-                              self.logtokensum +
-                              self.permutations_cost())
 
+        n = self.tokens + self.boundaries
+        return  ((n * math.log(n) -
+                  self.boundaries * math.log(self.boundaries) -
+                  self.logtokensum) * self.weight
+                 + self.permutations_cost()
+                 + self.frequency_distribution_cost())
 
 class CorpusEncoding(Encoding):
 
-    def get_cost(self):
-        if self.boundaries == 0:
-            return 0.0
-        # Without permutation cost
-        return self.weight * ((self.tokens + self.boundaries) *
-                              math.log(self.tokens + self.boundaries) -
-                              self.boundaries * math.log(self.boundaries) -
-                              self.logtokensum)
+    def __init__(self, lexicon_encoding, weight=1.0):
+        super(CorpusEncoding, self).__init__(weight)
+        self.lexicon_encoding = lexicon_encoding
+
+    def get_types(self):
+        return self.lexicon_encoding.boundaries
+
 
 class AnnotatedCorpusEncoding(CorpusEncoding):
 
     def __init__(self, corpus, annotated_corpus_weight=None, penalty=-9999.9):
-        super(AnnotatedCorpusEncoding, self).__init__()
+        super(AnnotatedCorpusEncoding, self).__init__(annotated_corpus_weight)
 
         self.do_update_weight = True
         self.weight = None
@@ -1122,20 +1126,15 @@ class AnnotatedCorpusEncoding(CorpusEncoding):
             _logger.info("Corpus weight of annotated data set to %s"
                          % self.weight)
 
-    def get_cost(self):
-        return self.weight * ((self.tokens + self.types) *
-                              math.log(self.corpus.tokens
-                              + self.corpus.types) -
-                              self.logtokensum -
-                              self.boundaries *
-                              math.log(self.corpus.boundaries))
-
 
 class LexiconEncoding(Encoding):
 
     def __init__(self):
         super(LexiconEncoding, self).__init__()
         self.atoms = collections.Counter()
+
+    def get_types(self):
+        return len(self.atoms) + 1
 
     def add(self, construction):
         self.boundaries += 1
@@ -1163,17 +1162,6 @@ class LexiconEncoding(Encoding):
                 c = 1
             cost -= math.log(c)
         return cost
-
-    def get_cost(self):
-        if self.boundaries == 0:
-            return 0.0
-
-        n = self.tokens + self.boundaries
-        return  (n * math.log(n) -
-                 self.boundaries * math.log(self.boundaries) -
-                 self.logtokensum +
-                 self.frequency_distribution_cost(len(self.atoms)+1, n) +
-                 self.permutations_cost()) * self.weight
 
 
 def _boundary_recall(prediction, reference):
