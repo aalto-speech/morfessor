@@ -937,7 +937,7 @@ class BaselineModel:
                                  / self.corpus_coding.weight)
                     else:
                         cost += ((logtokens - math.log(addcount)
-                                  + ((self.lexicon_coding.boundaries + 
+                                  + ((self.lexicon_coding.boundaries +
                                       addcount) *
                                      math.log(self.lexicon_coding.boundaries
                                               + addcount))
@@ -1167,13 +1167,13 @@ class LexiconEncoding(Encoding):
     def get_cost(self):
         if self.boundaries == 0:
             return 0.0
-        return self.weight * ((self.tokens + self.boundaries) *
-                              math.log(self.tokens + self.boundaries) -
-                              self.boundaries * math.log(self.boundaries) -
-                              self.logtokensum +
-                              self.frequency_distribution_cost(len(self.atoms), 
-                                                               self.tokens) + 
-                              self.permutations_cost())
+
+        n = self.tokens + self.boundaries
+        return  (n * math.log(n) -
+                 self.boundaries * math.log(self.boundaries) -
+                 self.logtokensum +
+                 self.frequency_distribution_cost(len(self.atoms)+1, n) +
+                 self.permutations_cost()) * self.weight
 
 
 def _boundary_recall(prediction, reference):
