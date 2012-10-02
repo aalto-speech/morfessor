@@ -679,6 +679,17 @@ class BaselineModel:
         if self.supervised:
             self._update_annotation_choices()
             self.annot_coding.update_weight()
+        _logger.info("%s %s" % (self.corpus_coding.boundaries, 
+                                self.corpus_coding.tokens))
+        _logger.info("%s %s" % (self.lexicon_coding.boundaries, 
+                                self.lexicon_coding.tokens))
+        costs = (self.corpus_coding.get_cost(),
+                 self.lexicon_coding.frequency_distribution_cost(
+                self.lexicon_coding.boundaries, self.corpus_coding.tokens),
+                 self.lexicon_coding.get_cost())
+        _logger.info("%s + %s + %s = %s" % (costs[0], costs[1], costs[2], 
+                                            self.get_cost()))
+
 
     @staticmethod
     def _segmentation_to_splitloc(constructions):
@@ -1033,6 +1044,18 @@ class Encoding(object):
         logn = math.log(n)
         return n * logn - n + 0.5 * (logn + cls._log2pi)
 
+    @classmethod
+    def frequency_distribution_cost(cls, types, tokens):
+        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
+        tokens.
+
+        """
+        if types < 2:
+            return 0.0
+        return (cls._logfactorial(tokens - 1) -
+                cls._logfactorial(types - 1) -
+                cls._logfactorial(tokens - types))
+
     def permutations_cost(self):
         return -self._logfactorial(self.boundaries)
 
@@ -1128,14 +1151,16 @@ class LexiconEncoding(Encoding):
     def add(self, construction):
         self.boundaries += 1
         for atom in construction:
-            self.atoms[atom] += 1
-            self.update_count(atom, 0, 1)
+            c = self.atoms[atom]
+            self.atoms[atom] = c + 1
+            self.update_count(atom, c, c + 1)
 
     def remove(self, construction):
         self.boundaries -= 1
         for atom in construction:
-            self.atoms[atom] -= 1
-            self.update_count(atom, 1, 0)
+            c = self.atoms[atom]
+            self.atoms[atom] = c - 1
+            self.update_count(atom, c, c - 1)
 
     def get_codelength(self, construction):
         """Return an approximate codelength for new construction."""
@@ -1150,17 +1175,16 @@ class LexiconEncoding(Encoding):
             cost -= math.log(c)
         return cost
 
-    def frequency_distribution_cost(cls, types, tokens):
-        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
-        tokens.
-
-        """
-        if types < 2:
+    def get_cost(self):
+        if self.boundaries == 0:
             return 0.0
-        return (cls._logfactorial(tokens - 1) -
-                cls._logfactorial(types - 1) -
-                cls._logfactorial(tokens - types))
-
+        return self.weight * ((self.tokens + self.boundaries) *
+                              math.log(self.tokens + self.boundaries) -
+                              self.boundaries * math.log(self.boundaries) -
+                              self.logtokensum +
+                              self.frequency_distribution_cost(len(self.atoms), 
+                                                               self.tokens) + 
+                              self.permutations_cost())
 
 
 def _boundary_recall(prediction, reference):
