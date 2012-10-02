@@ -471,21 +471,23 @@ class BaselineModel:
         if not self.supervised:
             return
 
-        # Add data to self.annotatedconstructions
+        # Collect constructions from the most probable segmentations
+        # and add missing compounds also to the unannotated data
         constructions = collections.Counter()
-        for w, alternatives in self.annotations.get_data():
+        for compound, alternatives in self.annotations.get_data():
+            if not compound in self.analyses:
+                self._add_compound(compound, 1)
             analysis, cost = self._best_analysis(alternatives)
-
             for m in analysis:
-                constructions[m] += self.analyses[w].rcount
+                constructions[m] += 1
 
+        # Apply the selected constructions in annotated corpus coding
         self.annot_coding.set_constructions(constructions)
-
         for m, f in constructions.items():
             count = 0
             if m in self.analyses and len(self.analyses[m].splitloc) == 0:
                 count = self.analyses[m].count
-            self.annot_coding.update_count(m, -1, count)
+            self.annot_coding.set_count(m, count)
 
     def _best_analysis(self, choices):
         """Select the best analysis out of the given choices."""
@@ -498,8 +500,7 @@ class BaselineModel:
                     cost += (math.log(self.corpus_coding.tokens) -
                              math.log(self.analyses[m].count))
                 else:
-                    cost -= self.penalty  # penaltylogprob is
-                    # negative
+                    cost -= self.penalty # penalty is negative
             if bestcost is None or cost < bestcost:
                 bestcost = cost
                 bestanalysis = analysis
@@ -680,6 +681,9 @@ class BaselineModel:
         if self.supervised:
             self._update_annotation_choices()
             self.annot_coding.update_weight()
+            _logger.info("%s %s %s" % (self.corpus_coding.get_cost(), 
+                                       self.lexicon_coding.get_cost(),
+                                       self.annot_coding.get_cost()))
 
     @staticmethod
     def _segmentation_to_splitloc(constructions):
@@ -1078,52 +1082,65 @@ class CorpusEncoding(Encoding):
     def types(self):
         return self.lexicon_encoding.boundaries + 1
 
-class AnnotatedCorpusEncoding(CorpusEncoding):
+class AnnotatedCorpusEncoding(Encoding):
 
-    def __init__(self, corpus, annotated_corpus_weight=None, penalty=-9999.9):
-        super(AnnotatedCorpusEncoding, self).__init__(annotated_corpus_weight)
-
+    def __init__(self, corpus_coding, 
+                 annotated_corpus_weight=None, penalty=-9999.9):
+        super(AnnotatedCorpusEncoding, self).__init__()
         self.do_update_weight = True
-        self.weight = None
-
+        self.weight = 1.0
         if annotated_corpus_weight is not None:
             self.do_update_weight = False
             self.weight = annotated_corpus_weight
-
+        self.corpus_coding = corpus_coding
         self.penalty = penalty
         self.constructions = collections.Counter()
-        self.corpus = corpus
 
     def set_constructions(self, constructions):
-        self.constructions = collections.Counter(constructions)
+        self.constructions = constructions
         self.tokens = 0
         self.logtokensum = 0.0
+
+    def set_count(self, construction, count):
+        annot_count = self.constructions[construction]
+        self.tokens += annot_count
+        if count > 0:
+            self.logtokensum += annot_count * math.log(count)
+        else:
+            self.logtokensum += annot_count * self.penalty
 
     def update_count(self, construction, old_count, new_count):
         if construction in self.constructions:
             annot_count = self.constructions[construction]
-            if old_count > 1:
+            self.tokens += annot_count
+            if old_count > 0:
                 self.logtokensum -= annot_count * math.log(old_count)
-            if new_count > 1:
-                self.logtokensum += annot_count * math.log(new_count)
-
-            if old_count == 0:
+            else:
                 self.logtokensum -= annot_count * self.penalty
-            if new_count == 0:
+            if new_count > 0:
+                self.logtokensum += annot_count * math.log(new_count)
+            else:
                 self.logtokensum += annot_count * self.penalty
 
     def update_weight(self):
         if not self.do_update_weight:
             return
-
         old = self.weight
-        self.weight = (self.corpus.weight * float(self.corpus.boundaries) /
-                       self.types)
-
+        self.weight = (self.corpus_coding.weight * 
+                       float(self.corpus_coding.boundaries) / self.boundaries)
         if self.weight != old:
             _logger.info("Corpus weight of annotated data set to %s"
                          % self.weight)
 
+    def get_cost(self):
+        if self.boundaries == 0:
+            return 0.0
+        n = self.tokens + self.boundaries
+        return  ((n * math.log(self.corpus_coding.tokens + 
+                               self.corpus_coding.boundaries)
+                  - self.boundaries * math.log(self.corpus_coding.boundaries)
+                  - self.logtokensum
+                  + self.permutations_cost()) * self.weight)
 
 class LexiconEncoding(Encoding):
 
