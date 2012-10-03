@@ -3,8 +3,9 @@
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
-__all__ = ['InputFormatError', 'MorfessorIO', 'Lexicon', 'BaselineModel',
-           'Annotations']
+__all__ = ['MorfessorIO', 'BaselineModel',
+           'Annotations', 'Encoding', 'CorpusEncoding', 
+           'AnnotatedCorpusEncoding', 'LexiconEncoding']
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
@@ -681,6 +682,8 @@ class BaselineModel:
         if self.supervised:
             self._update_annotation_choices()
             self.annot_coding.update_weight()
+            _logger.info("%s %s" % (self.annot_coding.tokens,
+                                    self.annot_coding.boundaries))
             _logger.info("%s %s %s" % (self.corpus_coding.get_cost(), 
                                        self.lexicon_coding.get_cost(),
                                        self.annot_coding.get_cost()))
