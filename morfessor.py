@@ -3,7 +3,7 @@
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
-__all__ = ['InputFormatError', 'MorfessorIO', 'Lexicon', 'BaselineModel',
+__all__ = ['MorfessorIO', 'Lexicon', 'BaselineModel',
            'Annotations']
 
 __version__ = '2.0.0pre1'
