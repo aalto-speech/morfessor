@@ -373,6 +373,16 @@ class BaselineModel:
 
         self.penalty = -9999.9
 
+    @property
+    def tokens(self):
+        """Return the number of construction tokens."""
+        return self.corpus_coding.tokens
+
+    @property
+    def types(self):
+        """Return the number of construction types."""
+        return self.corpus_coding.types - 1  # do not include boundary
+
     def _get_compounds(self):
         """Return the compound types stored by the model."""
         return [w for w, node in self.analyses.items()
