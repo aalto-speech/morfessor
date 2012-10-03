@@ -692,11 +692,6 @@ class BaselineModel:
         if self.supervised:
             self._update_annotation_choices()
             self.annot_coding.update_weight()
-            _logger.info("%s %s" % (self.annot_coding.tokens,
-                                    self.annot_coding.boundaries))
-            _logger.info("%s %s %s" % (self.corpus_coding.get_cost(), 
-                                       self.lexicon_coding.get_cost(),
-                                       self.annot_coding.get_cost()))
 
     @staticmethod
     def _segmentation_to_splitloc(constructions):
@@ -1095,6 +1090,28 @@ class CorpusEncoding(Encoding):
     def types(self):
         return self.lexicon_encoding.boundaries + 1
 
+    def frequency_distribution_cost(self):
+        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
+        tokens.
+
+        """
+        if self.types < 2:
+            return 0.0
+        tokens = self.tokens
+        return (self._logfactorial(tokens - 1) -
+                self._logfactorial(self.types - 2) -
+                self._logfactorial(tokens - self.types + 1))
+
+    def get_cost(self):
+        if self.boundaries == 0:
+            return 0.0
+
+        n = self.tokens + self.boundaries
+        return  ((n * math.log(n)
+                  - self.boundaries * math.log(self.boundaries)
+                  - self.logtokensum) * self.weight
+                 + self.frequency_distribution_cost())
+
 class AnnotatedCorpusEncoding(Encoding):
 
     def __init__(self, corpus_coding, 
@@ -1152,8 +1169,7 @@ class AnnotatedCorpusEncoding(Encoding):
         return  ((n * math.log(self.corpus_coding.tokens + 
                                self.corpus_coding.boundaries)
                   - self.boundaries * math.log(self.corpus_coding.boundaries)
-                  - self.logtokensum
-                  + self.permutations_cost()) * self.weight)
+                  - self.logtokensum) * self.weight)
 
 class LexiconEncoding(Encoding):
 
