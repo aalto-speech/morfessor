@@ -488,9 +488,10 @@ class BaselineModel:
         for compound, alternatives in self.annotations.get_data():
             if not compound in self.analyses:
                 self._add_compound(compound, 1)
+
             analysis, cost = self._best_analysis(alternatives)
             for m in analysis:
-                constructions[m] += 1
+                constructions[m] += self.analyses[compound].rcount
 
         # Apply the selected constructions in annotated corpus coding
         self.annot_coding.set_constructions(constructions)
@@ -1128,12 +1129,11 @@ class AnnotatedCorpusEncoding(Encoding):
 
     def set_constructions(self, constructions):
         self.constructions = constructions
-        self.tokens = 0
+        self.tokens = sum(constructions.values())
         self.logtokensum = 0.0
 
     def set_count(self, construction, count):
         annot_count = self.constructions[construction]
-        self.tokens += annot_count
         if count > 0:
             self.logtokensum += annot_count * math.log(count)
         else:
@@ -1142,7 +1142,6 @@ class AnnotatedCorpusEncoding(Encoding):
     def update_count(self, construction, old_count, new_count):
         if construction in self.constructions:
             annot_count = self.constructions[construction]
-            self.tokens += annot_count
             if old_count > 0:
                 self.logtokensum -= annot_count * math.log(old_count)
             else:
