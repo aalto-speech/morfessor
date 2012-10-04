@@ -14,7 +14,6 @@ import codecs
 import collections
 import datetime
 import gzip
-import itertools
 import locale
 import logging
 import math
@@ -521,7 +520,7 @@ class BaselineModel:
                     cost += (math.log(self.corpus_coding.tokens) -
                              math.log(self.analyses[m].count))
                 else:
-                    cost -= self.penalty # penalty is negative
+                    cost -= self.penalty  # penalty is negative
             if bestcost is None or cost < bestcost:
                 bestcost = cost
                 bestanalysis = analysis
@@ -802,6 +801,9 @@ class BaselineModel:
         compounds = list(self._get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
                      (len(compounds), self.corpus_coding.boundaries))
+
+        corpus_weight_updater = AnnotationsModelUpdate(devel_annotations, self)
+
         epochs = 0
         _logger.info("Starting batch training")
         _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
@@ -827,23 +829,10 @@ class BaselineModel:
             newcost = self.get_cost()
 
             if devel_annotations is not None:
-                # Tune corpus weight based on development data
-                tmp = devel_annotations.items()
-                wlist, annotations = zip(*tmp)
-                segments = [self.viterbi_segment(w)[0] for w in wlist]
-                d = _estimate_segmentation_dir(segments, annotations)
-                if d != 0:
-                    if d > 0:
-                        self.corpus_coding.weight *= 1 + 2.0 / epochs
-                    else:
-                        self.corpus_coding.weight *= 1.0 / (1 + 2.0 / epochs)
-                    _logger.info("Corpus weight set to %s" %
-                                 self.corpus_coding.weight)
+                if corpus_weight_updater.update_model(epochs):
                     self._epoch_update(epochs)
+                    forced_epochs = max(forced_epochs, 2)
                     newcost = self.get_cost()
-                    # Prevent stopping on next epoch
-                    if forced_epochs < 2:
-                        forced_epochs = 2
 
             _logger.info("Epochs: %s" % epochs)
             _logger.info("Cost: %s" % newcost)
@@ -984,13 +973,91 @@ class BaselineModel:
         constructions.reverse()
         return constructions, cost
 
+
 class AnnotationsModelUpdate:
     def __init__(self, data, model):
         self.data = data
         self.model = model
 
-    def update_model(self):
-        pass
+    def update_model(self, epochs):
+        # Tune corpus weight based on development data
+        tmp = self.data.items()
+        wlist, annotations = zip(*tmp)
+        segments = [self.model.viterbi_segment(w)[0] for w in wlist]
+        d = self._estimate_segmentation_dir(segments, annotations)
+
+        if d != 0:
+            if d > 0:
+                self.model.corpus_coding.weight *= 1 + 2.0 / epochs
+            else:
+                self.model.corpus_coding.weight *= 1.0 / (1 + 2.0 / epochs)
+            _logger.info("Corpus weight set to %s" %
+                         self.model.corpus_coding.weight)
+            return True
+        return False
+
+    @classmethod
+    def _boundary_recall(cls, prediction, reference):
+        """Calculate average boundary recall for given segmentations."""
+        rec_total = 0
+        rec_sum = 0.0
+        for pre_list, ref_list in zip(prediction, reference):
+            best = -1
+            for ref in ref_list:
+                # list of internal boundary positions
+                ref_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
+                                   ref, [0])[1:-1])
+                if len(ref_b) == 0:
+                    best = 1.0
+                    break
+                for pre in pre_list:
+                    pre_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
+                                       pre, [0])[1:-1])
+                    r = len(ref_b.intersection(pre_b)) / float(len(ref_b))
+                    if r > best:
+                        best = r
+            if best >= 0:
+                rec_sum += best
+                rec_total += 1
+        return rec_sum, rec_total
+
+    @classmethod
+    def _bpr_evaluation(cls, prediction, reference):
+        """Return boundary precision, recall, and F-score for segmentations."""
+        rec_s, rec_t = cls._boundary_recall(prediction, reference)
+        pre_s, pre_t = cls._boundary_recall(reference, prediction)
+        rec = rec_s / rec_t
+        pre = pre_s / pre_t
+        f = 2.0 * pre * rec / (pre + rec)
+        return pre, rec, f
+
+    @classmethod
+    def _estimate_segmentation_dir(cls, segments, annotations, threshold=0.01):
+        """Estimate if the given compounds are under- or oversegmented.
+
+        The decision is based on the difference between boundary precision
+        and recall values for the given sample of segmented data.
+
+        Arguments:
+          segments -- list of predicted segmentations
+          annotations -- list of reference segmentations
+          threshold -- maximum threshold for the difference between
+                       predictions and reference
+
+        Return 1 in the case of oversegmentation, -1 in the case of
+        undersegmentation, and 0 if no changes are required.
+
+        """
+        pre, rec, f = cls._bpr_evaluation(map(lambda x: [x], segments),
+                                          annotations)
+        _logger.info("Boundary evaluation: precision %.4f; recall %.4f" %
+                     (pre, rec))
+        if abs(pre - rec) < threshold:
+            return 0
+        elif rec > pre:
+            return 1
+        else:
+            return -1
 
 
 class Encoding(object):
@@ -1054,6 +1121,7 @@ class Encoding(object):
                   + self.permutations_cost()) * self.weight
                  + self.frequency_distribution_cost())
 
+
 class CorpusEncoding(Encoding):
 
     def __init__(self, lexicon_encoding, weight=1.0):
@@ -1085,6 +1153,7 @@ class CorpusEncoding(Encoding):
                   - self.boundaries * math.log(self.boundaries)
                   - self.logtokensum) * self.weight
                  + self.frequency_distribution_cost())
+
 
 class AnnotatedCorpusEncoding(Encoding):
 
@@ -1143,6 +1212,7 @@ class AnnotatedCorpusEncoding(Encoding):
                   - self.boundaries * math.log(self.corpus_coding.boundaries)
                   - self.logtokensum) * self.weight)
 
+
 class LexiconEncoding(Encoding):
 
     def __init__(self):
@@ -1179,68 +1249,6 @@ class LexiconEncoding(Encoding):
                 c = 1
             cost -= math.log(c)
         return cost
-
-
-def _boundary_recall(prediction, reference):
-    """Calculate average boundary recall for given segmentations."""
-    rec_total = 0
-    rec_sum = 0.0
-    for pre_list, ref_list in zip(prediction, reference):
-        best = -1
-        for ref in ref_list:
-            # list of internal boundary positions
-            ref_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
-                               ref, [0])[1:-1])
-            if len(ref_b) == 0:
-                best = 1.0
-                break
-            for pre in pre_list:
-                pre_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
-                                   pre, [0])[1:-1])
-                r = len(ref_b.intersection(pre_b)) / float(len(ref_b))
-                if r > best:
-                    best = r
-        if best >= 0:
-            rec_sum += best
-            rec_total += 1
-    return rec_sum, rec_total
-
-
-def _bpr_evaluation(prediction, reference):
-    """Return boundary precision, recall, and F-score for segmentations."""
-    rec_s, rec_t = _boundary_recall(prediction, reference)
-    pre_s, pre_t = _boundary_recall(reference, prediction)
-    rec = rec_s / rec_t
-    pre = pre_s / pre_t
-    f = 2.0 * pre * rec / (pre + rec)
-    return pre, rec, f
-
-
-def _estimate_segmentation_dir(segments, annotations, threshold=0.01):
-    """Estimate if the given compounds are under- or oversegmented.
-
-    The decision is based on the difference between boundary precision
-    and recall values for the given sample of segmented data.
-
-    Arguments:
-      segments -- list of predicted segmentations
-      annotations -- list of reference segmentations
-      threshold -- maximum threshold for the difference between
-                   predictions and reference
-
-    Return 1 in the case of oversegmentation, -1 in the case of
-    undersegmentation, and 0 if no changes are required.
-
-    """
-    pre, rec, f = _bpr_evaluation(map(lambda x: [x], segments), annotations)
-    _logger.info("Boundary evaluation: precision %.4f; recall %.4f" %
-                 (pre, rec))
-    if abs(pre - rec) < threshold:
-        return 0
-    elif rec > pre:
-        return 1
-    else:
-        return -1
 
 
 def main(argv):
