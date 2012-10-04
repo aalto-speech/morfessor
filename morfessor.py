@@ -1048,7 +1048,7 @@ class AnnotationsModelUpdate:
         undersegmentation, and 0 if no changes are required.
 
         """
-        pre, rec, f = cls._bpr_evaluation(map(lambda x: [x], segments),
+        pre, rec, f = cls._bpr_evaluation([[x] for x in segments],
                                           annotations)
         _logger.info("Boundary evaluation: precision %.4f; recall %.4f" %
                      (pre, rec))
