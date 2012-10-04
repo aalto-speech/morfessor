@@ -217,7 +217,8 @@ class MorfessorIO:
                 yield 1, line, self._split_atoms(line)
         _logger.info("Done.")
 
-    def read_annotations_file(self, file_name):
+    def read_annotations_file(self, file_name, construction_separator=' ',
+                              analysis_sep=','):
         """Read a annotations file.
 
         Each line has the format:
@@ -226,15 +227,26 @@ class MorfessorIO:
         Yield tuples (compound, list(analyses)).
 
         """
+        annotations = {}
         _logger.info("Reading annotations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
             analyses = []
             compound, analyses_line = line.split(None, 1)
 
-            for analysis in analyses_line.split(','):
-                analyses.append(analysis.split(' '))
+            if compound not in annotations:
+                annotations[compound] = []
 
+            if analysis_sep is not None:
+                for analysis in analyses_line.split(analysis_sep):
+                    annotations[compound].append(
+                        analysis.split(construction_separator))
+            else:
+                annotations[compound].append(
+                    analyses_line.split(construction_separator))
+
+        for compound, analyses in annotations.items():
             yield compound, analyses
+
         _logger.info("Done.")
 
     def write_lexicon_file(self, file_name, lexicon):
@@ -975,6 +987,13 @@ class BaselineModel:
         constructions.reverse()
         return constructions, cost
 
+class AnnotationsModelUpdate:
+    def __init__(self, data, model):
+        pass
+
+    def update_model(self):
+        pass
+
 
 class Annotations:
     """Annotated data for semi-supervised learning."""
@@ -1370,6 +1389,10 @@ Interactive use (read corpus from user):
     add_arg('--compound-separator', dest="cseparator", type=str, default='\W+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
+    add_arg('--analysis-separator', dest='analysisseparator', type=str,
+            default=',', metavar='<regexp>',
+            help="separator for different analyses in an annotation file. Use"
+                 "  NONE for only allowing one analysis per line")
 
     # Options for model training
     add_arg = parser.add_argument_group(
@@ -1518,14 +1541,19 @@ Interactive use (read corpus from user):
     if args.loadsegfile is not None:
         model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
 
+    analysis_sep = (args.analysisseparator
+                    if args.analysisseparator != 'NONE' else None)
+
     if args.annofile is not None:
         annotations = Annotations()
-        annotations.load(io.read_annotations_file(args.annofile))
+        annotations.load(io.read_annotations_file(args.annofile,
+                                                  analysis_sep=analysis_sep))
         model.set_annotations(annotations, args.annotationweight)
 
     if args.develfile is not None:
         develannots = Annotations()
-        develannots.load(io.read_annotations_file(args.develfile))
+        develannots.load(io.read_annotations_file(args.develfile,
+                                                  analysis_sep=analysis_sep))
     else:
         develannots = None
 
