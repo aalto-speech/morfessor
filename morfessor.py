@@ -3,8 +3,7 @@
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
-__all__ = ['MorfessorIO', 'BaselineModel',
-           'Annotations', 'Encoding', 'CorpusEncoding',
+__all__ = ['MorfessorIO', 'BaselineModel', 'Encoding', 'CorpusEncoding',
            'AnnotatedCorpusEncoding', 'LexiconEncoding']
 
 __version__ = '2.0.0pre1'
@@ -244,10 +243,8 @@ class MorfessorIO:
                 annotations[compound].append(
                     analyses_line.split(construction_separator))
 
-        for compound, analyses in annotations.items():
-            yield compound, analyses
-
         _logger.info("Done.")
+        return annotations
 
     def write_lexicon_file(self, file_name, lexicon):
         """Write to a Lexicon file all constructions and their counts."""
@@ -497,7 +494,7 @@ class BaselineModel:
         # Collect constructions from the most probable segmentations
         # and add missing compounds also to the unannotated data
         constructions = collections.Counter()
-        for compound, alternatives in self.annotations.get_data():
+        for compound, alternatives in self.annotations.items():
             if not compound in self.analyses:
                 self._add_compound(compound, 1)
 
@@ -795,7 +792,7 @@ class BaselineModel:
         self.annot_coding = AnnotatedCorpusEncoding(self.corpus_coding,
                                                     annotated_corpus_weight=
                                                     annotatedcorpusweight)
-        self.annot_coding.boundaries = self.annotations.get_types()
+        self.annot_coding.boundaries = len(self.annotations)
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
                     devel_annotations=None, finish_threshold=0.005):
@@ -831,7 +828,7 @@ class BaselineModel:
 
             if devel_annotations is not None:
                 # Tune corpus weight based on development data
-                tmp = devel_annotations.get_data()
+                tmp = devel_annotations.items()
                 wlist, annotations = zip(*tmp)
                 segments = [self.viterbi_segment(w)[0] for w in wlist]
                 d = _estimate_segmentation_dir(segments, annotations)
@@ -989,54 +986,11 @@ class BaselineModel:
 
 class AnnotationsModelUpdate:
     def __init__(self, data, model):
-        pass
+        self.data = data
+        self.model = model
 
     def update_model(self):
         pass
-
-
-class Annotations:
-    """Annotated data for semi-supervised learning."""
-
-    def __init__(self):
-        """Initialize a new instance of annotated data."""
-        self.types = 0
-        self.analyses = {}
-
-    def get_types(self):
-        """Return the number of annotated compound types."""
-        return self.types
-
-    def get_compounds(self):
-        """Return the annotated compounds."""
-        return self.analyses.keys()
-
-    def get_data(self):
-        """Return the annotated compounds and their analyses."""
-        return self.analyses.items()
-
-    def has_analysis(self, compound):
-        """Return whether the given compound has annotation."""
-        return compound in self.analyses
-
-    def get_analyses(self, compound):
-        """Return the analyses for the given compound."""
-        return self.analyses[compound]
-
-    def load(self, data):
-        """Load annotations from file.
-
-        Arguments:
-            datafile -- filename
-            separator -- regexp for separating constructions in one analysis
-            comment_re -- regexp for separating alternative analyses
-
-        """
-
-        for compound, analyses in data:
-            self.analyses[compound] = analyses
-
-        self.types = len(self.analyses)
 
 
 class Encoding(object):
@@ -1545,15 +1499,13 @@ Interactive use (read corpus from user):
                     if args.analysisseparator != 'NONE' else None)
 
     if args.annofile is not None:
-        annotations = Annotations()
-        annotations.load(io.read_annotations_file(args.annofile,
-                                                  analysis_sep=analysis_sep))
+        annotations = io.read_annotations_file(args.annofile,
+                                               analysis_sep=analysis_sep)
         model.set_annotations(annotations, args.annotationweight)
 
     if args.develfile is not None:
-        develannots = Annotations()
-        develannots.load(io.read_annotations_file(args.develfile,
-                                                  analysis_sep=analysis_sep))
+        develannots = io.read_annotations_file(args.develfile,
+                                               analysis_sep=analysis_sep)
     else:
         develannots = None
 
