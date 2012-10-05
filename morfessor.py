@@ -77,15 +77,19 @@ def _progress(iter_func):
             def __iter__(self):
                 return self
 
-            def next(self):
+            def __next__(self):
                 self.i += 1
                 if self.i % self.dotfreq == 0:
                     sys.stderr.write('.')
+                    sys.stderr.flush()
                 try:
-                    return self.it.next()
+                    return next(self.it)
                 except StopIteration:
                     sys.stderr.write('\n')
                     raise
+
+            next = __next__
+
         ProgressBar = SimpleProgressBar
 
     # In case of a decorator (argument is a function),
