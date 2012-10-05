@@ -30,6 +30,7 @@ except ImportError:
     import pickle
 
 try:
+    # In Python 3 reduce is a method in functools. Try to import
     from functools import reduce
 except ImportError:
     pass
@@ -1465,7 +1466,7 @@ Interactive use (read corpus from user):
     # Basic settings for logging to the error stream
     ch = logging.StreamHandler()
     ch.setLevel(loglevel)
-    ch.setFormatter(default_formatter)
+    ch.setFormatter(plain_formatter)
     _logger.addHandler(ch)
 
     # Settings for when log_file is present
@@ -1477,8 +1478,6 @@ Interactive use (read corpus from user):
         # If logging to a file, make INFO the highest level for the
         # error stream
         ch.setLevel(max(loglevel, logging.INFO))
-        # Also, don't print timestamps to the error stream
-        ch.setFormatter(plain_formatter)
 
     # If debug messages are printed to screen or if stderr is not a tty (but
     # a pipe or a file), don't show the progressbar
