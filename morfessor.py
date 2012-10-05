@@ -3,8 +3,9 @@
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
-__all__ = ['MorfessorIO', 'BaselineModel', 'Encoding', 'CorpusEncoding',
-           'AnnotatedCorpusEncoding', 'LexiconEncoding']
+__all__ = ['MorfessorIO', 'BaselineModel', 'AnnotationsModelUpdate',
+           'Encoding', 'CorpusEncoding', 'AnnotatedCorpusEncoding',
+           'LexiconEncoding']
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
