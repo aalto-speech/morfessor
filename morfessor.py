@@ -839,8 +839,7 @@ class BaselineModel:
                     forced_epochs = max(forced_epochs, 2)
                     newcost = self.get_cost()
 
-            _logger.info("Epochs: %s" % epochs)
-            _logger.info("Cost: %s" % newcost)
+            _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
             if (forced_epochs == 0 and
                     newcost >= oldcost - finish_threshold *
                     self.corpus_coding.boundaries):
