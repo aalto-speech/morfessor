@@ -30,12 +30,6 @@ try:
 except ImportError:
     import pickle
 
-try:
-    # In Python 3 reduce is a method in functools. Try to import
-    from functools import reduce
-except ImportError:
-    pass
-
 _logger = logging.getLogger(__name__)
 
 show_progress_bar = True
@@ -477,7 +471,7 @@ class BaselineModel:
                     self.analyses[construction] = ConstrNode(rcount, 0, [])
                     self._modify_construction_count(construction, count)
                 else:
-                    suffix = reduce(lambda x, y: x + y, parts[p + 1:])
+                    suffix = self._join_constructions(parts[p + 1:])
                     self.analyses[construction] = ConstrNode(rcount, count,
                                                              [len(prefix)])
                     self._modify_construction_count(prefix, count)
@@ -730,6 +724,13 @@ class BaselineModel:
             startpos = endpos
         parts.append(compound[endpos:])
         return parts
+
+    @staticmethod
+    def _join_constructions(constructions):
+        result = type(constructions[0])()
+        for c in constructions:
+            result += c
+        return result
 
     def get_cost(self):
         """Return current model cost."""
@@ -1010,14 +1011,12 @@ class AnnotationsModelUpdate:
             best = -1
             for ref in ref_list:
                 # list of internal boundary positions
-                ref_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
-                                   ref, [0])[1:-1])
+                ref_b = set(BaselineModel._segmentation_to_splitloc(ref))
                 if len(ref_b) == 0:
                     best = 1.0
                     break
                 for pre in pre_list:
-                    pre_b = set(reduce(lambda x, y: x + [(x[-1] + len(y))],
-                                       pre, [0])[1:-1])
+                    pre_b = set(BaselineModel._segmentation_to_splitloc(pre))
                     r = len(ref_b.intersection(pre_b)) / float(len(ref_b))
                     if r > best:
                         best = r
