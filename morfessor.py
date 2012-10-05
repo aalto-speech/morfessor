@@ -1430,6 +1430,10 @@ Interactive use (read corpus from user):
     add_arg('--logfile', dest='log_file', metavar='<file>',
             help="write log messages to file in addition to standard "
             "error stream")
+    add_arg('--progressbar', dest='progress', default=False,
+            action='store_true',
+            help="Force the progressbar to be displayed (possibly lowers the "
+                 "log level for the standard error stream)")
 
     add_arg = parser.add_argument_group('other options').add_argument
     add_arg('-h', '--help', action='help',
@@ -1478,6 +1482,10 @@ Interactive use (read corpus from user):
     if (ch.level > logging.INFO or
             (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
         show_progress_bar = False
+
+    if args.progress:
+        show_progress_bar = True
+        ch.setLevel(min(ch.level, logging.INFO))
 
     if (args.loadfile is None and
             args.loadsegfile is None and
