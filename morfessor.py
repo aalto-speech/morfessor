@@ -68,7 +68,7 @@ def _progress(iter_func):
                 self.i = 0
 
                 # Dot frequency is determined as ceil(len(it) / NUM_DOTS)
-                self.dotfreq = len(it) + self.NUM_DOTS - 1 // self.NUM_DOTS
+                self.dotfreq = (len(it) + self.NUM_DOTS - 1) // self.NUM_DOTS
                 if self.dotfreq < 1:
                     self.dotfreq = 1
 
