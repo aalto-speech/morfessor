@@ -3,9 +3,9 @@
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
 
-__all__ = ['MorfessorIO', 'BaselineModel', 'AnnotationsModelUpdate',
-           'Encoding', 'CorpusEncoding', 'AnnotatedCorpusEncoding',
-           'LexiconEncoding']
+__all__ = ['MorfessorException', 'MorfessorIO', 'BaselineModel',
+           'AnnotationsModelUpdate', 'Encoding', 'CorpusEncoding',
+           'AnnotatedCorpusEncoding', 'LexiconEncoding']
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
@@ -123,7 +123,7 @@ def _constructions_to_str(constructions):
         return ' + '.join(map(lambda x: ' '.join(x), constructions))
 
 
-class Error(Exception):
+class MorfessorException(Exception):
     """Base class for exceptions in this module."""
     pass
 
@@ -484,7 +484,7 @@ class BaselineModel:
                     self._modify_construction_count(suffix, count)
                     construction = suffix
         else:
-            raise Error("Unknown parse type '%s'" % ptype)
+            raise MorfessorException("Unknown parse type '%s'" % ptype)
 
     def _update_annotation_choices(self):
         """Update the selection of alternative analyses in annotations.
@@ -824,7 +824,7 @@ class BaselineModel:
                 elif algorithm == 'viterbi':
                     segments = self._viterbi_optimize(w, *algorithm_params)
                 else:
-                    raise Error("unknown algorithm '%s'" % algorithm)
+                    raise MorfessorException("unknown algorithm '%s'" % algorithm)
                 _logger.debug("#%s -> %s" %
                               (w, _constructions_to_str(segments)))
             epochs += 1
@@ -890,7 +890,7 @@ class BaselineModel:
                 elif algorithm == 'viterbi':
                     segments = self._viterbi_optimize(w, *algorithm_params)
                 else:
-                    raise Error("unknown algorithm '%s'" % algorithm)
+                    raise MorfessorException("unknown algorithm '%s'" % algorithm)
                 _logger.debug("#%s: %s -> %s" %
                               (i, w, _constructions_to_str(segments)))
                 i += 1
@@ -938,7 +938,7 @@ class BaselineModel:
                 if (construction in self.analyses and
                         len(self.analyses[construction].splitloc) == 0):
                     if self.analyses[construction].count <= 0:
-                        raise Error("Construction count of '%s' is %s" %
+                        raise MorfessorException("Construction count of '%s' is %s" %
                                     (construction,
                                      self.analyses[construction].count))
                     cost += (logtokens -
