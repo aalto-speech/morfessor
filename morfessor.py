@@ -852,7 +852,8 @@ class BaselineModel:
         return epochs, newcost
 
     def train_online(self, data, count_modifier=None, epoch_interval=10000,
-                     algorithm='recursive', algorithm_params=()):
+                     algorithm='recursive', algorithm_params=(),
+                     init_rand_split=None):
         if count_modifier is not None:
             counts = {}
 
@@ -886,6 +887,9 @@ class BaselineModel:
                         self._add_compound(w, addc)
                 else:
                     self._add_compound(w, 1)
+                if init_rand_split is not None and init_rand_split > 0:
+                        parts = self._random_split(w, init_rand_split)
+                        self._set_compound_analysis(w, parts)
                 if algorithm == 'recursive':
                     segments = self._recursive_optimize(w, *algorithm_params)
                 elif algorithm == 'viterbi':
@@ -947,15 +951,15 @@ class BaselineModel:
                                       addcount))
                 elif addcount > 0:
                     if self.corpus_coding.tokens == 0:
-                        cost += ((addcount * math.log(addcount)
-                                 + self.lexicon_coding.get_codelength(construction))
+                        cost += (addcount * math.log(addcount) +
+                                 self.lexicon_coding.get_codelength(construction)
                                  / self.corpus_coding.weight)
                     else:
-                        cost += ((logtokens - math.log(addcount)
-                                  + ((self.lexicon_coding.boundaries +
-                                      addcount) *
-                                     math.log(self.lexicon_coding.boundaries
-                                              + addcount))
+                        cost += (logtokens - math.log(addcount) +
+                                 (((self.lexicon_coding.boundaries +
+                                    addcount) *
+                                   math.log(self.lexicon_coding.boundaries
+                                            + addcount))
                                   - (self.lexicon_coding.boundaries
                                      * math.log(self.lexicon_coding.boundaries))
                                   + self.lexicon_coding.get_codelength(construction))
@@ -1385,8 +1389,8 @@ Interactive use (read corpus from user):
             help="seed for random number generator")
     add_arg('-R', '--randsplit', dest="splitprob", default=None, type=float,
             metavar='<float>',
-            help="initialize model by random splitting using the given split "
-                 "probability (default no splitting)")
+            help="initialize new words by random splitting using the given "
+                 "split probability (default no splitting)")
     add_arg('--skips', dest="skips", default=False, action='store_true',
             help="use random skips for frequently seen compounds to speed up "
                  "training")
@@ -1583,12 +1587,14 @@ Interactive use (read corpus from user):
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams)
+                                      args.algorithm, algparams, 
+                                      args.splitprob)
             _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online+batch':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams)
+                                      args.algorithm, algparams, 
+                                      args.splitprob)
             e, c = model.train_batch(args.algorithm, algparams, develannots)
             _logger.info("Epochs: %s" % e)
         else:
