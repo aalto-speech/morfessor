@@ -42,10 +42,11 @@ def _progress(iter_func):
     iter_func can be both a function providing a iterator (for decorator
     style use) or an iterator itself.
 
-    No progressbar is displayed when stderr is redirected to a file
+    No progressbar is displayed when the show_progress_bar variable is set to
+     false.
 
     If the progressbar module is available a fancy percentage style
-    progressbar is displayed. Otherwise 20 dots are printed as indicator.
+    progressbar is displayed. Otherwise 60 dots are printed as indicator.
 
     """
 
@@ -57,6 +58,8 @@ def _progress(iter_func):
         from progressbar import ProgressBar
     except ImportError:
         class SimpleProgressBar:
+            """Create a simple progress bar that prints 60 dots on a single
+            line, proportional to the progress """
             NUM_DOTS = 60
 
             def __call__(self, it):
@@ -84,12 +87,13 @@ def _progress(iter_func):
                     sys.stderr.write('\n')
                     raise
 
+            #Needed to be compatible with both Python2 and 3
             next = __next__
 
         ProgressBar = SimpleProgressBar
 
     # In case of a decorator (argument is a function),
-    # wrap the functions result is a ProgressBar and return the new function
+    # wrap the functions result in a ProgressBar and return the new function
     if isinstance(iter_func, types.FunctionType):
         def i(*args, **kwargs):
             if logging.getLogger(__name__).isEnabledFor(logging.INFO):
@@ -125,6 +129,10 @@ class MorfessorException(Exception):
 class MorfessorIO:
     """Definition for all input and output files. Also handles all
     encoding issues.
+
+    The only state this class has is the separators used in the data.
+    Therefore, the same class instance can be used for initializing multiple
+    files.
 
     """
 
@@ -347,7 +355,14 @@ ConstrNode = collections.namedtuple('ConstrNode',
 
 
 class BaselineModel:
-    """Morfessor Baseline model class."""
+    """Morfessor Baseline model class.
+
+    Implements training of and segmenting with a Morfessor model. The model
+    is complete agnostic to whether it is used with lists of strings (finding
+     phrases in sentences) or strings of characters (finding morphs in words).
+    """
+
+    penalty = -9999.9
 
     def __init__(self, forcesplit_list=None, corpusweight=1.0,
                  use_skips=False):
@@ -361,6 +376,10 @@ class BaselineModel:
                          to speed up training
 
         """
+
+        # In analyses for each construction a ConstrNode is stored. All
+        # training data has a rcount (real count) > 0. All real morphemes
+        # have no split locations.
         self.analyses = {}
 
         # Cost variables
@@ -373,13 +392,12 @@ class BaselineModel:
         self.use_skips = use_skips  # Random skips for frequent constructions
         self.supervised = False
 
-        self.counter = collections.Counter()  # Counter for random skipping
+        # Counter for random skipping
+        self.counter = collections.Counter()
         if forcesplit_list is None:
             self.forcesplit_list = []
         else:
             self.forcesplit_list = forcesplit_list
-
-        self.penalty = -9999.9
 
     @property
     def tokens(self):
@@ -727,13 +745,15 @@ class BaselineModel:
 
     @staticmethod
     def _join_constructions(constructions):
+        """Append the constructions after each other by addition. Works for
+        both lists and strings """
         result = type(constructions[0])()
         for c in constructions:
             result += c
         return result
 
     def get_cost(self):
-        """Return current model cost."""
+        """Return current model encoding cost."""
         cost = self.corpus_coding.get_cost() + self.lexicon_coding.get_cost()
         if self.supervised:
             return cost + self.annot_coding.get_cost()
@@ -796,14 +816,36 @@ class BaselineModel:
         self.supervised = True
         self.annotations = annotations
         self.annot_coding = AnnotatedCorpusEncoding(self.corpus_coding,
-                                                    annotated_corpus_weight=
+                                                    weight=
                                                     annotatedcorpusweight)
         self.annot_coding.boundaries = len(self.annotations)
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
                     devel_annotations=None, finish_threshold=0.005):
+        """Train the model in batch fashion.
+
+        The model is trained with the data already loaded into the model (by
+        using an existing model or calling one of the load_ methods).
+
+        In each iteration (epoch) all compounds in the training data are
+        optimized once, in a random order. If applicable, corpus weight,
+        annotation cost, and random split counters are recalculated after
+        each iteration.
+
+        Arguments:
+            algorithm -- string in ('recursive', 'viterbi') that indicates
+                         the splitting algorithm used.
+            algorithm_params -- parameters passed to the splitting algorithm.
+            devel_annotations -- an annotated dataset (iterator of
+                                 (compound, [analyses]) tuples) used for
+                                 controlling the weight of the corpus
+                                 encoding.
+            finish_threshold -- the stopping threshold. Training stops when
+                                the improvement of the last iteration is
+                                smaller then finish_threshold * #boundaries
+
+        """
         self._epoch_update(0)
-        oldcost = 0.0
         newcost = self.get_cost()
         compounds = list(self._get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
@@ -854,6 +896,35 @@ class BaselineModel:
     def train_online(self, data, count_modifier=None, epoch_interval=10000,
                      algorithm='recursive', algorithm_params=(),
                      init_rand_split=None):
+        """Train the model in online fashion.
+
+        The model is trained with the data provided in the data argument.
+        As example the data could come from a generator linked to standard in
+         for live monitoring of the splitting.
+
+        All compounds from data are only optimized once. After online
+        training, batch training could be used for further optimization.
+
+        Epochs are defined as a fixed number of compounds. After each epoch (
+        like in batch training), the annotation cost, and random split counters
+        are recalculated if applicable.
+
+        Arguments:
+            data -- iterator/generator of (_,_, compound) tuples. The first
+                    two arguments are ignored, as every occurence of the
+                    compound is taken with count 1
+            count_modifier -- function for adjusting the counts of each
+                              compound
+            epoch_interval -- number of compounds to process before starting
+                              a new epoch
+            algorithm -- string in ('recursive', 'viterbi') that indicates
+                         the splitting algorithm used.
+            algorithm_params -- parameters passed to the splitting algorithm.
+            init_rand_split -- probability for random splitting a compound to
+                               at any point for initializing the model. None
+                               or 0 means no random splitting.
+
+        """
         if count_modifier is not None:
             counts = {}
 
@@ -985,12 +1056,23 @@ class BaselineModel:
 
 
 class AnnotationsModelUpdate:
+    """Class for using development annotations to update the corpus weight
+    during batch training
+
+    """
     def __init__(self, data, model):
+        """Initialize class with the development data and the model to update.
+
+        Arguments:
+            data -- iterator of (compound, [analyses,]) tuples.
+            model -- BaselineModel to update
+        """
         self.data = data
         self.model = model
 
     def update_model(self, epochs):
-        # Tune corpus weight based on development data
+        """Tune model corpus weight based on the precision and
+        recall of the development data, trying to keep them equal"""
         tmp = self.data.items()
         wlist, annotations = zip(*tmp)
         segments = [self.model.viterbi_segment(w)[0] for w in wlist]
@@ -1069,17 +1151,33 @@ class AnnotationsModelUpdate:
 
 
 class Encoding(object):
+    """Base class for calculating the entropy (encoding length) of a corpus
+    or lexicon.
 
+     Commonly subclassed to redefine specific methods.
+
+    """
     def __init__(self, weight=1.0):
+        """Initizalize class
+
+        Arguments:
+            weight -- weight used for this encoding
+        """
         self.logtokensum = 0.0
         self.tokens = 0
         self.boundaries = 0
         self.weight = weight
 
+    # constant used for speeding up logfactorial calculations with Stirling's
+    # approximation
     _log2pi = math.log(2 * math.pi)
 
     @property
     def types(self):
+        """Define number of types as 0. types is made a property method to
+        ensure easy redefinition in subclasses
+
+        """
         return 0
 
     @classmethod
@@ -1097,8 +1195,9 @@ class Encoding(object):
         return n * logn - n + 0.5 * (logn + cls._log2pi)
 
     def frequency_distribution_cost(self):
-        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!] for M types and N
-        tokens.
+        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!]
+
+        M is the number of tokens+boundaries and N the number of types
 
         """
         if self.types < 2:
@@ -1109,9 +1208,11 @@ class Encoding(object):
                 self._logfactorial(tokens - self.types))
 
     def permutations_cost(self):
+        """The permutations cost for the encoding."""
         return -self._logfactorial(self.boundaries)
 
     def update_count(self, construction, old_count, new_count):
+        """Update the counts in the encoding."""
         self.tokens += new_count - old_count
         if old_count > 1:
             self.logtokensum -= old_count * math.log(old_count)
@@ -1119,6 +1220,7 @@ class Encoding(object):
             self.logtokensum += new_count * math.log(new_count)
 
     def get_cost(self):
+        """Calculate the cost for encoding the corpus/lexicon"""
         if self.boundaries == 0:
             return 0.0
 
@@ -1131,13 +1233,22 @@ class Encoding(object):
 
 
 class CorpusEncoding(Encoding):
+    """Encoding the corpus class
 
+    The basic difference to a normal encoding is that the number of types is
+    not stored directly but fetched from the lexicon encoding. Also does the
+    cost function not contain any permutation cost.
+    """
     def __init__(self, lexicon_encoding, weight=1.0):
         super(CorpusEncoding, self).__init__(weight)
         self.lexicon_encoding = lexicon_encoding
 
     @property
     def types(self):
+        """Return the number of types of the corpus, which is the same as the
+         number of boundaries in the lexicon + 1
+
+        """
         return self.lexicon_encoding.boundaries + 1
 
     def frequency_distribution_cost(self):
@@ -1153,6 +1264,10 @@ class CorpusEncoding(Encoding):
                 self._logfactorial(tokens - self.types + 1))
 
     def get_cost(self):
+        """Override for the Encoding get_cost function. A corpus does not
+        have a permutation cost
+
+        """
         if self.boundaries == 0:
             return 0.0
 
@@ -1164,25 +1279,46 @@ class CorpusEncoding(Encoding):
 
 
 class AnnotatedCorpusEncoding(Encoding):
+    """Encoding the cost of an Annotated Corpus.
 
-    def __init__(self, corpus_coding,
-                 annotated_corpus_weight=None, penalty=-9999.9):
+    In this encoding constructions that are missing are penalized.
+    """
+    def __init__(self, corpus_coding, weight=None, penalty=-9999.9):
+        """
+        Initialize encoding with appropriate meta data
+
+        Arguments:
+            corpus_coding -- CorpusEncoding instance used for retrieving the
+                             number of tokens and boundaries in the corpus
+            weight -- The weight of this encoding. If the weight is None,
+                      it is updated automatically to be in balance with the
+                      corpus
+            penalty -- log penalty used for missing constructions
+
+        """
         super(AnnotatedCorpusEncoding, self).__init__()
         self.do_update_weight = True
         self.weight = 1.0
-        if annotated_corpus_weight is not None:
+        if weight is not None:
             self.do_update_weight = False
-            self.weight = annotated_corpus_weight
+            self.weight = weight
         self.corpus_coding = corpus_coding
         self.penalty = penalty
         self.constructions = collections.Counter()
 
     def set_constructions(self, constructions):
+        """Method for re-initializing the constructions. The count of the
+        constructions must still be set with a call to set_count
+
+        """
         self.constructions = constructions
         self.tokens = sum(constructions.values())
         self.logtokensum = 0.0
 
     def set_count(self, construction, count):
+        """Set an initial count for each construction. Missing constructions
+        are penalized
+        """
         annot_count = self.constructions[construction]
         if count > 0:
             self.logtokensum += annot_count * math.log(count)
@@ -1190,6 +1326,10 @@ class AnnotatedCorpusEncoding(Encoding):
             self.logtokensum += annot_count * self.penalty
 
     def update_count(self, construction, old_count, new_count):
+        """Update the counts in the Encoding, setting (or removing) a penalty
+         for missing constructions
+
+        """
         if construction in self.constructions:
             annot_count = self.constructions[construction]
             if old_count > 0:
@@ -1202,6 +1342,9 @@ class AnnotatedCorpusEncoding(Encoding):
                 self.logtokensum += annot_count * self.penalty
 
     def update_weight(self):
+        """Update the weight of the Encoding by taking the ratio of the
+        corpus boundaries and annotated boundaries
+        """
         if not self.do_update_weight:
             return
         old = self.weight
@@ -1212,6 +1355,7 @@ class AnnotatedCorpusEncoding(Encoding):
                          % self.weight)
 
     def get_cost(self):
+        """Return the cost of the Annotation Corpus."""
         if self.boundaries == 0:
             return 0.0
         n = self.tokens + self.boundaries
@@ -1222,16 +1366,26 @@ class AnnotatedCorpusEncoding(Encoding):
 
 
 class LexiconEncoding(Encoding):
+    """Class for calculating the encoding cost for the Lexicon"""
 
     def __init__(self):
+        """Initialize Lexcion Encoding"""
         super(LexiconEncoding, self).__init__()
         self.atoms = collections.Counter()
 
     @property
     def types(self):
+        """Return the number of different atoms in the lexicon + 1 for the
+        compound-end-token
+
+        """
         return len(self.atoms) + 1
 
     def add(self, construction):
+        """Add a construction to the lexicon, updating automatically the
+        count for its atoms
+
+        """
         self.boundaries += 1
         for atom in construction:
             c = self.atoms[atom]
@@ -1239,6 +1393,10 @@ class LexiconEncoding(Encoding):
             self.update_count(atom, c, c + 1)
 
     def remove(self, construction):
+        """Remove construction from the lexicon, updating automatically the
+        count for its atoms
+
+        """
         self.boundaries -= 1
         for atom in construction:
             c = self.atoms[atom]
@@ -1587,13 +1745,13 @@ Interactive use (read corpus from user):
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams, 
+                                      args.algorithm, algparams,
                                       args.splitprob)
             _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online+batch':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams, 
+                                      args.algorithm, algparams,
                                       args.splitprob)
             e, c = model.train_batch(args.algorithm, algparams, develannots)
             _logger.info("Epochs: %s" % e)
