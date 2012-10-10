@@ -281,7 +281,7 @@ class MorfessorIO:
         if self.atom_separator is None:
             return construction
         else:
-            return self._atom_sep_re.split(construction)
+            return tuple(self._atom_sep_re.split(construction))
 
     def _open_text_file_write(self, file_name):
         """Open a file with the appropriate compression and encoding"""
