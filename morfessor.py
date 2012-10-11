@@ -15,6 +15,7 @@ import codecs
 import collections
 import datetime
 import gzip
+import io
 import locale
 import logging
 import math
@@ -23,6 +24,8 @@ import re
 import sys
 import time
 import types
+
+PY3 = sys.version_info.major == 3
 
 try:
     # In Python2 import cPickle for better performance
@@ -302,19 +305,52 @@ class MorfessorIO:
         Comments and empty lines are skipped.
 
         """
-        if self.encoding is None:
-            self.encoding = self._find_encoding(file_name)
-        if file_name == '-':
-            file_obj = sys.stdin
-        elif file_name.endswith('.gz'):
-            file_obj = gzip.open(file_name, 'rb')
-        else:
-            file_obj = open(file_name, 'rb')
+        encoding = self.encoding
+        if encoding is None:
+            if file_name == '-':
+                encoding = locale.getpreferredencoding()
+            else:
+                encoding = self._find_encoding(file_name)
 
-        for line in codecs.getreader(self.encoding)(file_obj):
-            line = line.rstrip()
-            if len(line) > 0 and not line.startswith(self.comment_start):
-                yield line
+        if file_name == '-':
+            if PY3:
+                if self.encoding == sys.stdin.encoding:
+                    inp = sys.stdin
+                else:
+                    inp = io.TextIOWrapper(sys.stdin.buffer, encoding=encoding)
+            else:
+                class StdinUnicodeReader:
+                    def __init__(self, encoding):
+                        self.encoding = encoding
+
+                    def __iter__(self):
+                        return self
+
+                    def next(self):
+                        return sys.stdin.readline().decode(self.encoding)
+                inp = StdinUnicodeReader(encoding)
+        else:
+            if file_name.endswith('.gz'):
+                file_obj = gzip.open(file_name, 'rb')
+            else:
+                file_obj = open(file_name, 'rb')
+
+            if self.encoding is None:
+                self.encoding = self._find_encoding(file_name)
+
+            inp = codecs.getreader(self.encoding)(file_obj)
+
+        try:
+            for line in inp:
+                line = line.rstrip()
+                if len(line) > 0 and not line.startswith(self.comment_start):
+                    yield line
+        except KeyboardInterrupt:
+            if file_name == '-':
+                _logger.info("Finished reading from stdin")
+                return
+            else:
+                raise
 
     def _find_encoding(self, *files):
         """Test default encodings on reading files.
