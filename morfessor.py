@@ -140,7 +140,7 @@ class MorfessorIO:
     """
 
     def __init__(self, encoding=None, construction_separator=' + ',
-                 comment_start='#', compound_separator='\W+',
+                 comment_start='#', compound_separator='\s+',
                  atom_separator=None):
         self.encoding = encoding
         self.construction_separator = construction_separator
@@ -1550,7 +1550,7 @@ Interactive use (read corpus from user):
     add_arg('--atom-separator', dest="separator", type=str, default=None,
             metavar='<regexp>',
             help="atom separator regexp (default %(default)s)")
-    add_arg('--compound-separator', dest="cseparator", type=str, default='\W+',
+    add_arg('--compound-separator', dest="cseparator", type=str, default='\s+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
     add_arg('--analysis-separator', dest='analysisseparator', type=str,
