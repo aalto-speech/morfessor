@@ -1775,7 +1775,7 @@ Interactive use (read corpus from user):
                     data = io.read_corpus_list_file(f)
                 else:
                     data = io.read_corpus_file(f)
-            model.load_data(data, args.freqthreshold, dampfunc, args.splitprob)
+                model.load_data(data, args.freqthreshold, dampfunc, args.splitprob)
             e, c = model.train_batch(args.algorithm, algparams, develannots)
             _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online':
