@@ -19,7 +19,7 @@ setup(name='Morfessor',
       author_email='sami.virpioja@aalto.fi',
       url='http://www.cis.hut.fi/projects/morpho/',
       description='Morfessor',
-      py_modules=['morfessor'],
+      py_modules=['morfessor', 'distribute_setup'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'Intended Audience :: Science/Research',
