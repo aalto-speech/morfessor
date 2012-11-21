@@ -9,7 +9,7 @@ __all__ = ['MorfessorException', 'MorfessorIO', 'BaselineModel',
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
-__author_email__ = "sami.virpioja@aalto.fi"
+__author_email__ = "morfessor@cis.hut.fi"
 
 import codecs
 import collections
