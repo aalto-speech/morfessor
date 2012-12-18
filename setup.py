@@ -16,10 +16,10 @@ requires = [
 setup(name='Morfessor',
       version=metadata['version'],
       author=metadata['author'],
-      author_email='sami.virpioja@aalto.fi',
+      author_email='morfessor@cis.hut.fi',
       url='http://www.cis.hut.fi/projects/morpho/',
       description='Morfessor',
-      py_modules=['morfessor'],
+      py_modules=['morfessor', 'distribute_setup'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'Intended Audience :: Science/Research',

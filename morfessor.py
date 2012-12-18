@@ -9,7 +9,7 @@ __all__ = ['MorfessorException', 'MorfessorIO', 'BaselineModel',
 
 __version__ = '2.0.0pre1'
 __author__ = 'Sami Virpioja, Peter Smit'
-__author_email__ = "sami.virpioja@aalto.fi"
+__author_email__ = "morfessor@cis.hut.fi"
 
 import codecs
 import collections
@@ -1655,7 +1655,7 @@ Interactive use (read corpus from user):
             version='%(prog)s ' + __version__,
             help="show version number and exit")
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv[1:])
 
     if args.verbose >= 2:
         loglevel = logging.DEBUG
@@ -1840,7 +1840,7 @@ Interactive use (read corpus from user):
 
 if __name__ == "__main__":
     try:
-        main(sys.argv[1:])
+        main(sys.argv)
     except Exception as e:
         _logger.error("Fatal Error %s %s" % (type(e), str(e)))
         raise
