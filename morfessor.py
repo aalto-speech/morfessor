@@ -327,7 +327,10 @@ class MorfessorIO:
                         return self
 
                     def next(self):
-                        return sys.stdin.readline().decode(self.encoding)
+                        l = sys.stdin.readline()
+                        if not l:
+                            raise StopIteration()
+                        return l.decode(self.encoding)
                 inp = StdinUnicodeReader(encoding)
         else:
             if file_name.endswith('.gz'):
@@ -846,9 +849,9 @@ class BaselineModel:
 
     def segment(self, compound):
         """Segment the compound by looking it up in the model analyses.
-        Raises KeyError if compound is not present yet.
 
-        For segmenting new words use viterbi_segment.
+        Raises KeyError if compound is not present in the training
+        data. For segmenting new words, use viterbi_segment(compound).
 
         """
         rcount, count, splitloc = self._analyses[compound]
@@ -1201,7 +1204,7 @@ class Encoding(object):
     """Base class for calculating the entropy (encoding length) of a corpus
     or lexicon.
 
-     Commonly subclassed to redefine specific methods.
+    Commonly subclassed to redefine specific methods.
 
     """
     def __init__(self, weight=1.0):
@@ -1329,6 +1332,7 @@ class AnnotatedCorpusEncoding(Encoding):
     """Encoding the cost of an Annotated Corpus.
 
     In this encoding constructions that are missing are penalized.
+
     """
     def __init__(self, corpus_coding, weight=None, penalty=-9999.9):
         """
