@@ -290,6 +290,8 @@ class MorfessorIO:
         """Open a file with the appropriate compression and encoding"""
         if file_name == '-':
             file_obj = sys.stdout
+            if PY3:
+                return file_obj
         elif file_name.endswith('.gz'):
             file_obj = gzip.open(file_name, 'wb')
         else:
