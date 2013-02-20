@@ -362,7 +362,7 @@ class MorfessorIO:
         of the default encodings would work.
 
         """
-        test_encodings = [locale.getpreferredencoding(), 'utf-8']
+        test_encodings = ['utf-8', locale.getpreferredencoding()]
         for encoding in test_encodings:
             ok = True
             for f in files:
