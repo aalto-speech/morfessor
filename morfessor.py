@@ -307,21 +307,19 @@ class MorfessorIO:
         """
         encoding = self.encoding
         if encoding is None:
-            if file_name == '-':
-                encoding = locale.getpreferredencoding()
-            else:
+            if file_name != '-':
                 encoding = self._find_encoding(file_name)
 
         if file_name == '-':
+
             if PY3:
-                if self.encoding == sys.stdin.encoding:
-                    inp = sys.stdin
-                else:
-                    inp = io.TextIOWrapper(sys.stdin.buffer, encoding=encoding)
+                inp = sys.stdin
             else:
                 class StdinUnicodeReader:
                     def __init__(self, encoding):
                         self.encoding = encoding
+                        if self.encoding is None:
+                            self.encoding = locale.getpreferredencoding()
 
                     def __iter__(self):
                         return self
