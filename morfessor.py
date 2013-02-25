@@ -1572,6 +1572,11 @@ Interactive use (read corpus from user):
             default=',', metavar='<regexp>',
             help="separator for different analyses in an annotation file. Use"
                  "  NONE for only allowing one analysis per line")
+    add_arg('--output-format', dest='outputformat', type=str,
+            default='{analysis}\n', metavar='<format>',
+            help="format string for --output file. Valid keywords are " 
+            "{analysis}, {compound}, {count}, and {logprob} "
+            "(default: '{analysis}\\n')")
 
     # Options for model training
     add_arg = parser.add_argument_group(
@@ -1838,13 +1843,19 @@ Interactive use (read corpus from user):
     # Segment test data
     if len(args.testfiles) > 0:
         _logger.info("Segmenting test data...")
+        outformat = args.outputformat
+        outformat = outformat.replace(r"\n", "\n")
+        outformat = outformat.replace(r"\t", "\t")
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
-            for _, _, compound in testdata:
+            for count, compound, atoms in testdata:
                 constructions, logp = model.viterbi_segment(
-                    compound, args.viterbismooth, args.viterbimaxlen)
-                fobj.write("%s\n" % ' '.join(constructions))
+                    atoms, args.viterbismooth, args.viterbimaxlen)
+                analysis = ' '.join(constructions)
+                fobj.write(outformat.format(
+                        analysis=analysis, compound=compound, 
+                        count=count, logprob=logp))
                 i += 1
                 if i % 10000 == 0:
                     sys.stderr.write(".")
