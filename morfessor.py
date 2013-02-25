@@ -1573,10 +1573,10 @@ Interactive use (read corpus from user):
             help="separator for different analyses in an annotation file. Use"
                  "  NONE for only allowing one analysis per line")
     add_arg('--output-format', dest='outputformat', type=str,
-            default='{analysis}\n', metavar='<format>',
+            default=r'{analysis}\n', metavar='<format>',
             help="format string for --output file. Valid keywords are " 
             "{analysis}, {compound}, {count}, and {logprob} "
-            "(default: '{analysis}\\n')")
+            "(default: '%(default)s')")
 
     # Options for model training
     add_arg = parser.add_argument_group(
