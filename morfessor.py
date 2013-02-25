@@ -1540,10 +1540,10 @@ Interactive use (read corpus from user):
                  "append multiple files)")
 
     # Options for output data files
+    add_arg = parser.add_argument_group('output data files').add_argument
     add_arg('-o', '--output', dest="outfile", default='-', metavar='<file>',
             help="output file for test data results (for standard output, "
                  "use '-'; default '%(default)s')")
-    add_arg = parser.add_argument_group('output data files').add_argument
     add_arg('-s', '--save', dest="savefile", default=None, metavar='<file>',
             help="save final model to file (pickled model object)")
     add_arg('-S', '--save-segmentation', dest="savesegfile", default=None,
