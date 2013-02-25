@@ -1,0 +1,202 @@
+#!/usr/bin/env python
+
+import sys
+import argparse
+import logging
+import time
+import morfessor
+from morfessor import _logger
+
+def main(argv):
+    parser = argparse.ArgumentParser(
+        prog='morfessor-segment',
+        description="""
+Morfessor %s
+
+Copyright (c) 2012, Sami Virpioja and Peter Smit
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1.  Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+2.  Redistributions in binary form must reproduce the above
+    copyright notice, this list of conditions and the following
+    disclaimer in the documentation and/or other materials provided
+    with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+Command-line arguments:
+""" % morfessor.__version__,
+        epilog="""
+Simple usage example (load model.pickled and use it to segment test corpus):
+
+  %(prog)s -l model.pickled -o test_corpus.segmented test_corpus.txt
+
+Interactive use (read corpus from user):
+
+  %(prog)s -l model.pickled -
+
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False)
+
+    # Positional arguments
+    parser.add_argument('testfiles', metavar='<file>', nargs='+',
+                        help='corpus files to segment')
+
+    # Options for input data files
+    add_arg = parser.add_argument_group('input data files').add_argument
+    add_arg('-l', '--load', dest="loadfile", default=None, metavar='<file>',
+            help="load existing model from file (pickled model object)")
+    add_arg('-L', '--load-segmentation', dest="loadsegfile", default=None,
+            metavar='<file>',
+            help="load existing model from segmentation "
+                 "file (Morfessor 1.0 format)")
+
+    # Options for output data files
+    add_arg = parser.add_argument_group('output data files').add_argument
+    add_arg('-o', '--output', dest="outfile", default='-', metavar='<file>',
+            help="output file for test data results (for standard output, "
+                 "use '-'; default '%(default)s')")
+    add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
+            help="output model lexicon to given file")
+
+    # Options for data formats
+    add_arg = parser.add_argument_group(
+        'data format options').add_argument
+    add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
+            help="encoding of input and output files (if none is given, "
+            "both the local encoding and UTF-8 are tried)")
+    add_arg('--atom-separator', dest="separator", type=str, default=None,
+            metavar='<regexp>',
+            help="atom separator regexp (default %(default)s)")
+    add_arg('--compound-separator', dest="cseparator", type=str, default='\s+',
+            metavar='<regexp>',
+            help="compound separator regexp (default '%(default)s')")
+
+    # Options for model training
+    add_arg = parser.add_argument_group(
+        'segmentation options').add_argument
+    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
+            type=float, metavar='<float>',
+            help="additive smoothing parameter for Viterbi training "
+            "and segmentation (default %(default)s)")
+    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
+            type=int, metavar='<int>',
+            help="maximum construction length in Viterbi training "
+            "and segmentation (default %(default)s)")
+
+    # Options for logging
+    add_arg = parser.add_argument_group('logging options').add_argument
+    add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
+            metavar='<int>',
+            help="verbose level; controls what is written to the standard "
+                 "error stream or log file (default %(default)s)")
+    add_arg('--logfile', dest='log_file', metavar='<file>',
+            help="write log messages to file in addition to standard "
+            "error stream")
+    add_arg('--progressbar', dest='progress', default=False,
+            action='store_true',
+            help="Force the progressbar to be displayed (possibly lowers the "
+                 "log level for the standard error stream)")
+
+    add_arg = parser.add_argument_group('other options').add_argument
+    add_arg('-h', '--help', action='help',
+            help="show this help message and exit")
+    add_arg('--version', action='version',
+            version='%(prog)s ' + morfessor.__version__,
+            help="show version number and exit")
+
+    args = parser.parse_args(argv[1:])
+
+    if args.verbose >= 2:
+        loglevel = logging.DEBUG
+    elif args.verbose >= 1:
+        loglevel = logging.INFO
+    else:
+        loglevel = logging.WARNING
+
+    logging_format = '%(asctime)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+    default_formatter = logging.Formatter(logging_format, date_format)
+    plain_formatter = logging.Formatter('%(message)s')
+    logging.basicConfig(level=loglevel)
+    _logger.propagate = False  # do not forward messages to the root logger
+
+    # Basic settings for logging to the error stream
+    ch = logging.StreamHandler()
+    ch.setLevel(loglevel)
+    ch.setFormatter(plain_formatter)
+    _logger.addHandler(ch)
+
+    # Settings for when log_file is present
+    if args.log_file is not None:
+        fh = logging.FileHandler(args.log_file, 'w')
+        fh.setLevel(loglevel)
+        fh.setFormatter(default_formatter)
+        _logger.addHandler(fh)
+        # If logging to a file, make INFO the highest level for the
+        # error stream
+        ch.setLevel(max(loglevel, logging.INFO))
+
+    # If debug messages are printed to screen or if stderr is not a tty (but
+    # a pipe or a file), don't show the progressbar
+    global show_progress_bar
+    if (ch.level > logging.INFO or
+            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
+        show_progress_bar = False
+
+    if args.progress:
+        show_progress_bar = True
+        ch.setLevel(min(ch.level, logging.INFO))
+
+    io = morfessor.MorfessorIO(encoding=args.encoding,
+                               compound_separator=args.cseparator,
+                               atom_separator=args.separator)
+
+    # Load exisiting model or create a new one
+    if args.loadfile is not None:
+        model = io.read_binary_model_file(args.loadfile)
+
+    else:
+        model = morfessor.BaselineModel()
+
+    if args.loadsegfile is not None:
+        model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
+
+    # Output lexicon
+    if args.lexfile is not None:
+        io.write_lexicon_file(args.lexfile, model.get_constructions())
+
+    # Segment test data
+    _logger.info("Segmenting test data...")
+    with io._open_text_file_write(args.outfile) as fobj:
+        testdata = io.read_corpus_files(args.testfiles)
+        i = 0
+        for _, _, compound in testdata:
+            constructions, logp = model.viterbi_segment(
+                compound, args.viterbismooth, args.viterbimaxlen)
+            fobj.write("%s\n" % ' '.join(constructions))
+            i += 1
+            if i % 10000 == 0:
+                sys.stderr.write(".")
+        sys.stderr.write("\n")
+    _logger.info("Done.")
+
+main(sys.argv)

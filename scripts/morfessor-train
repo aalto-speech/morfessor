@@ -1,0 +1,363 @@
+#!/usr/bin/env python
+
+import sys
+import argparse
+import logging
+import time
+import morfessor
+from morfessor import _logger
+
+def main(argv):
+    parser = argparse.ArgumentParser(
+        prog='morfessor-train',
+        description="""
+Morfessor %s
+
+Copyright (c) 2012, Sami Virpioja and Peter Smit
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1.  Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+2.  Redistributions in binary form must reproduce the above
+    copyright notice, this list of conditions and the following
+    disclaimer in the documentation and/or other materials provided
+    with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+Command-line arguments:
+""" % morfessor.__version__,
+        epilog="""
+Simple usage example (train a model and save it to model.pickled):
+
+  %(prog)s -s model.pickled training_corpus.txt
+
+Interactive use (read corpus from user):
+
+  %(prog)s -m online -v 2 -
+
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False)
+
+    # Positional arguments
+    parser.add_argument('trainfiles', metavar='<file>', nargs='+',
+                        help='training data files')
+
+    # Options for input data files
+    add_arg = parser.add_argument_group('input data files').add_argument
+    add_arg('-l', '--load', dest="loadfile", default=None, metavar='<file>',
+            help="load existing model from file (pickled model object)")
+    add_arg('-L', '--load-segmentation', dest="loadsegfile", default=None,
+            metavar='<file>',
+            help="load existing model from segmentation "
+                 "file (Morfessor 1.0 format)")
+
+    # Options for output data files
+    add_arg = parser.add_argument_group('output data files').add_argument
+    add_arg('-s', '--save', dest="savefile", default=None, metavar='<file>',
+            help="save final model to file (pickled model object)")
+    add_arg('-S', '--save-segmentation', dest="savesegfile", default=None,
+            metavar='<file>',
+            help="save model segmentations to file (Morfessor 1.0 format)")
+    add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
+            help="output final lexicon to given file")
+
+    # Options for data formats
+    add_arg = parser.add_argument_group(
+        'data format options').add_argument
+    add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
+            help="encoding of input and output files (if none is given, "
+            "both the local encoding and UTF-8 are tried)")
+    add_arg('--traindata-list', dest="list", default=False,
+            action='store_true',
+            help="input file(s) for batch training are lists "
+                 "(one compound per line, optionally count as a prefix)")
+    add_arg('--atom-separator', dest="separator", type=str, default=None,
+            metavar='<regexp>',
+            help="atom separator regexp (default %(default)s)")
+    add_arg('--compound-separator', dest="cseparator", type=str, default='\s+',
+            metavar='<regexp>',
+            help="compound separator regexp (default '%(default)s')")
+    add_arg('--analysis-separator', dest='analysisseparator', type=str,
+            default=',', metavar='<regexp>',
+            help="separator for different analyses in an annotation file. Use"
+                 "  NONE for only allowing one analysis per line")
+
+    # Options for model training
+    add_arg = parser.add_argument_group(
+        'training and segmentation options').add_argument
+    add_arg('-m', '--mode', dest="trainmode", default='init+batch',
+            metavar='<mode>',
+            choices=['none', 'batch', 'init', 'init+batch', 'online',
+                     'online+batch'],
+            help="training mode ('none', 'init', 'batch', 'init+batch', "
+            "'online', or 'online+batch'; default '%(default)s')")
+    add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
+            metavar='<algorithm>', choices=['recursive', 'viterbi'],
+            help="algorithm type ('recursive', 'viterbi'; default "
+                 "'%(default)s')")
+    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
+            metavar='<type>', choices=['none', 'log', 'ones'],
+            help="frequency dampening for training data ('none', 'log', or "
+                 "'ones'; default '%(default)s')")
+    add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
+            metavar='<list>',
+            help="force split on given atoms (default %(default)s)")
+    add_arg('-F', '--finish-threshold', dest='finish_threshold', type=float,
+            default=0.005, metavar='<float>',
+            help="Stopping threshold. Training stops when "
+                 "the improvement of the last iteration is"
+                 "smaller then finish_threshold * #boundaries; "
+                 "(default '%(default)s')")
+    add_arg('-r', '--randseed', dest="randseed", default=None,
+            metavar='<seed>',
+            help="seed for random number generator")
+    add_arg('-R', '--randsplit', dest="splitprob", default=None, type=float,
+            metavar='<float>',
+            help="initialize new words by random splitting using the given "
+                 "split probability (default no splitting)")
+    add_arg('--skips', dest="skips", default=False, action='store_true',
+            help="use random skips for frequently seen compounds to speed up "
+                 "training")
+    add_arg('--batch-minfreq', dest="freqthreshold", type=int, default=1,
+            metavar='<int>',
+            help="compound frequency threshold for batch training (default "
+                 "%(default)s)")
+    add_arg('--online-epochint', dest="epochinterval", type=int,
+            default=10000, metavar='<int>',
+            help="epoch interval for online training (default %(default)s)")
+    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
+            type=float, metavar='<float>',
+            help="additive smoothing parameter for Viterbi training "
+            "and segmentation (default %(default)s)")
+    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
+            type=int, metavar='<int>',
+            help="maximum construction length in Viterbi training "
+            "and segmentation (default %(default)s)")
+
+    # Options for semi-supervised model training
+    add_arg = parser.add_argument_group(
+        'semi-supervised training options').add_argument
+    add_arg('-A', '--annotations', dest="annofile", default=None,
+            metavar='<file>',
+            help="load annotated data for semi-supervised learning")
+    add_arg('-D', '--develset', dest="develfile", default=None,
+            metavar='<file>',
+            help="load annotated data for tuning the corpus weight parameter")
+    add_arg('-w', '--corpusweight', dest="corpusweight", type=float,
+            default=1.0, metavar='<float>',
+            help="corpus weight parameter (default %(default)s); "
+            "sets the initial value if --develset is used")
+    add_arg('-W', '--annotationweight', dest="annotationweight",
+            type=float, default=None, metavar='<float>',
+            help="corpus weight parameter for annotated data (if unset, the "
+                 "weight is set to balance the number of tokens in annotated "
+                 "and unannotated data sets)")
+
+    # Options for logging
+    add_arg = parser.add_argument_group('logging options').add_argument
+    add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
+            metavar='<int>',
+            help="verbose level; controls what is written to the standard "
+                 "error stream or log file (default %(default)s)")
+    add_arg('--logfile', dest='log_file', metavar='<file>',
+            help="write log messages to file in addition to standard "
+            "error stream")
+    add_arg('--progressbar', dest='progress', default=False,
+            action='store_true',
+            help="Force the progressbar to be displayed (possibly lowers the "
+                 "log level for the standard error stream)")
+
+    add_arg = parser.add_argument_group('other options').add_argument
+    add_arg('-h', '--help', action='help',
+            help="show this help message and exit")
+    add_arg('--version', action='version',
+            version='%(prog)s ' + morfessor.__version__,
+            help="show version number and exit")
+
+    args = parser.parse_args(argv[1:])
+
+    if args.verbose >= 2:
+        loglevel = logging.DEBUG
+    elif args.verbose >= 1:
+        loglevel = logging.INFO
+    else:
+        loglevel = logging.WARNING
+
+    logging_format = '%(asctime)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+    default_formatter = logging.Formatter(logging_format, date_format)
+    plain_formatter = logging.Formatter('%(message)s')
+    logging.basicConfig(level=loglevel)
+    _logger.propagate = False  # do not forward messages to the root logger
+
+    # Basic settings for logging to the error stream
+    ch = logging.StreamHandler()
+    ch.setLevel(loglevel)
+    ch.setFormatter(plain_formatter)
+    _logger.addHandler(ch)
+
+    # Settings for when log_file is present
+    if args.log_file is not None:
+        fh = logging.FileHandler(args.log_file, 'w')
+        fh.setLevel(loglevel)
+        fh.setFormatter(default_formatter)
+        _logger.addHandler(fh)
+        # If logging to a file, make INFO the highest level for the
+        # error stream
+        ch.setLevel(max(loglevel, logging.INFO))
+
+    # If debug messages are printed to screen or if stderr is not a tty (but
+    # a pipe or a file), don't show the progressbar
+    global show_progress_bar
+    if (ch.level > logging.INFO or
+            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
+        show_progress_bar = False
+
+    if args.progress:
+        show_progress_bar = True
+        ch.setLevel(min(ch.level, logging.INFO))
+
+    if len(args.trainfiles) == 0:
+        parser.error("not training data files defined")
+
+    if args.randseed is not None:
+        random.seed(args.randseed)
+
+    io = morfessor.MorfessorIO(encoding=args.encoding,
+                               compound_separator=args.cseparator,
+                               atom_separator=args.separator)
+
+    # Load exisiting model or create a new one
+    if args.loadfile is not None:
+        model = io.read_binary_model_file(args.loadfile)
+
+    else:
+        model = morfessor.BaselineModel(forcesplit_list=args.forcesplit,
+                                        corpusweight=args.corpusweight,
+                                        use_skips=args.skips)
+
+    if args.loadsegfile is not None:
+        model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
+
+    analysis_sep = (args.analysisseparator
+                    if args.analysisseparator != 'NONE' else None)
+
+    if args.annofile is not None:
+        annotations = io.read_annotations_file(args.annofile,
+                                               analysis_sep=analysis_sep)
+        model.set_annotations(annotations, args.annotationweight)
+
+    if args.develfile is not None:
+        develannots = io.read_annotations_file(args.develfile,
+                                               analysis_sep=analysis_sep)
+    else:
+        develannots = None
+
+    # Set frequency dampening function
+    if args.dampening == 'none':
+        dampfunc = lambda x: x
+    elif args.dampening == 'log':
+        dampfunc = lambda x: int(round(math.log(x + 1, 2)))
+    elif args.dampening == 'ones':
+        dampfunc = lambda x: 1
+    else:
+        parser.error("unknown dampening type '%s'" % args.dampening)
+
+    # Set algorithm parameters
+    if args.algorithm == 'viterbi':
+        algparams = (args.viterbismooth, args.viterbimaxlen)
+    else:
+        algparams = ()
+
+    # Train model
+    if args.trainmode == 'none':
+        pass
+    elif args.trainmode == 'batch':
+        if len(model.get_compounds()) == 0:
+            _logger.warning("Model contains no compounds for batch training."
+                            " Use 'init+batch' mode to add new data.")
+        else:
+            if len(args.trainfiles) > 0:
+                _logger.warning("Training mode 'batch' ignores new data "
+                                "files. Use 'init+batch' or 'online' to "
+                                "add new compounds.")
+            ts = time.time()
+            e, c = model.train_batch(args.algorithm, algparams, develannots,
+                                     args.finish_threshold)
+            te = time.time()
+            _logger.info("Epochs: %s" % e)
+            _logger.info("Final cost: %s" % c)
+            _logger.info("Training time: %.3fs" % (te - ts))
+    elif len(args.trainfiles) > 0:
+        ts = time.time()
+        if args.trainmode == 'init':
+            for f in args.trainfiles:
+                if args.list:
+                    data = io.read_corpus_list_file(f)
+                else:
+                    data = io.read_corpus_file(f)
+            c = model.load_data(data, args.freqthreshold, dampfunc,
+                                args.splitprob)
+        elif args.trainmode == 'init+batch':
+            for f in args.trainfiles:
+                if args.list:
+                    data = io.read_corpus_list_file(f)
+                else:
+                    data = io.read_corpus_file(f)
+                model.load_data(data, args.freqthreshold, dampfunc,
+                                args.splitprob)
+            e, c = model.train_batch(args.algorithm, algparams, develannots,
+                                     args.finish_threshold)
+            _logger.info("Epochs: %s" % e)
+        elif args.trainmode == 'online':
+            data = io.read_corpus_files(args.trainfiles)
+            e, c = model.train_online(data, dampfunc, args.epochinterval,
+                                      args.algorithm, algparams,
+                                      args.splitprob)
+            _logger.info("Epochs: %s" % e)
+        elif args.trainmode == 'online+batch':
+            data = io.read_corpus_files(args.trainfiles)
+            e, c = model.train_online(data, dampfunc, args.epochinterval,
+                                      args.algorithm, algparams,
+                                      args.splitprob)
+            e, c = model.train_batch(args.algorithm, algparams, develannots,
+                                     args.finish_threshold)
+            _logger.info("Epochs: %s" % e)
+        else:
+            parser.error("unknown training mode '%s'" % args.trainmode)
+        te = time.time()
+        _logger.info("Final cost: %s" % c)
+        _logger.info("Training time: %.3fs" % (te - ts))
+    else:
+        _logger.warning("No training data files specified.")
+
+    # Save model
+    if args.savefile is not None:
+        io.write_binary_model_file(args.savefile, model)
+
+    if args.savesegfile is not None:
+        io.write_segmentation_file(args.savesegfile, model.get_segmentations())
+
+    # Output lexicon
+    if args.lexfile is not None:
+        io.write_lexicon_file(args.lexfile, model.get_constructions())
+
+main(sys.argv)
