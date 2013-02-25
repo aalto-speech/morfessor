@@ -1593,6 +1593,12 @@ Interactive use (read corpus from user):
     add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
             metavar='<list>',
             help="force split on given atoms (default %(default)s)")
+    add_arg('-F', '--finish-threshold', dest='finish_threshold', type=float,
+            default=0.005, metavar='<float>',
+            help="Stopping threshold. Training stops when "
+                 "the improvement of the last iteration is"
+                 "smaller then finish_threshold * #boundaries; "
+                 "(default '%(default)s')")
     add_arg('-r', '--randseed', dest="randseed", default=None,
             metavar='<seed>',
             help="seed for random number generator")
@@ -1769,7 +1775,8 @@ Interactive use (read corpus from user):
                                 "files. Use 'init+batch' or 'online' to "
                                 "add new compounds.")
             ts = time.time()
-            e, c = model.train_batch(args.algorithm, algparams, develannots)
+            e, c = model.train_batch(args.algorithm, algparams, develannots,
+                                     args.finish_threshold)
             te = time.time()
             _logger.info("Epochs: %s" % e)
             _logger.info("Final cost: %s" % c)
@@ -1792,7 +1799,8 @@ Interactive use (read corpus from user):
                     data = io.read_corpus_file(f)
                 model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
-            e, c = model.train_batch(args.algorithm, algparams, develannots)
+            e, c = model.train_batch(args.algorithm, algparams, develannots,
+                                     args.finish_threshold)
             _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
@@ -1805,7 +1813,8 @@ Interactive use (read corpus from user):
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams,
                                       args.splitprob)
-            e, c = model.train_batch(args.algorithm, algparams, develannots)
+            e, c = model.train_batch(args.algorithm, algparams, develannots,
+                                     args.finish_threshold)
             _logger.info("Epochs: %s" % e)
         else:
             parser.error("unknown training mode '%s'" % args.trainmode)
