@@ -1844,6 +1844,8 @@ Interactive use (read corpus from user):
     if len(args.testfiles) > 0:
         _logger.info("Segmenting test data...")
         outformat = args.outputformat
+        if not PY3:
+            outformat = unicode(outformat)
         outformat = outformat.replace(r"\n", "\n")
         outformat = outformat.replace(r"\t", "\t")
         with io._open_text_file_write(args.outfile) as fobj:
