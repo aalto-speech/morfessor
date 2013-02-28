@@ -1275,11 +1275,11 @@ class Encoding(object):
             return 0.0
 
         n = self.tokens + self.boundaries
-        return  ((n * math.log(n)
-                  - self.boundaries * math.log(self.boundaries)
-                  - self.logtokensum
-                  + self.permutations_cost()) * self.weight
-                 + self.frequency_distribution_cost())
+        return ((n * math.log(n)
+                 - self.boundaries * math.log(self.boundaries)
+                 - self.logtokensum
+                 + self.permutations_cost()) * self.weight
+                + self.frequency_distribution_cost())
 
 
 class CorpusEncoding(Encoding):
@@ -1322,10 +1322,10 @@ class CorpusEncoding(Encoding):
             return 0.0
 
         n = self.tokens + self.boundaries
-        return  ((n * math.log(n)
-                  - self.boundaries * math.log(self.boundaries)
-                  - self.logtokensum) * self.weight
-                 + self.frequency_distribution_cost())
+        return ((n * math.log(n)
+                 - self.boundaries * math.log(self.boundaries)
+                 - self.logtokensum) * self.weight
+                + self.frequency_distribution_cost())
 
 
 class AnnotatedCorpusEncoding(Encoding):
@@ -1410,10 +1410,10 @@ class AnnotatedCorpusEncoding(Encoding):
         if self.boundaries == 0:
             return 0.0
         n = self.tokens + self.boundaries
-        return  ((n * math.log(self.corpus_coding.tokens +
-                               self.corpus_coding.boundaries)
-                  - self.boundaries * math.log(self.corpus_coding.boundaries)
-                  - self.logtokensum) * self.weight)
+        return ((n * math.log(self.corpus_coding.tokens +
+                              self.corpus_coding.boundaries)
+                 - self.boundaries * math.log(self.corpus_coding.boundaries)
+                 - self.logtokensum) * self.weight)
 
 
 class LexiconEncoding(Encoding):
@@ -1468,7 +1468,7 @@ class LexiconEncoding(Encoding):
         return cost
 
 
-def main(argv):
+def get_default_argparser():
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -1557,7 +1557,7 @@ Interactive use (read corpus from user):
         'data format options').add_argument
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help="encoding of input and output files (if none is given, "
-            "both the local encoding and UTF-8 are tried)")
+                 "both the local encoding and UTF-8 are tried)")
     add_arg('--traindata-list', dest="list", default=False,
             action='store_true',
             help="input file(s) for batch training are lists "
@@ -1574,9 +1574,9 @@ Interactive use (read corpus from user):
                  "  NONE for only allowing one analysis per line")
     add_arg('--output-format', dest='outputformat', type=str,
             default=r'{analysis}\n', metavar='<format>',
-            help="format string for --output file. Valid keywords are " 
-            "{analysis}, {compound}, {count}, and {logprob} "
-            "(default: '%(default)s')")
+            help="format string for --output file. Valid keywords are "
+                 "{analysis}, {compound}, {count}, and {logprob} "
+                 "(default: '%(default)s')")
 
     # Options for model training
     add_arg = parser.add_argument_group(
@@ -1586,7 +1586,7 @@ Interactive use (read corpus from user):
             choices=['none', 'batch', 'init', 'init+batch', 'online',
                      'online+batch'],
             help="training mode ('none', 'init', 'batch', 'init+batch', "
-            "'online', or 'online+batch'; default '%(default)s')")
+                 "'online', or 'online+batch'; default '%(default)s')")
     add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
             metavar='<algorithm>', choices=['recursive', 'viterbi'],
             help="algorithm type ('recursive', 'viterbi'; default "
@@ -1624,11 +1624,11 @@ Interactive use (read corpus from user):
     add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
             type=float, metavar='<float>',
             help="additive smoothing parameter for Viterbi training "
-            "and segmentation (default %(default)s)")
+                 "and segmentation (default %(default)s)")
     add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
             type=int, metavar='<int>',
             help="maximum construction length in Viterbi training "
-            "and segmentation (default %(default)s)")
+                 "and segmentation (default %(default)s)")
 
     # Options for semi-supervised model training
     add_arg = parser.add_argument_group(
@@ -1642,7 +1642,7 @@ Interactive use (read corpus from user):
     add_arg('-w', '--corpusweight', dest="corpusweight", type=float,
             default=1.0, metavar='<float>',
             help="corpus weight parameter (default %(default)s); "
-            "sets the initial value if --develset is used")
+                 "sets the initial value if --develset is used")
     add_arg('-W', '--annotationweight', dest="annotationweight",
             type=float, default=None, metavar='<float>',
             help="corpus weight parameter for annotated data (if unset, the "
@@ -1657,7 +1657,7 @@ Interactive use (read corpus from user):
                  "error stream or log file (default %(default)s)")
     add_arg('--logfile', dest='log_file', metavar='<file>',
             help="write log messages to file in addition to standard "
-            "error stream")
+                 "error stream")
     add_arg('--progressbar', dest='progress', default=False,
             action='store_true',
             help="Force the progressbar to be displayed (possibly lowers the "
@@ -1670,8 +1670,10 @@ Interactive use (read corpus from user):
             version='%(prog)s ' + __version__,
             help="show version number and exit")
 
-    args = parser.parse_args(argv[1:])
+    return parser
 
+
+def main(args):
     if args.verbose >= 2:
         loglevel = logging.DEBUG
     elif args.verbose >= 1:
@@ -1716,7 +1718,8 @@ Interactive use (read corpus from user):
     if (args.loadfile is None and
             args.loadsegfile is None and
             len(args.trainfiles) == 0):
-        parser.error("either model file or training data should be defined")
+        raise ArgumentException("either model file or training data should "
+                                "be defined")
 
     if args.randseed is not None:
         random.seed(args.randseed)
@@ -1759,7 +1762,7 @@ Interactive use (read corpus from user):
     elif args.dampening == 'ones':
         dampfunc = lambda x: 1
     else:
-        parser.error("unknown dampening type '%s'" % args.dampening)
+        raise ArgumentException("unknown dampening type '%s'" % args.dampening)
 
     # Set algorithm parameters
     if args.algorithm == 'viterbi':
@@ -1822,7 +1825,8 @@ Interactive use (read corpus from user):
                                      args.finish_threshold)
             _logger.info("Epochs: %s" % e)
         else:
-            parser.error("unknown training mode '%s'" % args.trainmode)
+            raise ArgumentException("unknown training mode '%s'"
+                                    % args.trainmode)
         te = time.time()
         _logger.info("Final cost: %s" % c)
         _logger.info("Training time: %.3fs" % (te - ts))
@@ -1856,17 +1860,25 @@ Interactive use (read corpus from user):
                     atoms, args.viterbismooth, args.viterbimaxlen)
                 analysis = ' '.join(constructions)
                 fobj.write(outformat.format(
-                        analysis=analysis, compound=compound, 
-                        count=count, logprob=logp))
+                           analysis=analysis, compound=compound,
+                           count=count, logprob=logp))
                 i += 1
                 if i % 10000 == 0:
                     sys.stderr.write(".")
             sys.stderr.write("\n")
         _logger.info("Done.")
 
+
+class ArgumentException(Exception):
+    pass
+
 if __name__ == "__main__":
+    parser = get_default_argparser()
     try:
-        main(sys.argv)
+        args = parser.parse_args(sys.argv[1:])
+        main(args)
+    except ArgumentException as e:
+        parser.error(e.message)
     except Exception as e:
         _logger.error("Fatal Error %s %s" % (type(e), str(e)))
         raise
