@@ -865,7 +865,8 @@ class BaselineModel:
         return constructions
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
-                    devel_annotations=None, finish_threshold=0.005):
+                    devel_annotations=None, finish_threshold=0.005,
+                    max_epochs=None):
         """Train the model in batch fashion.
 
         The model is trained with the data already loaded into the model (by
@@ -935,12 +936,15 @@ class BaselineModel:
                 break
             if forced_epochs > 0:
                 forced_epochs -= 1
+            if max_epochs is not None and epochs >= max_epochs:
+                _logger.info("Max number of epochs reached, stop training")
+                break
         _logger.info("Done.")
         return epochs, newcost
 
     def train_online(self, data, count_modifier=None, epoch_interval=10000,
                      algorithm='recursive', algorithm_params=(),
-                     init_rand_split=None):
+                     init_rand_split=None, max_epochs=None):
         """Train the model in online fashion.
 
         The model is trained with the data provided in the data argument.
@@ -1018,6 +1022,9 @@ class BaselineModel:
                 i += 1
 
             epochs += 1
+            if max_epochs is not None and epochs >= max_epochs:
+                _logger.info("Max number of epochs reached, stop training")
+                break
 
         self._epoch_update(epochs)
         newcost = self.get_cost()
@@ -1618,6 +1625,9 @@ Interactive use (read corpus from user):
             metavar='<int>',
             help="compound frequency threshold for batch training (default "
                  "%(default)s)")
+    add_arg('--max-epochs', dest='maxepochs', type=int, default=None,
+            metavar='<int>',
+            help='hard maximum of epochs in training')
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
@@ -1784,7 +1794,7 @@ def main(args):
                                 "add new compounds.")
             ts = time.time()
             e, c = model.train_batch(args.algorithm, algparams, develannots,
-                                     args.finish_threshold)
+                                     args.finish_threshold, args.maxepochs)
             te = time.time()
             _logger.info("Epochs: %s" % e)
             _logger.info("Final cost: %s" % c)
@@ -1808,21 +1818,21 @@ def main(args):
                 model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
             e, c = model.train_batch(args.algorithm, algparams, develannots,
-                                     args.finish_threshold)
+                                     args.finish_threshold, args.maxepochs)
             _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams,
-                                      args.splitprob)
+                                      args.splitprob, args.maxepochs)
             _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online+batch':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams,
-                                      args.splitprob)
+                                      args.splitprob, args.maxepochs)
             e, c = model.train_batch(args.algorithm, algparams, develannots,
-                                     args.finish_threshold)
+                                     args.finish_threshold, args.maxepochs - e)
             _logger.info("Epochs: %s" % e)
         else:
             raise ArgumentException("unknown training mode '%s'"
