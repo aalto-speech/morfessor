@@ -1576,14 +1576,22 @@ Interactive use (read corpus from user):
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
     add_arg('--analysis-separator', dest='analysisseparator', type=str,
-            default=',', metavar='<regexp>',
+            default=',', metavar='<str>',
             help="separator for different analyses in an annotation file. Use"
                  "  NONE for only allowing one analysis per line")
     add_arg('--output-format', dest='outputformat', type=str,
             default=r'{analysis}\n', metavar='<format>',
-            help="format string for --output file. Valid keywords are "
-                 "{analysis}, {compound}, {count}, and {logprob} "
-                 "(default: '%(default)s')")
+            help="format string for --output file (default: '%(default)s'). "
+            "Valid keywords are: "
+            "{analysis} = constructions of the compound, "
+            "{compound} = compound string, "
+            "{count} = count of the compound (currently always 1), and "
+            "{logprob} = log-probability of the compound. Valid escape "
+            "sequences are '\\n' (newline) and '\\t' (tabular)")
+    add_arg('--output-format-separator', dest='outputformatseparator',
+            type=str, default=' ', metavar='<str>',
+            help="construction separator for analysis in --output file "
+            "(default: '%(default)s')")
 
     # Options for model training
     add_arg = parser.add_argument_group(
@@ -1858,8 +1866,10 @@ def main(args):
     if len(args.testfiles) > 0:
         _logger.info("Segmenting test data...")
         outformat = args.outputformat
+        csep = args.outputformatseparator
         if not PY3:
             outformat = unicode(outformat)
+            csep = unicode(csep)
         outformat = outformat.replace(r"\n", "\n")
         outformat = outformat.replace(r"\t", "\t")
         with io._open_text_file_write(args.outfile) as fobj:
@@ -1868,7 +1878,7 @@ def main(args):
             for count, compound, atoms in testdata:
                 constructions, logp = model.viterbi_segment(
                     atoms, args.viterbismooth, args.viterbimaxlen)
-                analysis = ' '.join(constructions)
+                analysis = csep.join(constructions)
                 fobj.write(outformat.format(
                            analysis=analysis, compound=compound,
                            count=count, logprob=logp))
