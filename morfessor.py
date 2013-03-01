@@ -7,7 +7,7 @@ __all__ = ['MorfessorException', 'MorfessorIO', 'BaselineModel',
            'AnnotationsModelUpdate', 'Encoding', 'CorpusEncoding',
            'AnnotatedCorpusEncoding', 'LexiconEncoding']
 
-__version__ = '2.0.0alpha1'
+__version__ = '2.0.0alpha2'
 __author__ = 'Sami Virpioja, Peter Smit'
 __author_email__ = "morfessor@cis.hut.fi"
 
