@@ -2,6 +2,21 @@
 
 import sys
 
-from morfessor import main
+import morfessor
+from morfessor import _logger
 
-main(sys.argv)
+
+def main(argv):
+    parser = morfessor.get_default_argparser()
+    try:
+        args = parser.parse_args(argv)
+        morfessor.main(args)
+    except morfessor.ArgumentException as e:
+        parser.error(e.message)
+    except Exception as e:
+        _logger.error("Fatal Error %s %s" % (type(e), str(e)))
+        raise
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
