@@ -1130,11 +1130,11 @@ class AnnotationsModelUpdate:
 
         if d != 0:
             if d > 0:
-                self.model.corpus_coding.weight *= 1 + 2.0 / epochs
+                self.model._corpus_coding.weight *= 1 + 2.0 / epochs
             else:
-                self.model.corpus_coding.weight *= 1.0 / (1 + 2.0 / epochs)
+                self.model._corpus_coding.weight *= 1.0 / (1 + 2.0 / epochs)
             _logger.info("Corpus weight set to %s" %
-                         self.model.corpus_coding.weight)
+                         self.model._corpus_coding.weight)
             return True
         return False
 
