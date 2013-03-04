@@ -29,6 +29,6 @@ setup(name='Morfessor',
           'Topic :: Scientific/Engineering',
       ],
       license="BSD",
-      scripts=['scripts/morfessor'],
+      scripts=['scripts/morfessor', 'scripts/morfessor-train', 'scripts/morfessor-segment'],
       install_requires=requires,
      )
