@@ -1898,7 +1898,7 @@ if __name__ == "__main__":
         args = parser.parse_args(sys.argv[1:])
         main(args)
     except ArgumentException as e:
-        parser.error(e.message)
+        parser.error(e)
     except Exception as e:
-        _logger.error("Fatal Error %s %s" % (type(e), str(e)))
+        _logger.error("Fatal Error %s %s" % (type(e), e))
         raise
