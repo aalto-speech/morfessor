@@ -7,7 +7,7 @@ __all__ = ['MorfessorException', 'MorfessorIO', 'BaselineModel',
            'AnnotationsModelUpdate', 'Encoding', 'CorpusEncoding',
            'AnnotatedCorpusEncoding', 'LexiconEncoding']
 
-__version__ = '2.0.0alpha2'
+__version__ = '2.0.0alpha3'
 __author__ = 'Sami Virpioja, Peter Smit'
 __author_email__ = "morfessor@cis.hut.fi"
 
@@ -1465,7 +1465,7 @@ class LexiconEncoding(Encoding):
         """Return an approximate codelength for new construction."""
         l = len(construction) + 1
         cost = l * math.log(self.tokens + l)
-        cost -= math.log(self.boundaries)
+        cost -= math.log(self.boundaries + 1)
         for atom in construction:
             if atom in self.atoms:
                 c = self.atoms[atom]
@@ -1898,7 +1898,7 @@ if __name__ == "__main__":
         args = parser.parse_args(sys.argv[1:])
         main(args)
     except ArgumentException as e:
-        parser.error(e.message)
+        parser.error(e)
     except Exception as e:
-        _logger.error("Fatal Error %s %s" % (type(e), str(e)))
+        _logger.error("Fatal Error %s %s" % (type(e), e))
         raise

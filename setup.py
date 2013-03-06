@@ -10,7 +10,7 @@ main_py = open('morfessor.py').read()
 metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
 
 requires = [
-    'progressbar',
+#    'progressbar',
 ]
 
 setup(name='Morfessor',
@@ -29,6 +29,6 @@ setup(name='Morfessor',
           'Topic :: Scientific/Engineering',
       ],
       license="BSD",
-      scripts=['scripts/morfessor'],
+      scripts=['scripts/morfessor', 'scripts/morfessor-train', 'scripts/morfessor-segment'],
       install_requires=requires,
      )
