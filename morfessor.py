@@ -15,6 +15,7 @@ import codecs
 import collections
 import datetime
 import gzip
+import bz2
 import io
 import locale
 import logging
@@ -294,6 +295,8 @@ class MorfessorIO:
                 return file_obj
         elif file_name.endswith('.gz'):
             file_obj = gzip.open(file_name, 'wb')
+        elif file_name.endswith('.bz2'):
+            file_obj = bz2.BZ2File(file_name, 'wb')
         else:
             file_obj = open(file_name, 'wb')
         if self.encoding is None:
@@ -335,6 +338,8 @@ class MorfessorIO:
         else:
             if file_name.endswith('.gz'):
                 file_obj = gzip.open(file_name, 'rb')
+            elif file_name.endswith('.bz2'):
+                file_obj = bz2.BZ2File(file_name, 'wb')
             else:
                 file_obj = open(file_name, 'rb')
 
@@ -371,6 +376,8 @@ class MorfessorIO:
                 try:
                     if f.endswith('.gz'):
                         file_obj = gzip.open(f, 'rb')
+                    elif f.endswith('.bz2'):
+                        file_obj = bz2.BZ2File(file_name, 'wb')
                     else:
                         file_obj = open(f, 'rb')
 
@@ -1537,12 +1544,12 @@ Interactive use (read corpus from user):
                  "file (Morfessor 1.0 format)")
     add_arg('-t', '--traindata', dest='trainfiles', action='append',
             default=[], metavar='<file>',
-            help="input corpus file(s) for training (text or gzipped text; "
+            help="input corpus file(s) for training (text or bz2/gzipped text; "
                  "use '-' for standard input; add several times in order to "
                  "append multiple files)")
     add_arg('-T', '--testdata', dest='testfiles', action='append',
             default=[], metavar='<file>',
-            help="input corpus file(s) to analyze (text or gzipped text;  "
+            help="input corpus file(s) to analyze (text or bz2/gzipped text;  "
                  "use '-' for standard input; add several times in order to "
                  "append multiple files)")
 
