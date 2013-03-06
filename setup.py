@@ -10,7 +10,7 @@ main_py = open('morfessor.py').read()
 metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
 
 requires = [
-    'progressbar',
+#    'progressbar',
 ]
 
 setup(name='Morfessor',
