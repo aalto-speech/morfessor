@@ -1465,7 +1465,7 @@ class LexiconEncoding(Encoding):
         """Return an approximate codelength for new construction."""
         l = len(construction) + 1
         cost = l * math.log(self.tokens + l)
-        cost -= math.log(self.boundaries)
+        cost -= math.log(self.boundaries + 1)
         for atom in construction:
             if atom in self.atoms:
                 c = self.atoms[atom]
