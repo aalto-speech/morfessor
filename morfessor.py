@@ -377,7 +377,7 @@ class MorfessorIO:
                     if f.endswith('.gz'):
                         file_obj = gzip.open(f, 'rb')
                     elif f.endswith('.bz2'):
-                        file_obj = bz2.BZ2File(file_name, 'wb')
+                        file_obj = bz2.BZ2File(f, 'wb')
                     else:
                         file_obj = open(f, 'rb')
 
