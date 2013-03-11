@@ -1259,9 +1259,9 @@ class Encoding(object):
         return n * logn - n + 0.5 * (logn + cls._log2pi)
 
     def frequency_distribution_cost(self):
-        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!]
+        """Calculate -log[(u - 1)! (v - u)! / (v - 1)!]
 
-        M is the number of tokens+boundaries and N the number of types
+        v is the number of tokens+boundaries and u the number of types
 
         """
         if self.types < 2:
