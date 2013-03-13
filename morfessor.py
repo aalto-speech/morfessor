@@ -142,7 +142,7 @@ class MorfessorIO:
 
     def __init__(self, encoding=None, construction_separator=' + ',
                  comment_start='#', compound_separator='\s+',
-                 atom_separator=None):
+                 atom_separator=None, lowercase=False):
         self.encoding = encoding
         self.construction_separator = construction_separator
         self.comment_start = comment_start
@@ -150,6 +150,7 @@ class MorfessorIO:
         self.atom_separator = atom_separator
         if atom_separator is not None:
             self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
+        self.lowercase = lowercase
 
     def read_segmentation_file(self, file_name, **kwargs):
         """Read segmentation file.
@@ -352,7 +353,10 @@ class MorfessorIO:
             for line in inp:
                 line = line.rstrip()
                 if len(line) > 0 and not line.startswith(self.comment_start):
-                    yield line
+                    if self.lowercase:
+                        yield line.lower()
+                    else:
+                        yield line
         except KeyboardInterrupt:
             if file_name == '-':
                 _logger.info("Finished reading from stdin")
@@ -1572,6 +1576,9 @@ Interactive use (read corpus from user):
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help="encoding of input and output files (if none is given, "
                  "both the local encoding and UTF-8 are tried)")
+    add_arg('--lowercase', dest="lowercase", default=False,
+            action='store_true',
+            help="lowercase input data")
     add_arg('--traindata-list', dest="list", default=False,
             action='store_true',
             help="input file(s) for batch training are lists "
@@ -1751,7 +1758,8 @@ def main(args):
 
     io = MorfessorIO(encoding=args.encoding,
                      compound_separator=args.cseparator,
-                     atom_separator=args.separator)
+                     atom_separator=args.separator,
+                     lowercase=args.lowercase)
 
     # Load exisiting model or create a new one
     if args.loadfile is not None:
