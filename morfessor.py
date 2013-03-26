@@ -415,7 +415,7 @@ class BaselineModel:
     penalty = -9999.9
 
     def __init__(self, forcesplit_list=None, corpusweight=1.0,
-                 use_skips=False):
+                 use_skips=False, nosplit_re=None):
         """Initialize a new model instance.
 
         Arguments:
@@ -448,6 +448,10 @@ class BaselineModel:
             self.forcesplit_list = []
         else:
             self.forcesplit_list = forcesplit_list
+        if nosplit_re is None:
+            self.nosplit_re = None
+        else:
+            self.nosplit_re = re.compile(nosplit_re, re.UNICODE)
 
     @property
     def tokens(self):
@@ -663,6 +667,8 @@ class BaselineModel:
         self._modify_construction_count(construction, -count)
         splitloc = []
         for i in range(1, len(construction)):
+            if self.nosplit_re and self.nosplit_re.match(construction[(i-1):(i+1)]):
+                    continue
             prefix = construction[:i]
             suffix = construction[i:]
             self._modify_construction_count(prefix, count)
@@ -1070,6 +1076,10 @@ class BaselineModel:
             # Note that we can come from any node in history.
             bestpath = None
             bestcost = None
+            if self.nosplit_re and t < clen and \
+                    self.nosplit_re.match(compound[(t-1):(t+1)]):
+                grid.append((clen*badlikelihood, t-1))
+                continue
             for pt in range(max(0, t - maxlen), t):
                 if grid[pt][0] is None:
                     continue
@@ -1105,6 +1115,10 @@ class BaselineModel:
                                  / self._corpus_coding.weight)
                 elif len(construction) == 1:
                     cost += badlikelihood
+                elif self.nosplit_re:
+                    # Some splits are forbidden, so longer unknown
+                    # constructions have to be allowed
+                    cost += len(construction) * badlikelihood
                 else:
                     continue
                 if bestcost is None or cost < bestcost:
@@ -1650,6 +1664,10 @@ Interactive use (read corpus from user):
     add_arg('--max-epochs', dest='maxepochs', type=int, default=None,
             metavar='<int>',
             help='hard maximum of epochs in training')
+    add_arg('--nosplit-re', dest="nosplit", type=str, default=None,
+            metavar='<regexp>',
+            help="if the expression matches the two surrounding characters, "
+                 "do not allow splitting (default %(default)s)")
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
@@ -1768,7 +1786,8 @@ def main(args):
     else:
         model = BaselineModel(forcesplit_list=args.forcesplit,
                               corpusweight=args.corpusweight,
-                              use_skips=args.skips)
+                              use_skips=args.skips,
+                              nosplit_re=args.nosplit)
 
     if args.loadsegfile is not None:
         model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
