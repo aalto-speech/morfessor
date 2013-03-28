@@ -196,6 +196,16 @@ class MorfessorIO:
             for item in self.read_corpus_file(file_name):
                 yield item
 
+    def read_corpus_list_files(self, file_names):
+        """Read one or more corpus list files.
+
+        Yield for each compound found (count, compound, compound_atoms).
+
+        """
+        for file_name in file_names:
+            for item in self.read_corpus_list_file(file_name):
+                yield item
+
     def read_corpus_file(self, file_name):
         """Read one corpus file.
 
@@ -811,16 +821,17 @@ class BaselineModel:
             if c > 0:
                 yield c, self.segment(w)
 
-    def load_data(self, corpus, freqthreshold=1, cfunc=lambda x: x,
+    def load_data(self, data, freqthreshold=1, count_modifier=None,
                   init_rand_split=None):
         """Load data to initialize the model for batch training.
 
         Arguments:
+            data -- iterator/generator of (count, compound, atoms) tuples
             corpus -- corpus instance
             freqthreshold -- discard compounds that occur less than
                              given times in the corpus (default 1)
-            cfunc -- function (int -> int) for modifying the counts
-                     (defaults to identity function)
+            count_modifier -- function for adjusting the counts of each
+                              compound
             init_rand_split -- If given, random split the word with
                                init_rand_split as the probability for each
                                split
@@ -829,10 +840,17 @@ class BaselineModel:
         the total cost.
 
         """
-        for count, _, atoms in corpus:
+        totalcount = collections.Counter()
+        for count, _, atoms in data:
+            totalcount[atoms] += count
+
+        for atoms, count in totalcount.items():
             if count < freqthreshold:
                 continue
-            self._add_compound(atoms, cfunc(count))
+            if count_modifier != None:
+                self._add_compound(atoms, count_modifier(count))
+            else:
+                self._add_compound(atoms, count)
 
             if init_rand_split is not None and init_rand_split > 0:
                 parts = self._random_split(atoms, init_rand_split)
@@ -1808,7 +1826,7 @@ def main(args):
 
     # Set frequency dampening function
     if args.dampening == 'none':
-        dampfunc = lambda x: x
+        dampfunc = None
     elif args.dampening == 'log':
         dampfunc = lambda x: int(round(math.log(x + 1, 2)))
     elif args.dampening == 'ones':
@@ -1844,20 +1862,18 @@ def main(args):
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.trainmode == 'init':
-            for f in args.trainfiles:
-                if args.list:
-                    data = io.read_corpus_list_file(f)
-                else:
-                    data = io.read_corpus_file(f)
+            if args.list:
+                data = io.read_corpus_list_files(args.trainfiles)
+            else:
+                data = io.read_corpus_files(args.trainfiles)
             c = model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
         elif args.trainmode == 'init+batch':
-            for f in args.trainfiles:
-                if args.list:
-                    data = io.read_corpus_list_file(f)
-                else:
-                    data = io.read_corpus_file(f)
-                model.load_data(data, args.freqthreshold, dampfunc,
+            if args.list:
+                data = io.read_corpus_list_files(args.trainfiles)
+            else:
+                data = io.read_corpus_files(args.trainfiles)
+            c = model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
             e, c = model.train_batch(args.algorithm, algparams, develannots,
                                      args.finish_threshold, args.maxepochs)
