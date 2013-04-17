@@ -3,88 +3,16 @@ import math
 import random
 import sys
 import time
-import types
 
-from morfessor import _logger, __version__, PY3
-from morfessor.baseline import BaselineModel
-from morfessor.io import MorfessorIO
+from . import get_version
+from .baseline import BaselineModel
+from .exception import ArgumentException
+from .io import MorfessorIO
 
-show_progress_bar = True
+PY3 = sys.version_info.major == 3
 
+_logger = logging.getLogger(__name__)
 
-def _progress(iter_func):
-    """Decorator/function for displaying a progress bar when iterating
-    through a list.
-
-    iter_func can be both a function providing a iterator (for decorator
-    style use) or an iterator itself.
-
-    No progressbar is displayed when the show_progress_bar variable is set to
-     false.
-
-    If the progressbar module is available a fancy percentage style
-    progressbar is displayed. Otherwise 60 dots are printed as indicator.
-
-    """
-
-    if not show_progress_bar:
-        return iter_func
-
-    #Try to see or the progressbar module is available, else fabricate our own
-    try:
-        from progressbar import ProgressBar
-    except ImportError:
-        class SimpleProgressBar:
-            """Create a simple progress bar that prints 60 dots on a single
-            line, proportional to the progress """
-            NUM_DOTS = 60
-
-            def __call__(self, it):
-                self.it = iter(it)
-                self.i = 0
-
-                # Dot frequency is determined as ceil(len(it) / NUM_DOTS)
-                self.dotfreq = (len(it) + self.NUM_DOTS - 1) // self.NUM_DOTS
-                if self.dotfreq < 1:
-                    self.dotfreq = 1
-
-                return self
-
-            def __iter__(self):
-                return self
-
-            def __next__(self):
-                self.i += 1
-                if self.i % self.dotfreq == 0:
-                    sys.stderr.write('.')
-                    sys.stderr.flush()
-                try:
-                    return next(self.it)
-                except StopIteration:
-                    sys.stderr.write('\n')
-                    raise
-
-            #Needed to be compatible with both Python2 and 3
-            next = __next__
-
-        ProgressBar = SimpleProgressBar
-
-    # In case of a decorator (argument is a function),
-    # wrap the functions result in a ProgressBar and return the new function
-    if isinstance(iter_func, types.FunctionType):
-        def i(*args, **kwargs):
-            if logging.getLogger(__name__).isEnabledFor(logging.INFO):
-                return ProgressBar()(iter_func(*args, **kwargs))
-            else:
-                return iter_func(*args, **kwargs)
-        return i
-
-    #In case of an iterator, wrap it in a ProgressBar and return it.
-    elif hasattr(iter_func, '__iter__'):
-        return ProgressBar()(iter_func)
-
-    #If all else fails, just return the original.
-    return iter_func
 
 def get_default_argparser():
     import argparse
@@ -123,7 +51,7 @@ ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
 Command-line arguments:
-""" % __version__,
+""" % get_version(),
         epilog="""
 Simple usage examples (training and testing):
 
@@ -148,8 +76,8 @@ Interactive use (read corpus from user):
                  "file (Morfessor 1.0 format)")
     add_arg('-t', '--traindata', dest='trainfiles', action='append',
             default=[], metavar='<file>',
-            help="input corpus file(s) for training (text or bz2/gzipped text; "
-                 "use '-' for standard input; add several times in order to "
+            help="input corpus file(s) for training (text or bz2/gzipped text;"
+                 " use '-' for standard input; add several times in order to "
                  "append multiple files)")
     add_arg('-T', '--testdata', dest='testfiles', action='append',
             default=[], metavar='<file>',
@@ -303,7 +231,7 @@ Interactive use (read corpus from user):
     add_arg('-h', '--help', action='help',
             help="show this help message and exit")
     add_arg('--version', action='version',
-            version='%(prog)s ' + __version__,
+            version='%(prog)s ' + get_version(),
             help="show version number and exit")
 
     return parser
@@ -505,7 +433,3 @@ def main(args):
                     sys.stderr.write(".")
             sys.stderr.write("\n")
         _logger.info("Done.")
-
-
-class ArgumentException(Exception):
-    pass

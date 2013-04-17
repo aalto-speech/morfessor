@@ -3,10 +3,21 @@ import codecs
 import datetime
 import gzip
 import locale
-import pickle as pickle
+import logging
 import re
 import sys
-from morfessor import _logger, __version__, PY3
+
+from . import get_version
+
+try:
+    # In Python2 import cPickle for better performance
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
+PY3 = sys.version_info.major == 3
+
+_logger = logging.getLogger(__name__)
 
 
 class MorfessorIO:
@@ -55,7 +66,7 @@ class MorfessorIO:
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
-                           (__version__, d))
+                           (get_version(), d))
             for count, segmentation in segmentations:
                 if self.atom_separator is None:
                     s = self.construction_separator.join(segmentation)
@@ -284,4 +295,3 @@ class MorfessorIO:
                 return encoding
 
         raise UnicodeError("Can not determine encoding of input files")
-

@@ -6,11 +6,11 @@ use_setuptools()
 from setuptools import setup
 
 import re
-main_py = open('morfessor.py').read()
+main_py = open('morfessor/__init__.py').read()
 metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
 
 requires = [
-#    'progressbar',
+    #    'progressbar',
 ]
 
 setup(name='Morfessor',
@@ -29,6 +29,7 @@ setup(name='Morfessor',
           'Topic :: Scientific/Engineering',
       ],
       license="BSD",
-      scripts=['scripts/morfessor', 'scripts/morfessor-train', 'scripts/morfessor-segment'],
+      scripts=['scripts/morfessor', 'scripts/morfessor-train',
+               'scripts/morfessor-segment'],
       install_requires=requires,
-     )
+      )

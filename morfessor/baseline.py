@@ -1,8 +1,13 @@
 import collections
+import logging
 import math
 import random
 import re
-from morfessor import _logger, _progress, MorfessorException
+
+from . import _progress
+from .exception import MorfessorException
+
+_logger = logging.getLogger(__name__)
 
 
 def _constructions_to_str(constructions):
@@ -287,7 +292,8 @@ class BaselineModel:
         self._modify_construction_count(construction, -count)
         splitloc = []
         for i in range(1, len(construction)):
-            if self.nosplit_re and self.nosplit_re.match(construction[(i-1):(i+1)]):
+            if (self.nosplit_re and
+                    self.nosplit_re.match(construction[(i-1):(i+1)])):
                     continue
             prefix = construction[:i]
             suffix = construction[i:]
@@ -457,7 +463,7 @@ class BaselineModel:
         for atoms, count in totalcount.items():
             if count < freqthreshold:
                 continue
-            if count_modifier != None:
+            if count_modifier is not None:
                 self._add_compound(atoms, count_modifier(count))
             else:
                 self._add_compound(atoms, count)
@@ -1126,4 +1132,3 @@ class LexiconEncoding(Encoding):
                 c = 1
             cost -= math.log(c)
         return cost
-
