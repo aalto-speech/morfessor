@@ -3,6 +3,8 @@
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
 import logging
+import sys
+import types
 
 show_progress_bar = True
 
