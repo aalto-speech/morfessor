@@ -6,6 +6,17 @@ import logging
 import sys
 import types
 
+from .baseline import BaselineModel
+from .cmd import main, get_default_argparser
+from .exception import MorfessorException, ArgumentException
+from .io import MorfessorIO
+
+__all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
+           'BaselineModel', 'main', 'get_default_argparser']
+
+__version__ = '2.0.0alpha3'
+__author__ = 'Sami Virpioja, Peter Smit'
+__author_email__ = "morfessor@cis.hut.fi"
 show_progress_bar = True
 
 _logger = logging.getLogger(__name__)
@@ -88,16 +99,3 @@ def _progress(iter_func):
 
     #If all else fails, just return the original.
     return iter_func
-
-
-from .baseline import BaselineModel
-from .cmd import main, get_default_argparser
-from .exception import MorfessorException, ArgumentException
-from .io import MorfessorIO
-
-__all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
-           'BaselineModel', 'main', 'get_default_argparser']
-
-__version__ = '2.0.0alpha3'
-__author__ = 'Sami Virpioja, Peter Smit'
-__author_email__ = "morfessor@cis.hut.fi"
