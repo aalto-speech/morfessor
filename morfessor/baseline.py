@@ -4,7 +4,7 @@ import math
 import random
 import re
 
-from . import _progress
+from .utils import _progress
 from .exception import MorfessorException
 
 _logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
 
-class BaselineModel:
+class BaselineModel(object):
     """Morfessor Baseline model class.
 
     Implements training of and segmenting with a Morfessor model. The model
@@ -770,6 +770,12 @@ class BaselineModel:
         constructions.reverse()
         return constructions, cost
 
+    def get_corpus_coding_weight(self):
+        return self._corpus_coding.weight
+
+    def set_corpus_coding_weight(self, weight):
+        self._corpus_coding.weight = weight
+
 
 class AnnotationsModelUpdate:
     """Class for using development annotations to update the corpus weight
@@ -795,12 +801,13 @@ class AnnotationsModelUpdate:
         d = self._estimate_segmentation_dir(segments, annotations)
 
         if d != 0:
+            weight = self.model.get_corpus_coding_weight()
             if d > 0:
-                self.model._corpus_coding.weight *= 1 + 2.0 / epochs
+                weight *= 1 + 2.0 / epochs
             else:
-                self.model._corpus_coding.weight *= 1.0 / (1 + 2.0 / epochs)
-            _logger.info("Corpus weight set to %s" %
-                         self.model._corpus_coding.weight)
+                weight *= 1.0 / (1 + 2.0 / epochs)
+            self.model.set_corpus_coding_weight(weight)
+            _logger.info("Corpus weight set to {}".format(weight))
             return True
         return False
 
