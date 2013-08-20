@@ -209,7 +209,8 @@ class MorfessorIO:
     def read_corpus_file(self, file_name):
         """Read one corpus file.
 
-        Yield for each compound found (1, compound, compound_atoms).
+        For each compound, yield (1, compound, compound_atoms).
+        After each line, yield (0, "\n", ()).
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
@@ -218,6 +219,7 @@ class MorfessorIO:
             for compound in compound_sep.split(line):
                 if len(compound) > 0:
                     yield 1, compound, self._split_atoms(compound)
+            yield 0, "\n", ()
         _logger.info("Done.")
 
     def read_corpus_list_file(self, file_name):
@@ -842,7 +844,8 @@ class BaselineModel:
         """
         totalcount = collections.Counter()
         for count, _, atoms in data:
-            totalcount[atoms] += count
+            if len(atoms) > 0:
+                totalcount[atoms] += count
 
         for atoms, count in totalcount.items():
             if count < freqthreshold:
@@ -994,7 +997,7 @@ class BaselineModel:
         are recalculated if applicable.
 
         Arguments:
-            data -- iterator/generator of (_,_, compound) tuples. The first
+            data -- iterator/generator of (_, _, compound) tuples. The first
                     two arguments are ignored, as every occurence of the
                     compound is taken with count 1
             count_modifier -- function for adjusting the counts of each
@@ -1028,6 +1031,10 @@ class BaselineModel:
                 except StopIteration:
                     more_tokens = False
                     break
+
+                if len(w) == 0:
+                    # Newline in corpus
+                    continue
 
                 if count_modifier is not None:
                     if not w in counts:
@@ -1638,6 +1645,10 @@ Interactive use (read corpus from user):
             type=str, default=' ', metavar='<str>',
             help="construction separator for analysis in --output file "
             "(default: '%(default)s')")
+    add_arg('--output-newlines', dest='outputnewlines', default=False,
+            action='store_true', 
+            help="for each newline in input, print newline in --output file "
+            "(default: '%(default)s')")
 
     # Options for model training
     add_arg = parser.add_argument_group(
@@ -1926,6 +1937,11 @@ def main(args):
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
             for count, compound, atoms in testdata:
+                if len(atoms) == 0:
+                    # Newline in corpus
+                    if args.outputnewlines:
+                        fobj.write("\n")
+                    continue
                 constructions, logp = model.viterbi_segment(
                     atoms, args.viterbismooth, args.viterbimaxlen)
                 analysis = csep.join(constructions)
