@@ -134,6 +134,10 @@ Interactive use (read corpus from user):
             type=str, default=' ', metavar='<str>',
             help="construction separator for analysis in --output file "
             "(default: '%(default)s')")
+    add_arg('--output-newlines', dest='outputnewlines', default=False,
+            action='store_true',
+            help="for each newline in input, print newline in --output file "
+            "(default: '%(default)s')")
 
     # Options for model training
     add_arg = parser.add_argument_group(
@@ -422,6 +426,11 @@ def main(args):
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
             for count, compound, atoms in testdata:
+                if len(atoms) == 0:
+                    # Newline in corpus
+                    if args.outputnewlines:
+                        fobj.write("\n")
+                    continue
                 constructions, logp = model.viterbi_segment(
                     atoms, args.viterbismooth, args.viterbimaxlen)
                 analysis = csep.join(constructions)

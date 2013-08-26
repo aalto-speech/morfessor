@@ -458,7 +458,8 @@ class BaselineModel(object):
         """
         totalcount = collections.Counter()
         for count, _, atoms in data:
-            totalcount[atoms] += count
+            if len(atoms) > 0:
+                totalcount[atoms] += count
 
         for atoms, count in totalcount.items():
             if count < freqthreshold:
@@ -610,7 +611,7 @@ class BaselineModel(object):
         are recalculated if applicable.
 
         Arguments:
-            data -- iterator/generator of (_,_, compound) tuples. The first
+            data -- iterator/generator of (_, _, compound) tuples. The first
                     two arguments are ignored, as every occurence of the
                     compound is taken with count 1
             count_modifier -- function for adjusting the counts of each
@@ -644,6 +645,10 @@ class BaselineModel(object):
                 except StopIteration:
                     more_tokens = False
                     break
+
+                if len(w) == 0:
+                    # Newline in corpus
+                    continue
 
                 if count_modifier is not None:
                     if not w in counts:
