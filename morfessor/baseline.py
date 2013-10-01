@@ -773,6 +773,10 @@ class BaselineModel(object):
             path = grid[t][1]
             lt = t
         constructions.reverse()
+        # Add boundary cost
+        cost += math.log(self._corpus_coding.tokens + \
+                             self._corpus_coding.boundaries) - \
+                             math.log(self._corpus_coding.boundaries)
         return constructions, cost
 
     def get_corpus_coding_weight(self):
