@@ -1,56 +1,117 @@
 import collections
 import logging
+import itertools
 import random
+
 
 EvaluationConfig = collections.namedtuple('EvaluationConfig', ['num_samples', 'sample_size'])
 
+
+def _sample(compound_list, size, seed):
+        """
+        Create a specific size sample from the compound list using a specific seed
+        """
+        return random.Random(seed).sample(compound_list, size)
+
+class MorfessorEvaluationResult(object):
+    def __init__(self, meta_data):
+        self.meta_data = meta_data
+
+        self.precision = []
+        self.recall = []
+        self.f_score = []
+        self.sample_size = []
+
+    def add_data_point(self, precision, recall, f_score, sample_size):
+        self.precision.append(precision)
+        self.recall.append(recall)
+        self.f_score.append(f_score)
+        self.sample_size.append(sample_size)
+
+    # (precision | recall | fscore | sample_size ) (values | avg | min | max | std)
+    # give option to format output
+    # templates
+
 class MorfessorEvaluation(object):
 
-    def __init__(self, test_set, test_configuration=EvaluationConfig(10, 1000)):
-        self.test_configuration = test_configuration
-
+    def __init__(self, test_set):
         self.reference = {}
-        self.samples = []
 
         for compound, analyses in test_set:
-            self.reference[compound] = analyses
+            self.reference[compound] = list(tuple(self._segmentation_indices(a)) for a in analyses)
 
-        self._create_samples(sorted(self.reference.keys()))
+        self._samples = {}
 
-    def _create_samples(self, compound_list):
+    def _create_samples(self, configuration=EvaluationConfig(10, 1000)):
         """
         Create, in a stable manner, n testsets of size x as defined in test_configuration
         """
 
         #TODO: test for the size of the training set. If too small, warn about it!
 
-        for i in range(self.test_configuration.num_samples):
-            self.samples.append(self._get_sample(compound_list, self.test_configuration.sample_size, i))
+        compound_list = sorted(self.reference.keys())
+        self.samples[configuration] = [_sample(compound_list, configuration.sample_size, i) for i in range(configuration.num_samples)]
+
+    def get_samples(self, configuration=EvaluationConfig(10, 1000)):
+        if not configuration in self._samples:
+            self._create_samples(configuration)
+        return self._samples[configuration]
+
+    def _evaluate(self, prediction):
+        wordlist = set(prediction.keys()) & set(self.reference.keys())
+
+        recall_sum = 0.0
+        precis_sum = 0.0
+
+        for word in wordlist:
+            if len(word) < 2:
+                continue
+
+            recall_sum += max(len(set(r) - set(p))
+                              for p, r in itertools.product(prediction[word],
+                                                            self.reference[word])
+                              ) / len(word)
+
+            precis_sum += max(len(set(p) - set(r))
+                              for p, r in itertools.product(prediction[word],
+                                                            self.reference[word])
+                              ) / len(word)
+
+        precision = precis_sum / len(wordlist)
+        recall = recall_sum / len(wordlist)
+        f_score = 2.0/(1.0/precision+1.0/recall)
+
+        return precision, recall, f_score, len(wordlist)
 
     @staticmethod
-    def _get_sample(compound_list, size, seed):
-        """
-        Create, in a stable manner, n testsets of size x as defined in test_configuration
-        """
-        rand_class = random.Random(seed)
-        return sorted(rand_class.sample(compound_list, size))
+    def _segmentation_indices(annotation):
+        cur_len = 0
+        for a in annotation[:-1]:
+            cur_len += len(a)
+            yield cur_len
 
-    @staticmethod
-    def _segment_sample(sample, model):
+    def evaluate_model(self, model, configuration=EvaluationConfig(10, 1000), meta_data=None):
+        mer = MorfessorEvaluationResult(meta_data)
 
-        return []
+        for sample in self.get_samples(configuration):
+            prediction = {}
+            for compound in sample:
+                prediction[compound] = [tuple(self._segmentation_indices(model.viterbi_segment(compound)[0]))]
 
-    def evaluate(self, model):
+            mer.add_data_point(*self._evaluate(prediction))
+
+        return mer
+
+    def evaluate_segmentation(self, segmentation, meta_data=None):
         pass
 
 
-class MorfessorEvaluationResult(object):
+
+
+
+
+class WilcoxSignedRank(object):
+    # params:
+    # alpha
     pass
-
-
-
-
-if __name__ == "__main__":
-    me = MorfessorEvaluation(['a', 'b'])
-    me._get_random_set(1,2)
 

@@ -29,3 +29,4 @@ from .cmd import main, get_default_argparser
 from .exception import MorfessorException, ArgumentException
 from .io import MorfessorIO
 from .utils import _progress
+from .evaluation import MorfessorEvaluation, MorfessorEvaluationResult
