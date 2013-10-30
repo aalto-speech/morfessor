@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+import argparse
+import sys
+
+from morfessor import MorfessorIO, MorfessorEvaluation
+from morfessor import _logger
+
+def merge_constructions(constructions):
+    compound = constructions[0]
+    for i in range(1, len(constructions)):
+        compound = compound + constructions[i]
+    return compound
+
+def main(argv):
+
+
+    io = MorfessorIO(construction_separator=' ')
+    pred = io.read_segmentation_file('tmp/pred_data/pred.0', has_counts=False)
+    gold = io.read_annotations_file('tmp/test_data/test.segmented.0')
+
+    me = MorfessorEvaluation(gold)
+
+    print me.evaluate_segmentation(p[1] for p in pred)
+    #
+    #print(MorfessorEvaluation.bpr(MorfessorEvaluation.init_segmentation_dict(gold),
+    #                              MorfessorEvaluation.init_segmentation_dict(pred)))
+    ##me = MorfessorEvaluation(['a', 'b'])
+    #me._get_random_set(1, 2)
+
+#    parser = morfessor.get_default_argparser()
+#    parser.prog = "morfessor-evaluate"
+#    parser.epilog = """
+#Evaluate precision, recall and f-score of one or more models or segmentations.
+#If multiple models are given they are tested for statistical significant
+#differences with the Wilcoxon signed-rank test
+#
+#"""
+#
+#    keep_options = ['encoding', 'loadfile', 'loadsegfile', 'outfile', 'help',
+#                    'version']
+#    for action_group in parser._action_groups:
+#        for arg in action_group._group_actions:
+#            if arg.dest not in keep_options:
+#                arg.help = argparse.SUPPRESS
+#
+#    parser.add_argument('test_models', metavar='<file>', nargs='+',
+#                        help='models or segmentations to evaluate')
+#
+#    try:
+#        args = parser.parse_args(argv)
+#        morfessor.main(args)
+#    except morfessor.ArgumentException as e:
+#        parser.error(e)
+#    except Exception as e:
+#        _logger.error("Fatal Error %s %s" % (type(e), e))
+#        raise
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

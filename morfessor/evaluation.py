@@ -37,7 +37,7 @@ class MorfessorEvaluation(object):
     def __init__(self, test_set):
         self.reference = {}
 
-        for compound, analyses in test_set:
+        for compound, analyses in test_set.items():
             self.reference[compound] = list(tuple(self._segmentation_indices(a)) for a in analyses)
 
         self._samples = {}
@@ -58,7 +58,7 @@ class MorfessorEvaluation(object):
         return self._samples[configuration]
 
     def _evaluate(self, prediction):
-        wordlist = set(prediction.keys()) & set(self.reference.keys())
+        wordlist = sorted(set(prediction.keys()) & set(self.reference.keys()))
 
         recall_sum = 0.0
         precis_sum = 0.0
@@ -67,15 +67,15 @@ class MorfessorEvaluation(object):
             if len(word) < 2:
                 continue
 
-            recall_sum += max(len(set(r) - set(p))
+            recall_sum += max(((len(r) - len(set(r) - set(p))) / float(len(r)) if len(r) > 0 else 1.0)
                               for p, r in itertools.product(prediction[word],
                                                             self.reference[word])
-                              ) / len(word)
+                              )
 
-            precis_sum += max(len(set(p) - set(r))
+            precis_sum += max(((len(p) - len(set(p) - set(r))) / float(len(set(p))) if len(p) > 0 else 1.0)
                               for p, r in itertools.product(prediction[word],
                                                             self.reference[word])
-                              ) / len(word)
+                              )
 
         precision = precis_sum / len(wordlist)
         recall = recall_sum / len(wordlist)
@@ -90,6 +90,13 @@ class MorfessorEvaluation(object):
             cur_len += len(a)
             yield cur_len
 
+    @staticmethod
+    def _merge_construction(construction):
+        compound = construction[0]
+        for i in range(1, len(construction)):
+            compound = compound + construction[i]
+        return compound
+
     def evaluate_model(self, model, configuration=EvaluationConfig(10, 1000), meta_data=None):
         mer = MorfessorEvaluationResult(meta_data)
 
@@ -103,7 +110,11 @@ class MorfessorEvaluation(object):
         return mer
 
     def evaluate_segmentation(self, segmentation, meta_data=None):
-        pass
+        prediction = {}
+        for construction in segmentation:
+            prediction[self._merge_construction(construction)] = [tuple(self._segmentation_indices(construction))]
+
+        return self._evaluate(prediction)
 
 
 
