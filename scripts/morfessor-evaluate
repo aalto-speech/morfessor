@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from morfessor import MorfessorIO, MorfessorEvaluation
+from morfessor import MorfessorIO, MorfessorEvaluation, BaselineModel
 from morfessor import _logger
 
 def merge_constructions(constructions):
@@ -19,9 +19,14 @@ def main(argv):
     pred = io.read_segmentation_file('tmp/pred_data/pred.0', has_counts=False)
     gold = io.read_annotations_file('tmp/test_data/test.segmented.0')
 
+    model = BaselineModel()
+    model.load_segmentations(io.read_segmentation_file('tmp/test_models/segm'))
+
     me = MorfessorEvaluation(gold)
 
     print me.evaluate_segmentation(p[1] for p in pred)
+
+    print me.evaluate_model(model)
     #
     #print(MorfessorEvaluation.bpr(MorfessorEvaluation.init_segmentation_dict(gold),
     #                              MorfessorEvaluation.init_segmentation_dict(pred)))

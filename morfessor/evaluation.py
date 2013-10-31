@@ -1,6 +1,6 @@
 import collections
 import logging
-import itertools
+from itertools import product
 import random
 
 
@@ -16,23 +16,39 @@ def _sample(compound_list, size, seed):
 
 
 class MorfessorEvaluationResult(object):
+    print_functions = {'avg': lambda x: sum(x) / len(x),
+                 'min': min,
+                 'max': max,
+                 'values': list,
+                 'count': len}
+
     def __init__(self, meta_data):
         self.meta_data = meta_data
 
         self.precision = []
         self.recall = []
-        self.f_score = []
-        self.sample_size = []
+        self.fscore = []
+        self.samplesize = []
 
     def add_data_point(self, precision, recall, f_score, sample_size):
         self.precision.append(precision)
         self.recall.append(recall)
-        self.f_score.append(f_score)
-        self.sample_size.append(sample_size)
+        self.fscore.append(f_score)
+        self.samplesize.append(sample_size)
 
-        # (precision | recall | fscore | sample_size ) (values | avg | min | max | std)
-        # give option to format output
-        # templates
+    def __str__(self):
+        return self.format("""Sample size\t: {samplesize_avg}
+        F-score\t: {fscore_avg}
+        Precision\t: {precision_avg}
+        Recall\t: {recall_avg}""")
+
+    def _get_data_mat(self):
+        return {'{}_{}'.format(value, func_name): func(getattr(self, value))
+                for value in ('precision', 'recall', 'fscore', 'samplesize')
+                for func_name, func in self.print_functions.keys()}
+
+    def format(self, format_string):
+        return format_string.format(self._get_data_mat())
 
 
 class MorfessorEvaluation(object):
@@ -54,7 +70,7 @@ class MorfessorEvaluation(object):
         #TODO: test for the size of the training set. If too small, warn about it!
 
         compound_list = sorted(self.reference.keys())
-        self.samples[configuration] = [
+        self._samples[configuration] = [
             _sample(compound_list, configuration.sample_size, i) for i in
             range(configuration.num_samples)]
 
@@ -89,14 +105,12 @@ class MorfessorEvaluation(object):
                 continue
 
             recall_sum += max(calc_prop_distance(r, p)
-                              for p, r in itertools.product(prediction[word],
-                                                            self.reference[
-                                                                word]))
+                              for p, r in product(prediction[word],
+                                                  self.reference[word]))
 
             precis_sum += max(calc_prop_distance(p, r)
-                              for p, r in itertools.product(prediction[word],
-                                                            self.reference[
-                                                                word]))
+                              for p, r in product(prediction[word],
+                                                  self.reference[word]))
 
         precision = precis_sum / len(wordlist)
         recall = recall_sum / len(wordlist)
