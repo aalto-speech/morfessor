@@ -186,6 +186,21 @@ class MorfessorIO:
             pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
         _logger.info("Done.")
 
+    def read_any_model(self, file_name):
+        try:
+            model = self.read_binary_model_file(file_name)
+            _logger.info("%s was read as a binary model" % file_name)
+            return model
+        except BaseException:
+            pass
+
+        from morfessor import BaselineModel
+        model = BaselineModel()
+        model.load_segmentations(self.read_segmentation_file(file_name))
+        _logger.info("%s was read as a segmentation" % file_name)
+        return model
+
+
     def _split_atoms(self, construction):
         """Split construction to its atoms."""
         if self.atom_separator is None:

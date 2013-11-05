@@ -1,12 +1,27 @@
+from __future__ import print_function
+
 import collections
 import logging
-from itertools import product
+from itertools import chain, product
+import math
 import random
 
+_logger = logging.getLogger(__name__)
 
 EvaluationConfig = collections.namedtuple('EvaluationConfig',
                                           ['num_samples', 'sample_size'])
 
+FORMAT_STRINGS = {
+    'default': """Filename\t: {name}
+Num samples\t: {samplesize_count}
+Sample size\t: {samplesize_avg}
+F-score\t\t: {fscore_avg:.3}
+Precision\t: {precision_avg:.3}
+Recall\t\t: {recall_avg:.3}""",
+    'table': "{name:10} {fscore_avg:6.3} {precision_avg:6.3} {recall_avg:6.3}",
+    'latex': "{name} & {fscore_avg:.3} & {precision_avg:.3} &"
+             " {recall_avg:.3}\\\\",
+    }
 
 def _sample(compound_list, size, seed):
     """
@@ -30,6 +45,11 @@ class MorfessorEvaluationResult(object):
         self.fscore = []
         self.samplesize = []
 
+    def __getitem__(self, item):
+        d = self._get_data_mat()
+        d.update(self.meta_data)
+        return d[item]
+
     def add_data_point(self, precision, recall, f_score, sample_size):
         self.precision.append(precision)
         self.recall.append(recall)
@@ -38,17 +58,19 @@ class MorfessorEvaluationResult(object):
 
     def __str__(self):
         return self.format("""Sample size\t: {samplesize_avg}
-        F-score\t: {fscore_avg}
-        Precision\t: {precision_avg}
-        Recall\t: {recall_avg}""")
+F-score\t: {fscore_avg}
+Precision\t: {precision_avg}
+Recall\t: {recall_avg}""")
 
     def _get_data_mat(self):
         return {'{}_{}'.format(value, func_name): func(getattr(self, value))
                 for value in ('precision', 'recall', 'fscore', 'samplesize')
-                for func_name, func in self.print_functions.keys()}
+                for func_name, func in self.print_functions.items()}
 
     def format(self, format_string):
-        return format_string.format(self._get_data_mat())
+        d = self._get_data_mat()
+        d.update(self.meta_data)
+        return format_string.format(**d)
 
 
 class MorfessorEvaluation(object):
@@ -129,7 +151,8 @@ class MorfessorEvaluation(object):
                        meta_data=None):
         mer = MorfessorEvaluationResult(meta_data)
 
-        for sample in self.get_samples(configuration):
+        for i, sample in enumerate(self.get_samples(configuration)):
+            _logger.debug("Evaluating sample {}".format(i))
             prediction = {}
             for compound in sample:
                 prediction[compound] = [tuple(self._segmentation_indices(
@@ -157,5 +180,70 @@ class MorfessorEvaluation(object):
 class WilcoxSignedRank(object):
     # params:
     # alpha
-    pass
+    def __init__(self, alpha=0.01):
+        pass
+
+    def _wilcox(self, d):
+        count = len(d)
+        ranks = self._rankdata([abs(v) for v in d])
+        rank_sum_pos = sum(r for r, v in zip(ranks, d) if v > 0)
+        rank_sum_neg = sum(r for r, v in zip(ranks, d) if v < 0)
+
+        test = min(rank_sum_neg, rank_sum_pos)
+
+        mean = count * (count + 1) * 0.25
+        stdev = math.sqrt((count*(count + 1) * (2 * count + 1)) / 24.0)
+
+        correction = +0.5 if test > mean else -0.5
+        z = (test - mean - correction) / stdev
+
+        return 2 * self.norm_cum_pdf(abs(z))
+
+    def _rankdata(self, d):
+        od = collections.Counter()
+        for v in d:
+            od[v] += 1
+
+        rank_dict = {}
+        cur_rank = 1
+        for val, count in sorted(od.items(), key=lambda x: x[0]):
+            rank_dict[val] = (cur_rank + (cur_rank + count - 1)) / 2
+            cur_rank += count
+
+        return [rank_dict[v] for v in d]
+
+    def norm_cum_pdf(self, z):
+        return 0.5 - 0.5 * math.erf(z / math.sqrt(2))
+
+    def significance_test(self, evaluations, val_property='fscore_values',
+                          name_property='name'):
+
+        results = {r[name_property]: r[val_property] for r in evaluations}
+        p = {}
+        for r1, r2 in product(results.keys(), results.keys()):
+            p[(r1, r2)] = self._wilcox([v1-v2 for v1, v2 in zip(results[r1],
+                                                                results[r2])])
+
+        return p
+
+    def print_table(self, results):
+        names = sorted(set(r[0] for r in results.keys()))
+
+        col_width = max(len(n) for n in names)
+
+        for h in chain([""], names):
+            print('{:{width}}'.format(h, width=col_width), end='|')
+        print()
+
+        for name in names:
+            print('{:{width}}'.format(name, width=col_width), end='|')
+
+            for name2 in names:
+                print('{:{width}.5}'.format(results[(name, name2)],
+                                            width=col_width), end='|')
+            print()
+
+
+
+
 

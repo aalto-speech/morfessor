@@ -1,6 +1,7 @@
 import logging
 import math
 import random
+import os.path
 import sys
 import time
 
@@ -8,6 +9,8 @@ from . import get_version
 from .baseline import BaselineModel
 from .exception import ArgumentException
 from .io import MorfessorIO
+from .evaluation import MorfessorEvaluation, EvaluationConfig, \
+    WilcoxSignedRank, FORMAT_STRINGS
 
 PY3 = sys.version_info.major == 3
 
@@ -442,3 +445,138 @@ def main(args):
                     sys.stderr.write(".")
             sys.stderr.write("\n")
         _logger.info("Done.")
+
+def get_evaluation_argparser():
+    import argparse
+    standard_parser = get_default_argparser()
+    parser = argparse.ArgumentParser(
+        prog="morfessor-evaluate",
+        epilog="""
+        TODO TODO
+Simple usage example (load model.pickled and use it to segment test corpus):
+
+  %(prog)s -l model.pickled -o test_corpus.segmented test_corpus.txt
+
+Interactive use (read corpus from user):
+
+  %(prog)s -l model.pickled -
+
+    ) """,
+        description=standard_parser.description,
+        add_help=False
+    )
+
+    add_arg = parser.add_argument_group('evaluation options').add_argument
+    add_arg('--num-samples', dest='numsamples', type=int, metavar='<int>',
+            default=10, help='number of samples to take for testing')
+    add_arg('--sample-size', dest='samplesize', type=int, metavar='<int>',
+            default=1000, help='size of each testing samples')
+
+    add_arg = parser.add_argument_group('formatting options').add_argument
+    add_arg('--format-string', dest='formatstring', metavar='<format>',
+            help='Python new style format string used to report evaluation '
+                 'results. The following variables are a value and and action '
+                 'separated with and underscore. E.g. fscore_avg for the '
+                 'average f-score. The available values are "precision", '
+                 '"recall", "fscore", "samplesize" and the available actions: '
+                 '"avg", "max", "min", "values", "count". A last meta-data '
+                 'variable (withoug action) is "name", the filename of the '
+                 'model See also the format-template option for predefined '
+                 'strings')
+    add_arg('--format-template', dest='template', metavar='<template>',
+            help='Uses a template string for the format-string options. '
+                 'Available templates are: default, latex and latex-extended. '
+                 'If format-string is defined this option is ignored')
+
+    add_arg = parser.add_argument_group('file options').add_argument
+    add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
+            help="encoding of input and output files (if none is given, "
+                 "both the local encoding and UTF-8 are tried)")
+
+    add_arg = parser.add_argument_group('logging options').add_argument
+    add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
+            metavar='<int>',
+            help="verbose level; controls what is written to the standard "
+                 "error stream or log file (default %(default)s)")
+    add_arg('--logfile', dest='log_file', metavar='<file>',
+            help="write log messages to file in addition to standard "
+                 "error stream")
+
+    add_arg = parser.add_argument_group('other options').add_argument
+    add_arg('-h', '--help', action='help',
+            help="show this help message and exit")
+    add_arg('--version', action='version',
+            version='%(prog)s ' + get_version(),
+            help="show version number and exit")
+
+    parser.add_argument('gold', metavar='<goldstandard>', nargs=1,
+                        help='gold standard file in standard annotation format')
+    parser.add_argument('models', metavar='<model>', nargs='+',
+                        help='model files to segment (either binary or old '
+                             'style).')
+
+    return parser
+
+def main_evaluation(args):
+    if args.verbose >= 2:
+        loglevel = logging.DEBUG
+    elif args.verbose >= 1:
+        loglevel = logging.INFO
+    else:
+        loglevel = logging.WARNING
+
+    logging_format = '%(asctime)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+    default_formatter = logging.Formatter(logging_format, date_format)
+    plain_formatter = logging.Formatter('%(message)s')
+    logging.basicConfig(level=loglevel)
+    _logger.propagate = False  # do not forward messages to the root logger
+
+    # Basic settings for logging to the error stream
+    ch = logging.StreamHandler()
+    ch.setLevel(loglevel)
+    ch.setFormatter(plain_formatter)
+    _logger.addHandler(ch)
+
+    # Settings for when log_file is present
+    if args.log_file is not None:
+        fh = logging.FileHandler(args.log_file, 'w')
+        fh.setLevel(loglevel)
+        fh.setFormatter(default_formatter)
+        _logger.addHandler(fh)
+        # If logging to a file, make INFO the highest level for the
+        # error stream
+        ch.setLevel(max(loglevel, logging.INFO))
+
+    io = MorfessorIO(encoding=args.encoding)
+
+    ev = MorfessorEvaluation(io.read_annotations_file(args.gold[0]))
+
+
+
+    f_string = """Filename\t: {name}
+Num samples\t: {samplesize_count}
+Sample size\t: {samplesize_avg}
+F-score\t\t: {fscore_avg:.3}
+Precision\t: {precision_avg:.3}
+Recall\t\t: {recall_avg:.3}"""
+
+    results = []
+
+    sample_size = args.samplesize
+    num_samples = args.numsamples
+
+    for f in args.models:
+        result = ev.evaluate_model(io.read_any_model(f),
+                                   configuration=EvaluationConfig(num_samples,
+                                                                  sample_size),
+                                   meta_data={'name': os.path.basename(f)})
+        results.append(result)
+        print(result.format(FORMAT_STRINGS['table']))
+
+    if len(results) > 1:
+        wsr = WilcoxSignedRank()
+        r = wsr.significance_test(results)
+        wsr.print_table(r)
+
+
