@@ -799,7 +799,7 @@ class BaselineModel(object):
 
         """
         clen = len(compound)
-        grid = [[(0.0, None)]]
+        grid = [[(0.0, None, None)]]
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
                 addcount > 0:
             logtokens = math.log(self._corpus_coding.tokens + 
@@ -812,11 +812,9 @@ class BaselineModel(object):
             # Select the best path to current node.
             # Note that we can come from any node in history.
             bestn = []
-            #bestpath = None
-            #bestcost = None
             if self.nosplit_re and t < clen and \
                     self.nosplit_re.match(compound[(t-1):(t+1)]):
-                grid.append([(-clen*badlikelihood, t-1)])
+                grid.append([(-clen*badlikelihood, t-1, -1)])
                 continue
             for pt in range(max(0, t - maxlen), t):
                 for k in range(len(grid[pt])):
@@ -861,31 +859,28 @@ class BaselineModel(object):
                     else:
                         continue
                     if len(bestn) < n:
-                        heapq.heappush(bestn, (cost, pt))
+                        heapq.heappush(bestn, (cost, pt, k))
                     else:
-                        heapq.heappushpop(bestn, (cost, pt))
+                        heapq.heappushpop(bestn, (cost, pt, k))
             grid.append(bestn)
-        constr_list = []
-        cost_list = []
+        results = []
         for k in range(len(grid[-1])):
             constructions = []
-            cost, path = grid[-1][k]
+            cost, path, ki = grid[-1][k]
             lt = clen + 1
             while path is not None:
                 t = path
                 constructions.append(compound[t:lt])
-                path = grid[t][0][1]
+                path = grid[t][ki][1]
+                ki = grid[t][ki][2]
                 lt = t
             constructions.reverse()
             # Add boundary cost
-            cost += math.log(self._corpus_coding.tokens + 
+            cost -= math.log(self._corpus_coding.tokens + 
                              self._corpus_coding.boundaries) - \
                              math.log(self._corpus_coding.boundaries)
-            constr_list.append(constructions)
-            cost_list.append(-cost)
-        constr_list.reverse()
-        cost_list.reverse()
-        return constr_list, cost_list
+            results.append((-cost, constructions))
+        return [(constr, cost) for cost, constr in sorted(results)]
 
     def get_corpus_coding_weight(self):
         return self._corpus_coding.weight

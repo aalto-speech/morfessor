@@ -97,6 +97,8 @@ Interactive use (read corpus from user):
             help="save model segmentations to file (Morfessor 1.0 format)")
     add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
             help="output final lexicon to given file")
+    add_arg('--nbest', dest="nbest", default=1, type=int, metavar='<int>',
+            help="output n-best viterbi results")
 
     # Options for data formats
     add_arg = parser.add_argument_group(
@@ -431,12 +433,22 @@ def main(args):
                     if args.outputnewlines:
                         fobj.write("\n")
                     continue
-                constructions, logp = model.viterbi_segment(
-                    atoms, args.viterbismooth, args.viterbimaxlen)
-                analysis = csep.join(constructions)
-                fobj.write(outformat.format(
-                           analysis=analysis, compound=compound,
-                           count=count, logprob=logp))
+                if args.nbest > 1:
+                    nbestlist = model.viterbi_nbest(
+                        atoms, args.nbest, args.viterbismooth, 
+                        args.viterbimaxlen)
+                    for constructions, logp in nbestlist:
+                        analysis = csep.join(constructions)
+                        fobj.write(outformat.format(
+                                analysis=analysis, compound=compound,
+                                count=count, logprob=logp))
+                else:
+                    constructions, logp = model.viterbi_segment(
+                        atoms, args.viterbismooth, args.viterbimaxlen)
+                    analysis = csep.join(constructions)
+                    fobj.write(outformat.format(
+                            analysis=analysis, compound=compound,
+                            count=count, logprob=logp))
                 i += 1
                 if i % 10000 == 0:
                     sys.stderr.write(".")
