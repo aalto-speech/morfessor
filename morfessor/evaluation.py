@@ -31,13 +31,23 @@ def _sample(compound_list, size, seed):
 
 
 class MorfessorEvaluationResult(object):
+    """ A MorfessorEvaluationResult is returned by a MorfessorEvaluation
+    object. It's purpose is to store the evaluation data and provide nice
+    formatting options.
+
+    Each MorfessorEvaluationResult contains the data of 1 evaluation
+    (which can have multiple samples).
+
+    """
+
     print_functions = {'avg': lambda x: sum(x) / len(x),
                        'min': min,
                        'max': max,
                        'values': list,
                        'count': len}
+    #TODO add maybe std as a print function?
 
-    def __init__(self, meta_data):
+    def __init__(self, meta_data=None):
         self.meta_data = meta_data
 
         self.precision = []
@@ -45,32 +55,61 @@ class MorfessorEvaluationResult(object):
         self.fscore = []
         self.samplesize = []
 
+        self._cache = None
+
     def __getitem__(self, item):
-        d = self._get_data_mat()
-        d.update(self.meta_data)
-        return d[item]
+        """Provide dict style interface for all values (standard values and
+        metadata)"""
+        if self._cache is None:
+            self._fill_cache()
+
+        return self._cache[item]
 
     def add_data_point(self, precision, recall, f_score, sample_size):
+        """Method used by MorfessorEvaluation to add the results of a single
+        sample to the object"""
         self.precision.append(precision)
         self.recall.append(recall)
         self.fscore.append(f_score)
         self.samplesize.append(sample_size)
 
+        #clear cache
+        self._cache = None
+
     def __str__(self):
+        """Method for default visualization"""
         return self.format(FORMAT_STRINGS['default'])
 
-    def _get_data_mat(self):
-        return {'{}_{}'.format(value, func_name): func(getattr(self, value))
-                for value in ('precision', 'recall', 'fscore', 'samplesize')
-                for func_name, func in self.print_functions.items()}
+    def _fill_cache(self):
+        """ Pre calculate all variable / function combinations and put them in
+        cache"""
+        self._cache = {'{}_{}'.format(val, func_name): func(getattr(self, val))
+                       for val in ('precision', 'recall', 'fscore',
+                                   'samplesize')
+                       for func_name, func in self.print_functions.items()}
+        self._cache.update(self.meta_data)
+
+    def _get_cache(self):
+        """ Fill the cache (if necessary) and return it"""
+        if self._cache is None:
+            self._fill_cache()
+        return self._cache
 
     def format(self, format_string):
-        d = self._get_data_mat()
-        d.update(self.meta_data)
-        return format_string.format(**d)
+        """ Format this object. The format string can contain all variables,
+        e.g. fscore_avg, precision_values or any item from metadata"""
+        return format_string.format(**self._get_cache())
 
 
 class MorfessorEvaluation(object):
+    """ Do the evaluation of one model, on one testset. The basic procedure is
+    to create, in a stable manner, a number of samples and evaluate them
+    independently. The stable selection of samples makes it possible to use
+     the resulting values for Pair-wise statistical significance testing.
+
+     test_set is a standard annotation dictionary:
+     {compound => ([annoation1],.. ) }
+    """
     def __init__(self, test_set):
         self.reference = {}
 
@@ -107,7 +146,7 @@ class MorfessorEvaluation(object):
         return self._samples[configuration]
 
     def _evaluate(self, prediction):
-
+        """ Helper method to get the precision and recall of 1 sample"""
         def calc_prop_distance(ref, pred):
             #TODO rename variables
             if len(ref) == 0:
@@ -140,6 +179,7 @@ class MorfessorEvaluation(object):
 
     @staticmethod
     def _segmentation_indices(annotation):
+        """ Method to transform a annotation into a tuple of split indices"""
         cur_len = 0
         for a in annotation[:-1]:
             cur_len += len(a)
@@ -147,6 +187,12 @@ class MorfessorEvaluation(object):
 
     def evaluate_model(self, model, configuration=EvaluationConfig(10, 1000),
                        meta_data=None):
+        """ Get the prediction of the test samples from the model and do the
+        evaluation. The meta_data object has preferably at least the key
+        'name'."""
+        if meta_data is None:
+            meta_data = {'name': 'UNKNOWN'}
+
         mer = MorfessorEvaluationResult(meta_data)
 
         for i, sample in enumerate(self.get_samples(configuration)):
@@ -160,7 +206,9 @@ class MorfessorEvaluation(object):
 
         return mer
 
-    def evaluate_segmentation(self, segmentation, meta_data=None):
+    def evaluate_segmentation(self, segmentation):
+        """ Method for evaluating an already segmented sample.
+        """
         def merge_constructions(constructions):
             compound = constructions[0]
             for i in range(1, len(constructions)):
@@ -176,10 +224,11 @@ class MorfessorEvaluation(object):
 
 
 class WilcoxSignedRank(object):
-    # params:
-    # alpha
-    def __init__(self, alpha=0.01):
-        pass
+    """ Class for doing statistical signficance testing with the Wilcoxon
+    Signed-Rank test. It implements the Pratt method for handling
+    zero-differences and applies a 0.5 continuity correction for
+    the z-statistic
+    """
 
     def _wilcox(self, d):
         count = len(d)
@@ -195,7 +244,7 @@ class WilcoxSignedRank(object):
         correction = +0.5 if test > mean else -0.5
         z = (test - mean - correction) / stdev
 
-        return 2 * self.norm_cum_pdf(abs(z))
+        return 2 * WilcoxSignedRank._norm_cum_pdf(abs(z))
 
     def _rankdata(self, d):
         od = collections.Counter()
@@ -210,13 +259,24 @@ class WilcoxSignedRank(object):
 
         return [rank_dict[v] for v in d]
 
-    def norm_cum_pdf(self, z):
+    @staticmethod
+    def _norm_cum_pdf(z):
+        """ Pure python implementation of the normal cumulative pdf function
+        """
         return 0.5 - 0.5 * math.erf(z / math.sqrt(2))
 
     def significance_test(self, evaluations, val_property='fscore_values',
                           name_property='name'):
+        """ Take a set of evaluations (which should have the same
+        test-configuration) and calculate the p-value for the wilcoxin signed
+        rank test.
 
+        It return a dictionary with (name1,name2) keys and p-values as values.
+        """
         results = {r[name_property]: r[val_property] for r in evaluations}
+        if any(len(x) < 10 for x in results.values()):
+            _logger.error("Too small number of samples for the Wiloxin test")
+            return {}
         p = {}
         for r1, r2 in product(results.keys(), results.keys()):
             p[(r1, r2)] = self._wilcox([v1-v2 for v1, v2 in zip(results[r1],
@@ -226,6 +286,8 @@ class WilcoxSignedRank(object):
 
     @staticmethod
     def print_table(results):
+        """Nicely format a results table as returned by significance_test.
+        """
         names = sorted(set(r[0] for r in results.keys()))
 
         col_width = max(max(len(n) for n in names), 5)

@@ -8,13 +8,6 @@ import morfessor.evaluation
 from morfessor import _logger
 
 
-def merge_constructions(constructions):
-    compound = constructions[0]
-    for i in range(1, len(constructions)):
-        compound = compound + constructions[i]
-    return compound
-
-
 def main(argv):
     parser = morfessor.get_evaluation_argparser()
     try:

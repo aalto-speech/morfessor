@@ -187,6 +187,9 @@ class MorfessorIO:
         _logger.info("Done.")
 
     def read_any_model(self, file_name):
+        """Read a file that is either a binary model or a Morfessor 1.0 style
+        model segmentation. This method can not be used on standard input as
+        data might need to be read multiple times"""
         try:
             model = self.read_binary_model_file(file_name)
             _logger.info("%s was read as a binary model" % file_name)
@@ -199,7 +202,6 @@ class MorfessorIO:
         model.load_segmentations(self.read_segmentation_file(file_name))
         _logger.info("%s was read as a segmentation" % file_name)
         return model
-
 
     def _split_atoms(self, construction):
         """Split construction to its atoms."""

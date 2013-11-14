@@ -449,6 +449,7 @@ def main(args):
 
 def get_evaluation_argparser():
     import argparse
+    #TODO factor out redundancies with get_default_argparser()
     standard_parser = get_default_argparser()
     parser = argparse.ArgumentParser(
         prog="morfessor-evaluate",
@@ -521,6 +522,10 @@ Interactive use (read corpus from user):
 
 
 def main_evaluation(args):
+    """ Separate main for running evaluation and statistical significance
+    testing. Takes as argument the results of an get_evaluation_argparser()
+    """
+    #TODO refactor out redundancies with main()
     if args.verbose >= 2:
         loglevel = logging.DEBUG
     elif args.verbose >= 1:
