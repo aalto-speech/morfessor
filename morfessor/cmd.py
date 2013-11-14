@@ -446,6 +446,7 @@ def main(args):
             sys.stderr.write("\n")
         _logger.info("Done.")
 
+
 def get_evaluation_argparser():
     import argparse
     standard_parser = get_default_argparser()
@@ -484,6 +485,7 @@ Interactive use (read corpus from user):
                  'model See also the format-template option for predefined '
                  'strings')
     add_arg('--format-template', dest='template', metavar='<template>',
+            default='default',
             help='Uses a template string for the format-string options. '
                  'Available templates are: default, latex and latex-extended. '
                  'If format-string is defined this option is ignored')
@@ -509,13 +511,14 @@ Interactive use (read corpus from user):
             version='%(prog)s ' + get_version(),
             help="show version number and exit")
 
-    parser.add_argument('gold', metavar='<goldstandard>', nargs=1,
-                        help='gold standard file in standard annotation format')
-    parser.add_argument('models', metavar='<model>', nargs='+',
-                        help='model files to segment (either binary or old '
-                             'style).')
+    add_arg = parser.add_argument
+    add_arg('gold', metavar='<goldstandard>', nargs=1,
+            help='gold standard file in standard annotation format')
+    add_arg('models', metavar='<model>', nargs='+',
+            help='model files to segment (either binary or old style).')
 
     return parser
+
 
 def main_evaluation(args):
     if args.verbose >= 2:
@@ -552,19 +555,14 @@ def main_evaluation(args):
 
     ev = MorfessorEvaluation(io.read_annotations_file(args.gold[0]))
 
-
-
-    f_string = """Filename\t: {name}
-Num samples\t: {samplesize_count}
-Sample size\t: {samplesize_avg}
-F-score\t\t: {fscore_avg:.3}
-Precision\t: {precision_avg:.3}
-Recall\t\t: {recall_avg:.3}"""
-
     results = []
 
     sample_size = args.samplesize
     num_samples = args.numsamples
+
+    f_string = args.formatstring
+    if f_string is None:
+        f_string = FORMAT_STRINGS[args.template]
 
     for f in args.models:
         result = ev.evaluate_model(io.read_any_model(f),
@@ -572,11 +570,9 @@ Recall\t\t: {recall_avg:.3}"""
                                                                   sample_size),
                                    meta_data={'name': os.path.basename(f)})
         results.append(result)
-        print(result.format(FORMAT_STRINGS['table']))
+        print(result.format(f_string))
 
     if len(results) > 1:
         wsr = WilcoxSignedRank()
         r = wsr.significance_test(results)
-        wsr.print_table(r)
-
-
+        WilcoxSignedRank.print_table(r)

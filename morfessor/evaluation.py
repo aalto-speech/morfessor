@@ -20,8 +20,8 @@ Precision\t: {precision_avg:.3}
 Recall\t\t: {recall_avg:.3}""",
     'table': "{name:10} {fscore_avg:6.3} {precision_avg:6.3} {recall_avg:6.3}",
     'latex': "{name} & {fscore_avg:.3} & {precision_avg:.3} &"
-             " {recall_avg:.3}\\\\",
-    }
+             " {recall_avg:.3}\\\\"}
+
 
 def _sample(compound_list, size, seed):
     """
@@ -32,10 +32,10 @@ def _sample(compound_list, size, seed):
 
 class MorfessorEvaluationResult(object):
     print_functions = {'avg': lambda x: sum(x) / len(x),
-                 'min': min,
-                 'max': max,
-                 'values': list,
-                 'count': len}
+                       'min': min,
+                       'max': max,
+                       'values': list,
+                       'count': len}
 
     def __init__(self, meta_data):
         self.meta_data = meta_data
@@ -57,10 +57,7 @@ class MorfessorEvaluationResult(object):
         self.samplesize.append(sample_size)
 
     def __str__(self):
-        return self.format("""Sample size\t: {samplesize_avg}
-F-score\t: {fscore_avg}
-Precision\t: {precision_avg}
-Recall\t: {recall_avg}""")
+        return self.format(FORMAT_STRINGS['default'])
 
     def _get_data_mat(self):
         return {'{}_{}'.format(value, func_name): func(getattr(self, value))
@@ -89,7 +86,8 @@ class MorfessorEvaluation(object):
         test_configuration
         """
 
-        #TODO: test for the size of the training set. If too small, warn about it!
+        #TODO: test for the size of the training set. If too small,
+        # warn about it!
 
         compound_list = sorted(self.reference.keys())
         self._samples[configuration] = [
@@ -226,10 +224,11 @@ class WilcoxSignedRank(object):
 
         return p
 
-    def print_table(self, results):
+    @staticmethod
+    def print_table(results):
         names = sorted(set(r[0] for r in results.keys()))
 
-        col_width = max(len(n) for n in names)
+        col_width = max(max(len(n) for n in names), 5)
 
         for h in chain([""], names):
             print('{:{width}}'.format(h, width=col_width), end='|')
@@ -242,8 +241,3 @@ class WilcoxSignedRank(object):
                 print('{:{width}.5}'.format(results[(name, name2)],
                                             width=col_width), end='|')
             print()
-
-
-
-
-
