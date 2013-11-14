@@ -125,8 +125,10 @@ class MorfessorEvaluation(object):
         test_configuration
         """
 
-        #TODO: test for the size of the training set. If too small,
-        # warn about it!
+        #TODO: What is a reasonable limit to warn about a too small testset?
+        if len(self.reference) < (configuration.num_samples *
+                                  configuration.sample_size):
+            _logger.warn("The test set is too small for this sample size")
 
         compound_list = sorted(self.reference.keys())
         self._samples[configuration] = [
@@ -148,7 +150,6 @@ class MorfessorEvaluation(object):
     def _evaluate(self, prediction):
         """ Helper method to get the precision and recall of 1 sample"""
         def calc_prop_distance(ref, pred):
-            #TODO rename variables
             if len(ref) == 0:
                 return 1.0
             diff = len(set(ref) - set(pred))
@@ -230,9 +231,10 @@ class WilcoxSignedRank(object):
     the z-statistic
     """
 
-    def _wilcox(self, d):
+    @staticmethod
+    def _wilcox(d):
         count = len(d)
-        ranks = self._rankdata([abs(v) for v in d])
+        ranks = WilcoxSignedRank._rankdata([abs(v) for v in d])
         rank_sum_pos = sum(r for r, v in zip(ranks, d) if v > 0)
         rank_sum_neg = sum(r for r, v in zip(ranks, d) if v < 0)
 
@@ -246,7 +248,8 @@ class WilcoxSignedRank(object):
 
         return 2 * WilcoxSignedRank._norm_cum_pdf(abs(z))
 
-    def _rankdata(self, d):
+    @staticmethod
+    def _rankdata(d):
         od = collections.Counter()
         for v in d:
             od[v] += 1

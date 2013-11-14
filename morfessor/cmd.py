@@ -220,6 +220,12 @@ Interactive use (read corpus from user):
                  "weight is set to balance the number of tokens in annotated "
                  "and unannotated data sets)")
 
+    # Options for evaluation
+    add_arg = parser.add_argument_group('Evaluation options').add_argument
+    add_arg('-G', '--goldstandard', dest='goldstandard', default=None,
+            metavar='<file>',
+            help='If provided, evaluate the model against the gold standard')
+
     # Options for logging
     add_arg = parser.add_argument_group('logging options').add_argument
     add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
@@ -446,6 +452,13 @@ def main(args):
             sys.stderr.write("\n")
         _logger.info("Done.")
 
+    if args.goldstandard is not None:
+        _logger.info("Evaluating Model")
+        e = MorfessorEvaluation(io.read_annotations_file(args.goldstandard))
+        result = e.evaluate_model(model, meta_data={'name': 'MODEL'})
+        print(result.format(FORMAT_STRINGS['default']))
+        _logger.info("Done")
+
 
 def get_evaluation_argparser():
     import argparse
@@ -513,7 +526,7 @@ Interactive use (read corpus from user):
             help="show version number and exit")
 
     add_arg = parser.add_argument
-    add_arg('gold', metavar='<goldstandard>', nargs=1,
+    add_arg('goldstandard', metavar='<goldstandard>', nargs=1,
             help='gold standard file in standard annotation format')
     add_arg('models', metavar='<model>', nargs='+',
             help='model files to segment (either binary or old style).')
@@ -558,7 +571,7 @@ def main_evaluation(args):
 
     io = MorfessorIO(encoding=args.encoding)
 
-    ev = MorfessorEvaluation(io.read_annotations_file(args.gold[0]))
+    ev = MorfessorEvaluation(io.read_annotations_file(args.goldstandard[0]))
 
     results = []
 
