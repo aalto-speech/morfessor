@@ -782,6 +782,55 @@ class BaselineModel(object):
                          math.log(self._corpus_coding.boundaries)
         return constructions, cost
 
+    def forward_logprob(self, compound):
+        """Find log-probability of a compound using the forward algorithm.
+
+        Arguments:
+          compound -- compound to process
+
+        Returns the (negative) log-probability of the compound. If the
+        probability is zero, returns a number that is larger than the
+        value defined by the penalty attribute of the model object.
+
+        """
+        clen = len(compound)
+        grid = [0.0]
+        if self._corpus_coding.tokens + self._corpus_coding.boundaries > 0:
+            logtokens = math.log(self._corpus_coding.tokens + 
+                                 self._corpus_coding.boundaries)
+        else:
+            logtokens = 0
+        # Forward main loop
+        for t in range(1, clen + 1):
+            # Sum probabilities from all paths to the current node.
+            # Note that we can come from any node in history.
+            psum = 0.0
+            for pt in range(0, t):
+                cost = grid[pt]
+                construction = compound[pt:t]
+                if (construction in self._analyses and
+                        len(self._analyses[construction].splitloc) == 0):
+                    if self._analyses[construction].count <= 0:
+                        raise MorfessorException(
+                            "Construction count of '%s' is %s" %
+                            (construction,
+                             self._analyses[construction].count))
+                    cost += (logtokens -
+                             math.log(self._analyses[construction].count))
+                else:
+                    continue
+                psum += math.exp(-cost)
+            if psum > 0:
+                grid.append(-math.log(psum))
+            else:
+                grid.append(-self.penalty)
+        cost = grid[-1]
+        # Add boundary cost
+        cost += math.log(self._corpus_coding.tokens + 
+                         self._corpus_coding.boundaries) - \
+                         math.log(self._corpus_coding.boundaries)
+        return cost
+
     def viterbi_nbest(self, compound, n, addcount=1.0, maxlen=30):
         """Find top-n optimal segmentations using the Viterbi algorithm.
 

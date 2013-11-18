@@ -129,8 +129,9 @@ Interactive use (read corpus from user):
             "Valid keywords are: "
             "{analysis} = constructions of the compound, "
             "{compound} = compound string, "
-            "{count} = count of the compound (currently always 1), and "
-            "{logprob} = log-probability of the compound. Valid escape "
+            "{count} = count of the compound (currently always 1), "
+            "{logprob} = log-probability of the analysis, and "
+            "{clogprob} = log-probability of the compound. Valid escape "
             "sequences are '\\n' (newline) and '\\t' (tabular)")
     add_arg('--output-format-separator', dest='outputformatseparator',
             type=str, default=' ', metavar='<str>',
@@ -433,6 +434,10 @@ def main(args):
                     if args.outputnewlines:
                         fobj.write("\n")
                     continue
+                if "{clogprob}" in outformat:
+                    clogprob = model.forward_logprob(atoms)
+                else:
+                    clogprob = None
                 if args.nbest > 1:
                     nbestlist = model.viterbi_nbest(
                         atoms, args.nbest, args.viterbismooth, 
@@ -441,14 +446,15 @@ def main(args):
                         analysis = csep.join(constructions)
                         fobj.write(outformat.format(
                                 analysis=analysis, compound=compound,
-                                count=count, logprob=logp))
+                                count=count, logprob=logp,
+                                clogprob=clogprob))
                 else:
                     constructions, logp = model.viterbi_segment(
                         atoms, args.viterbismooth, args.viterbimaxlen)
                     analysis = csep.join(constructions)
                     fobj.write(outformat.format(
                             analysis=analysis, compound=compound,
-                            count=count, logprob=logp))
+                            count=count, logprob=logp, clogprob=clogprob))
                 i += 1
                 if i % 10000 == 0:
                     sys.stderr.write(".")
