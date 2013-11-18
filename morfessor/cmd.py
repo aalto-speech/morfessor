@@ -3,6 +3,7 @@ import math
 import random
 import sys
 import time
+import string
 
 from . import get_version
 from .baseline import BaselineModel
@@ -425,6 +426,7 @@ def main(args):
             csep = unicode(csep)
         outformat = outformat.replace(r"\n", "\n")
         outformat = outformat.replace(r"\t", "\t")
+        keywords = [x[1] for x in string.Formatter().parse(outformat)]
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
@@ -434,10 +436,10 @@ def main(args):
                     if args.outputnewlines:
                         fobj.write("\n")
                     continue
-                if "{clogprob}" in outformat:
+                if "clogprob" in keywords:
                     clogprob = model.forward_logprob(atoms)
                 else:
-                    clogprob = None
+                    clogprob = 0
                 if args.nbest > 1:
                     nbestlist = model.viterbi_nbest(
                         atoms, args.nbest, args.viterbismooth, 
