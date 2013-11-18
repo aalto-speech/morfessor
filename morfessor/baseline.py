@@ -707,7 +707,7 @@ class BaselineModel(object):
         grid = [(0.0, None)]
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
                 addcount > 0:
-            logtokens = math.log(self._corpus_coding.tokens + 
+            logtokens = math.log(self._corpus_coding.tokens +
                                  self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
@@ -777,9 +777,9 @@ class BaselineModel(object):
             lt = t
         constructions.reverse()
         # Add boundary cost
-        cost += math.log(self._corpus_coding.tokens + 
-                         self._corpus_coding.boundaries) - \
-                         math.log(self._corpus_coding.boundaries)
+        cost += (math.log(self._corpus_coding.tokens +
+                          self._corpus_coding.boundaries) -
+                 math.log(self._corpus_coding.boundaries))
         return constructions, cost
 
     def forward_logprob(self, compound):
