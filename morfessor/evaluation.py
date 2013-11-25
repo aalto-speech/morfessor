@@ -232,8 +232,14 @@ class WilcoxSignedRank(object):
     """
 
     @staticmethod
-    def _wilcox(d):
+    def _wilcox(d, method='pratt', correction=True):
+        if method not in ('wilcox', 'pratt'):
+            raise ValueError
+        if method == 'wilcox':
+            d = list(filter(lambda a: a != 0, d))
+
         count = len(d)
+
         ranks = WilcoxSignedRank._rankdata([abs(v) for v in d])
         rank_sum_pos = sum(r for r, v in zip(ranks, d) if v > 0)
         rank_sum_neg = sum(r for r, v in zip(ranks, d) if v < 0)
@@ -241,9 +247,19 @@ class WilcoxSignedRank(object):
         test = min(rank_sum_neg, rank_sum_pos)
 
         mean = count * (count + 1) * 0.25
-        stdev = math.sqrt((count*(count + 1) * (2 * count + 1)) / 24.0)
+        stdev = (count*(count + 1) * (2 * count + 1))
+        #compensate for duplicate ranks
+        no_zero_ranks = [r for i, r in enumerate(ranks) if d[i] != 0]
+        stdev -= 0.5 * sum(x * (x*x-1) for x in
+                           collections.Counter(no_zero_ranks).values())
 
-        correction = +0.5 if test > mean else -0.5
+
+        stdev = math.sqrt(stdev / 24.0)
+
+        if correction:
+            correction = +0.5 if test > mean else -0.5
+        else:
+            correction = 0
         z = (test - mean - correction) / stdev
 
         return 2 * WilcoxSignedRank._norm_cum_pdf(abs(z))
