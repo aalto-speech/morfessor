@@ -24,8 +24,8 @@ Recall     : {recall_avg:.3}""",
 
 
 def _sample(compound_list, size, seed):
-    """Create a specific size sample from the compound list using a specific seed
-    """
+    """Create a specific size sample from the compound list using a specific
+    seed"""
     return random.Random(seed).sample(compound_list, size)
 
 
@@ -268,7 +268,6 @@ class WilcoxonSignedRank(object):
         stdev -= 0.5 * sum(x * (x*x-1) for x in
                            collections.Counter(no_zero_ranks).values())
 
-
         stdev = math.sqrt(stdev / 24.0)
 
         if correction:
@@ -312,8 +311,9 @@ class WilcoxonSignedRank(object):
             return {}
         p = {}
         for r1, r2 in product(results.keys(), results.keys()):
-            p[(r1, r2)] = self._wilcoxon([v1-v2 for v1, v2 in zip(results[r1],
-                                                                results[r2])])
+            p[(r1, r2)] = self._wilcoxon([v1-v2
+                                          for v1, v2 in zip(results[r1],
+                                                            results[r2])])
 
         return p
 
