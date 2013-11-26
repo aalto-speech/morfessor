@@ -20,7 +20,7 @@ setup(name='Morfessor',
       url='http://www.cis.hut.fi/projects/morpho/',
       description='Morfessor',
       py_modules=['distribute_setup'],
-      packages=['morfessor'],
+      packages=['morfessor', 'morfessor.test'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'Intended Audience :: Science/Research',
