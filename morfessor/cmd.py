@@ -478,6 +478,7 @@ Interactive use (read corpus from user):
 
     ) """,
         description=standard_parser.description,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False
     )
 
