@@ -4,6 +4,7 @@ import random
 import os.path
 import sys
 import time
+import string
 
 from . import get_version
 from .baseline import BaselineModel
@@ -100,6 +101,8 @@ Interactive use (read corpus from user):
             help="save model segmentations to file (Morfessor 1.0 format)")
     add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
             help="output final lexicon to given file")
+    add_arg('--nbest', dest="nbest", default=1, type=int, metavar='<int>',
+            help="output n-best viterbi results")
 
     # Options for data formats
     add_arg = parser.add_argument_group(
@@ -130,8 +133,9 @@ Interactive use (read corpus from user):
             "Valid keywords are: "
             "{analysis} = constructions of the compound, "
             "{compound} = compound string, "
-            "{count} = count of the compound (currently always 1), and "
-            "{logprob} = log-probability of the compound. Valid escape "
+            "{count} = count of the compound (currently always 1), "
+            "{logprob} = log-probability of the analysis, and "
+            "{clogprob} = log-probability of the compound. Valid escape "
             "sequences are '\\n' (newline) and '\\t' (tabular)")
     add_arg('--output-format-separator', dest='outputformatseparator',
             type=str, default=' ', metavar='<str>',
@@ -431,6 +435,7 @@ def main(args):
             csep = unicode(csep)
         outformat = outformat.replace(r"\n", "\n")
         outformat = outformat.replace(r"\t", "\t")
+        keywords = [x[1] for x in string.Formatter().parse(outformat)]
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
@@ -440,12 +445,28 @@ def main(args):
                     if args.outputnewlines:
                         fobj.write("\n")
                     continue
-                constructions, logp = model.viterbi_segment(
-                    atoms, args.viterbismooth, args.viterbimaxlen)
-                analysis = csep.join(constructions)
-                fobj.write(outformat.format(
-                           analysis=analysis, compound=compound,
-                           count=count, logprob=logp))
+                if "clogprob" in keywords:
+                    clogprob = model.forward_logprob(atoms)
+                else:
+                    clogprob = 0
+                if args.nbest > 1:
+                    nbestlist = model.viterbi_nbest(atoms, args.nbest,
+                                                    args.viterbismooth,
+                                                    args.viterbimaxlen)
+                    for constructions, logp in nbestlist:
+                        analysis = csep.join(constructions)
+                        fobj.write(outformat.format(analysis=analysis,
+                                                    compound=compound,
+                                                    count=count, logprob=logp,
+                                                    clogprob=clogprob))
+                else:
+                    constructions, logp = model.viterbi_segment(
+                        atoms, args.viterbismooth, args.viterbimaxlen)
+                    analysis = csep.join(constructions)
+                    fobj.write(outformat.format(analysis=analysis,
+                                                compound=compound,
+                                                count=count, logprob=logp,
+                                                clogprob=clogprob))
                 i += 1
                 if i % 10000 == 0:
                     sys.stderr.write(".")
