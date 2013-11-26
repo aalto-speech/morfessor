@@ -495,7 +495,7 @@ def get_evaluation_argparser():
     add_arg('--format-template', dest='template', metavar='<template>',
             default='default',
             help='Uses a template string for the format-string options. '
-                 'Available templates are: default, latex and latex-extended. '
+                 'Available templates are: default, table and latex. '
                  'If format-string is defined this option is ignored')
 
     add_arg = parser.add_argument_group('file options').add_argument
