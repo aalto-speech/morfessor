@@ -208,8 +208,10 @@ class MorfessorEvaluation(object):
 
         return mer
 
-    def evaluate_segmentation(self, segmentation):
-        """Method for evaluating an already segmented sample"""
+    def evaluate_segmentation(self, segmentation,
+                              configuration=EvaluationConfig(10, 1000),
+                              meta_data=None):
+        """Method for evaluating an existing segmentation"""
 
         def merge_constructions(constructions):
             compound = constructions[0]
@@ -217,15 +219,25 @@ class MorfessorEvaluation(object):
                 compound = compound + constructions[i]
             return compound
 
-        prediction = {}
-        for analysis in segmentation:
-            prediction[merge_constructions(analysis)] = [
-                tuple(self._segmentation_indices(analysis))]
+        segmentation = {merge_constructions(x[1]):
+                        [tuple(self._segmentation_indices(x[1]))]
+                        for x in segmentation}
 
-        return self._evaluate(prediction)
+        if meta_data is None:
+            meta_data = {'name': 'UNKNOWN'}
+
+        mer = MorfessorEvaluationResult(meta_data)
+
+        for i, sample in enumerate(self.get_samples(configuration)):
+            _logger.debug("Evaluating sample {}".format(i))
+
+            prediction = {k: v for k, v in segmentation.items() if k in sample}
+            mer.add_data_point(*self._evaluate(prediction))
+
+        return mer
 
 
-class WilcoxSignedRank(object):
+class WilcoxonSignedRank(object):
     """Class for doing statistical signficance testing with the Wilcoxon
     Signed-Rank test
 
@@ -235,7 +247,7 @@ class WilcoxSignedRank(object):
     """
 
     @staticmethod
-    def _wilcox(d, method='pratt', correction=True):
+    def _wilcoxon(d, method='pratt', correction=True):
         if method not in ('wilcox', 'pratt'):
             raise ValueError
         if method == 'wilcox':
@@ -243,7 +255,7 @@ class WilcoxSignedRank(object):
 
         count = len(d)
 
-        ranks = WilcoxSignedRank._rankdata([abs(v) for v in d])
+        ranks = WilcoxonSignedRank._rankdata([abs(v) for v in d])
         rank_sum_pos = sum(r for r, v in zip(ranks, d) if v > 0)
         rank_sum_neg = sum(r for r, v in zip(ranks, d) if v < 0)
 
@@ -265,7 +277,7 @@ class WilcoxSignedRank(object):
             correction = 0
         z = (test - mean - correction) / stdev
 
-        return 2 * WilcoxSignedRank._norm_cum_pdf(abs(z))
+        return 2 * WilcoxonSignedRank._norm_cum_pdf(abs(z))
 
     @staticmethod
     def _rankdata(d):
@@ -300,7 +312,7 @@ class WilcoxSignedRank(object):
             return {}
         p = {}
         for r1, r2 in product(results.keys(), results.keys()):
-            p[(r1, r2)] = self._wilcox([v1-v2 for v1, v2 in zip(results[r1],
+            p[(r1, r2)] = self._wilcoxon([v1-v2 for v1, v2 in zip(results[r1],
                                                                 results[r2])])
 
         return p

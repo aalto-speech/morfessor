@@ -10,7 +10,7 @@ from .baseline import BaselineModel
 from .exception import ArgumentException
 from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
-    WilcoxSignedRank, FORMAT_STRINGS
+    WilcoxonSignedRank, FORMAT_STRINGS
 
 PY3 = sys.version_info.major == 3
 
@@ -466,17 +466,10 @@ def get_evaluation_argparser():
     standard_parser = get_default_argparser()
     parser = argparse.ArgumentParser(
         prog="morfessor-evaluate",
-        epilog="""
-        TODO TODO
-Simple usage example (load model.pickled and use it to segment test corpus):
+        epilog="""Simple usage example:
 
-  %(prog)s -l model.pickled -o test_corpus.segmented test_corpus.txt
-
-Interactive use (read corpus from user):
-
-  %(prog)s -l model.pickled -
-
-    ) """,
+  %(prog)s gold_standard model1 model2
+""",
         description=standard_parser.description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False
@@ -506,6 +499,10 @@ Interactive use (read corpus from user):
                  'If format-string is defined this option is ignored')
 
     add_arg = parser.add_argument_group('file options').add_argument
+    add_arg('--construction-separator', dest="cseparator", type=str,
+            default=' ', metavar='<regexp>',
+            help="construction separator for test segmentation files"
+                 " (default '%(default)s')")
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help="encoding of input and output files (if none is given, "
                  "both the local encoding and UTF-8 are tried)")
@@ -530,7 +527,12 @@ Interactive use (read corpus from user):
     add_arg('goldstandard', metavar='<goldstandard>', nargs=1,
             help='gold standard file in standard annotation format')
     add_arg('models', metavar='<model>', nargs='+',
-            help='model files to segment (either binary or old style).')
+            help='model files to segment (either binary or Morfessor 1.0 style'
+                 ' segmentation models).')
+    add_arg('-t', '--testsegmentation', dest='test_segmentations', default=[],
+            action='append',
+            help='Segmentation of the test set. Note that all words in the '
+                 'gold-standard must be segmented')
 
     return parser
 
@@ -591,7 +593,19 @@ def main_evaluation(args):
         results.append(result)
         print(result.format(f_string))
 
+    io.construction_separator = args.cseparator
+    for f in args.test_segmentations:
+        segmentation = io.read_segmentation_file(f, False)
+        result = ev.evaluate_segmentation(segmentation,
+                                          configuration=
+                                              EvaluationConfig(num_samples,
+                                                               sample_size),
+                                          meta_data={'name':
+                                                         os.path.basename(f)})
+        results.append(result)
+        print(result.format(f_string))
+
     if len(results) > 1:
-        wsr = WilcoxSignedRank()
+        wsr = WilcoxonSignedRank()
         r = wsr.significance_test(results)
-        WilcoxSignedRank.print_table(r)
+        WilcoxonSignedRank.print_table(r)
