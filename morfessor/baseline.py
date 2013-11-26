@@ -750,8 +750,8 @@ class BaselineModel(object):
                                    math.log(self._lexicon_coding.boundaries
                                             + addcount))
                                   - (self._lexicon_coding.boundaries
-                                     * math.log(
-                                     self._lexicon_coding.boundaries))
+                                     * math.log(self._lexicon_coding.boundaries
+                                                ))
                                   + self._lexicon_coding.get_codelength(
                                       construction))
                                  / self._corpus_coding.weight)
@@ -796,7 +796,7 @@ class BaselineModel(object):
         clen = len(compound)
         grid = [0.0]
         if self._corpus_coding.tokens + self._corpus_coding.boundaries > 0:
-            logtokens = math.log(self._corpus_coding.tokens + 
+            logtokens = math.log(self._corpus_coding.tokens +
                                  self._corpus_coding.boundaries)
         else:
             logtokens = 0
@@ -826,9 +826,9 @@ class BaselineModel(object):
                 grid.append(-self.penalty)
         cost = grid[-1]
         # Add boundary cost
-        cost += math.log(self._corpus_coding.tokens + 
-                         self._corpus_coding.boundaries) - \
-                         math.log(self._corpus_coding.boundaries)
+        cost += (math.log(self._corpus_coding.tokens +
+                          self._corpus_coding.boundaries) -
+                 math.log(self._corpus_coding.boundaries))
         return cost
 
     def viterbi_nbest(self, compound, n, addcount=1.0, maxlen=30):
@@ -851,7 +851,7 @@ class BaselineModel(object):
         grid = [[(0.0, None, None)]]
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
                 addcount > 0:
-            logtokens = math.log(self._corpus_coding.tokens + 
+            logtokens = math.log(self._corpus_coding.tokens +
                                  self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
@@ -894,8 +894,8 @@ class BaselineModel(object):
                                        math.log(self._lexicon_coding.boundaries
                                                 + addcount))
                                       - (self._lexicon_coding.boundaries
-                                         * math.log(
-                                         self._lexicon_coding.boundaries))
+                                         * math.log(self._lexicon_coding.
+                                                    boundaries))
                                       + self._lexicon_coding.get_codelength(
                                           construction))
                                      / self._corpus_coding.weight)
@@ -925,9 +925,9 @@ class BaselineModel(object):
                 lt = t
             constructions.reverse()
             # Add boundary cost
-            cost -= math.log(self._corpus_coding.tokens + 
-                             self._corpus_coding.boundaries) - \
-                             math.log(self._corpus_coding.boundaries)
+            cost -= (math.log(self._corpus_coding.tokens +
+                              self._corpus_coding.boundaries) -
+                     math.log(self._corpus_coding.boundaries))
             results.append((-cost, constructions))
         return [(constr, cost) for cost, constr in sorted(results)]
 

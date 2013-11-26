@@ -441,22 +441,23 @@ def main(args):
                 else:
                     clogprob = 0
                 if args.nbest > 1:
-                    nbestlist = model.viterbi_nbest(
-                        atoms, args.nbest, args.viterbismooth, 
-                        args.viterbimaxlen)
+                    nbestlist = model.viterbi_nbest(atoms, args.nbest,
+                                                    args.viterbismooth,
+                                                    args.viterbimaxlen)
                     for constructions, logp in nbestlist:
                         analysis = csep.join(constructions)
-                        fobj.write(outformat.format(
-                                analysis=analysis, compound=compound,
-                                count=count, logprob=logp,
-                                clogprob=clogprob))
+                        fobj.write(outformat.format(analysis=analysis,
+                                                    compound=compound,
+                                                    count=count, logprob=logp,
+                                                    clogprob=clogprob))
                 else:
                     constructions, logp = model.viterbi_segment(
                         atoms, args.viterbismooth, args.viterbimaxlen)
                     analysis = csep.join(constructions)
-                    fobj.write(outformat.format(
-                            analysis=analysis, compound=compound,
-                            count=count, logprob=logp, clogprob=clogprob))
+                    fobj.write(outformat.format(analysis=analysis,
+                                                compound=compound,
+                                                count=count, logprob=logp,
+                                                clogprob=clogprob))
                 i += 1
                 if i % 10000 == 0:
                     sys.stderr.write(".")
