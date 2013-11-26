@@ -33,6 +33,6 @@ setup(name='Morfessor',
       scripts=['scripts/morfessor', 'scripts/morfessor-train',
                'scripts/morfessor-segment',
                'scripts/morfessor-evaluate',
-              ],
+               ],
       install_requires=requires,
       )
