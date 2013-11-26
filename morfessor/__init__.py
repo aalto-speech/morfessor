@@ -9,7 +9,7 @@ __all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
            'BaselineModel', 'main', 'get_default_argparser', 'main_evaluation',
            'get_evaluation_argparser']
 
-__version__ = '2.0.0alpha3'
+__version__ = '2.0.0rc1'
 __author__ = 'Sami Virpioja, Peter Smit'
 __author_email__ = "morfessor@cis.hut.fi"
 
