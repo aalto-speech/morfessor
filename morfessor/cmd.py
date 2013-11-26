@@ -598,10 +598,10 @@ def main_evaluation(args):
         segmentation = io.read_segmentation_file(f, False)
         result = ev.evaluate_segmentation(segmentation,
                                           configuration=
-                                              EvaluationConfig(num_samples,
-                                                               sample_size),
+                                          EvaluationConfig(num_samples,
+                                                           sample_size),
                                           meta_data={'name':
-                                                         os.path.basename(f)})
+                                                     os.path.basename(f)})
         results.append(result)
         print(result.format(f_string))
 
