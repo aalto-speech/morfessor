@@ -6,11 +6,11 @@ use_setuptools()
 from setuptools import setup
 
 import re
-main_py = open('morfessor.py').read()
+main_py = open('morfessor/__init__.py').read()
 metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
 
 requires = [
-#    'progressbar',
+    #    'progressbar',
 ]
 
 setup(name='Morfessor',
@@ -19,7 +19,8 @@ setup(name='Morfessor',
       author_email='morfessor@cis.hut.fi',
       url='http://www.cis.hut.fi/projects/morpho/',
       description='Morfessor',
-      py_modules=['morfessor', 'distribute_setup'],
+      py_modules=['distribute_setup'],
+      packages=['morfessor', 'morfessor.test'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'Intended Audience :: Science/Research',
@@ -29,6 +30,9 @@ setup(name='Morfessor',
           'Topic :: Scientific/Engineering',
       ],
       license="BSD",
-      scripts=['scripts/morfessor', 'scripts/morfessor-train', 'scripts/morfessor-segment'],
+      scripts=['scripts/morfessor', 'scripts/morfessor-train',
+               'scripts/morfessor-segment',
+               'scripts/morfessor-evaluate',
+               ],
       install_requires=requires,
-     )
+      )

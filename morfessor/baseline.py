@@ -1,116 +1,14 @@
-#!/usr/bin/env python
-"""
-Morfessor 2.0 - Python implementation of the Morfessor method
-"""
-
-__all__ = ['MorfessorException', 'MorfessorIO', 'BaselineModel',
-           'AnnotationsModelUpdate', 'Encoding', 'CorpusEncoding',
-           'AnnotatedCorpusEncoding', 'LexiconEncoding']
-
-__version__ = '2.0.0alpha3'
-__author__ = 'Sami Virpioja, Peter Smit'
-__author_email__ = "morfessor@cis.hut.fi"
-
-import codecs
 import collections
-import datetime
-import gzip
-import io
-import locale
+import heapq
 import logging
 import math
 import random
 import re
-import sys
-import time
-import types
 
-PY3 = sys.version_info.major == 3
-
-try:
-    # In Python2 import cPickle for better performance
-    import cPickle as pickle
-except ImportError:
-    import pickle
+from .utils import _progress
+from .exception import MorfessorException
 
 _logger = logging.getLogger(__name__)
-
-show_progress_bar = True
-
-
-def _progress(iter_func):
-    """Decorator/function for displaying a progress bar when iterating
-    through a list.
-
-    iter_func can be both a function providing a iterator (for decorator
-    style use) or an iterator itself.
-
-    No progressbar is displayed when the show_progress_bar variable is set to
-     false.
-
-    If the progressbar module is available a fancy percentage style
-    progressbar is displayed. Otherwise 60 dots are printed as indicator.
-
-    """
-
-    if not show_progress_bar:
-        return iter_func
-
-    #Try to see or the progressbar module is available, else fabricate our own
-    try:
-        from progressbar import ProgressBar
-    except ImportError:
-        class SimpleProgressBar:
-            """Create a simple progress bar that prints 60 dots on a single
-            line, proportional to the progress """
-            NUM_DOTS = 60
-
-            def __call__(self, it):
-                self.it = iter(it)
-                self.i = 0
-
-                # Dot frequency is determined as ceil(len(it) / NUM_DOTS)
-                self.dotfreq = (len(it) + self.NUM_DOTS - 1) // self.NUM_DOTS
-                if self.dotfreq < 1:
-                    self.dotfreq = 1
-
-                return self
-
-            def __iter__(self):
-                return self
-
-            def __next__(self):
-                self.i += 1
-                if self.i % self.dotfreq == 0:
-                    sys.stderr.write('.')
-                    sys.stderr.flush()
-                try:
-                    return next(self.it)
-                except StopIteration:
-                    sys.stderr.write('\n')
-                    raise
-
-            #Needed to be compatible with both Python2 and 3
-            next = __next__
-
-        ProgressBar = SimpleProgressBar
-
-    # In case of a decorator (argument is a function),
-    # wrap the functions result in a ProgressBar and return the new function
-    if isinstance(iter_func, types.FunctionType):
-        def i(*args, **kwargs):
-            if logging.getLogger(__name__).isEnabledFor(logging.INFO):
-                return ProgressBar()(iter_func(*args, **kwargs))
-            else:
-                return iter_func(*args, **kwargs)
-        return i
-
-    #In case of an iterator, wrap it in a ProgressBar and return it.
-    elif hasattr(iter_func, '__iter__'):
-        return ProgressBar()(iter_func)
-
-    #If all else fails, just return the original.
-    return iter_func
 
 
 def _constructions_to_str(constructions):
@@ -124,267 +22,6 @@ def _constructions_to_str(constructions):
         return ' + '.join(map(lambda x: ' '.join(x), constructions))
 
 
-class MorfessorException(Exception):
-    """Base class for exceptions in this module."""
-    pass
-
-
-class MorfessorIO:
-    """Definition for all input and output files. Also handles all
-    encoding issues.
-
-    The only state this class has is the separators used in the data.
-    Therefore, the same class instance can be used for initializing multiple
-    files.
-
-    """
-
-    def __init__(self, encoding=None, construction_separator=' + ',
-                 comment_start='#', compound_separator='\s+',
-                 atom_separator=None):
-        self.encoding = encoding
-        self.construction_separator = construction_separator
-        self.comment_start = comment_start
-        self.compound_separator = compound_separator
-        self.atom_separator = atom_separator
-        if atom_separator is not None:
-            self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
-
-    def read_segmentation_file(self, file_name, **kwargs):
-        """Read segmentation file.
-
-        File format:
-        <count> <construction1><sep><construction2><sep>...<constructionN>
-
-        """
-        _logger.info("Reading segmentations from '%s'..." % file_name)
-        for line in self._read_text_file(file_name):
-            count, compound = line.split(' ', 1)
-            yield int(count), compound.split(self.construction_separator)
-        _logger.info("Done.")
-
-    def write_segmentation_file(self, file_name, segmentations, **kwargs):
-        """Write segmentation file.
-
-        File format:
-        <count> <construction1><sep><construction2><sep>...<constructionN>
-
-        """
-        _logger.info("Saving segmentations to '%s'..." % file_name)
-        with self._open_text_file_write(file_name) as file_obj:
-            d = datetime.datetime.now().replace(microsecond=0)
-            file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
-                           (__version__, d))
-            for count, segmentation in segmentations:
-                if self.atom_separator is None:
-                    s = self.construction_separator.join(segmentation)
-                else:
-                    s = self.construction_separator.join(
-                        map(lambda x: ' '.join(x), segmentation))
-                file_obj.write("%d %s\n" % (count, s))
-        _logger.info("Done.")
-
-    def read_corpus_files(self, file_names):
-        """Read one or more corpus files.
-
-        Yield for each compound found (1, compound, compound_atoms).
-
-        """
-        for file_name in file_names:
-            for item in self.read_corpus_file(file_name):
-                yield item
-
-    def read_corpus_file(self, file_name):
-        """Read one corpus file.
-
-        Yield for each compound found (1, compound, compound_atoms).
-
-        """
-        _logger.info("Reading corpus from '%s'..." % file_name)
-        compound_sep = re.compile(self.compound_separator, re.UNICODE)
-        for line in self._read_text_file(file_name):
-            for compound in compound_sep.split(line):
-                if len(compound) > 0:
-                    yield 1, compound, self._split_atoms(compound)
-        _logger.info("Done.")
-
-    def read_corpus_list_file(self, file_name):
-        """Read a corpus list file.
-
-        Each line has the format:
-        <count> <compound>
-
-        Yield tuples (count, compound, compound_atoms) for each compound.
-
-        """
-        _logger.info("Reading corpus from list '%s'..." % file_name)
-        for line in self._read_text_file(file_name):
-            try:
-                count, compound = line.split(None, 1)
-                yield int(count), compound, self._split_atoms(compound)
-            except ValueError:
-                yield 1, line, self._split_atoms(line)
-        _logger.info("Done.")
-
-    def read_annotations_file(self, file_name, construction_separator=' ',
-                              analysis_sep=','):
-        """Read a annotations file.
-
-        Each line has the format:
-        <compound> <constr1> <constr2>... <constrN>, <constr1>...<constrN>, ...
-
-        Yield tuples (compound, list(analyses)).
-
-        """
-        annotations = {}
-        _logger.info("Reading annotations from '%s'..." % file_name)
-        for line in self._read_text_file(file_name):
-            analyses = []
-            compound, analyses_line = line.split(None, 1)
-
-            if compound not in annotations:
-                annotations[compound] = []
-
-            if analysis_sep is not None:
-                for analysis in analyses_line.split(analysis_sep):
-                    annotations[compound].append(
-                        analysis.split(construction_separator))
-            else:
-                annotations[compound].append(
-                    analyses_line.split(construction_separator))
-
-        _logger.info("Done.")
-        return annotations
-
-    def write_lexicon_file(self, file_name, lexicon):
-        """Write to a Lexicon file all constructions and their counts."""
-        _logger.info("Saving model lexicon to '%s'..." % file_name)
-        with self._open_text_file_write(file_name) as file_obj:
-            for construction, count in lexicon:
-                file_obj.write("%d %s\n" % (count, construction))
-        _logger.info("Done.")
-
-    def read_binary_model_file(self, file_name):
-        """Read a pickled model from file."""
-        _logger.info("Loading model from '%s'..." % file_name)
-        with open(file_name, 'rb') as fobj:
-            model = pickle.load(fobj)
-        _logger.info("Done.")
-        return model
-
-    def write_binary_model_file(self, file_name, model):
-        """Pickle a model to a file."""
-        _logger.info("Saving model to '%s'..." % file_name)
-        with open(file_name, 'wb') as fobj:
-            pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
-        _logger.info("Done.")
-
-    def _split_atoms(self, construction):
-        """Split construction to its atoms."""
-        if self.atom_separator is None:
-            return construction
-        else:
-            return tuple(self._atom_sep_re.split(construction))
-
-    def _open_text_file_write(self, file_name):
-        """Open a file with the appropriate compression and encoding"""
-        if file_name == '-':
-            file_obj = sys.stdout
-            if PY3:
-                return file_obj
-        elif file_name.endswith('.gz'):
-            file_obj = gzip.open(file_name, 'wb')
-        else:
-            file_obj = open(file_name, 'wb')
-        if self.encoding is None:
-            # Take encoding from locale if not set so far
-            self.encoding = locale.getpreferredencoding()
-        return codecs.getwriter(self.encoding)(file_obj)
-
-    def _read_text_file(self, file_name):
-        """Read a text file with the appropriate compression and encoding.
-
-        Comments and empty lines are skipped.
-
-        """
-        encoding = self.encoding
-        if encoding is None:
-            if file_name != '-':
-                encoding = self._find_encoding(file_name)
-
-        if file_name == '-':
-
-            if PY3:
-                inp = sys.stdin
-            else:
-                class StdinUnicodeReader:
-                    def __init__(self, encoding):
-                        self.encoding = encoding
-                        if self.encoding is None:
-                            self.encoding = locale.getpreferredencoding()
-
-                    def __iter__(self):
-                        return self
-
-                    def next(self):
-                        l = sys.stdin.readline()
-                        if not l:
-                            raise StopIteration()
-                        return l.decode(self.encoding)
-                inp = StdinUnicodeReader(encoding)
-        else:
-            if file_name.endswith('.gz'):
-                file_obj = gzip.open(file_name, 'rb')
-            else:
-                file_obj = open(file_name, 'rb')
-
-            if self.encoding is None:
-                self.encoding = self._find_encoding(file_name)
-
-            inp = codecs.getreader(self.encoding)(file_obj)
-
-        try:
-            for line in inp:
-                line = line.rstrip()
-                if len(line) > 0 and not line.startswith(self.comment_start):
-                    yield line
-        except KeyboardInterrupt:
-            if file_name == '-':
-                _logger.info("Finished reading from stdin")
-                return
-            else:
-                raise
-
-    def _find_encoding(self, *files):
-        """Test default encodings on reading files.
-
-        If no encoding is given, this method can be used to test which
-        of the default encodings would work.
-
-        """
-        test_encodings = ['utf-8', locale.getpreferredencoding()]
-        for encoding in test_encodings:
-            ok = True
-            for f in files:
-                if f == '-':
-                    continue
-                try:
-                    if f.endswith('.gz'):
-                        file_obj = gzip.open(f, 'rb')
-                    else:
-                        file_obj = open(f, 'rb')
-
-                    for _ in codecs.getreader(encoding)(file_obj):
-                        pass
-                except UnicodeDecodeError:
-                    ok = False
-                    break
-            if ok:
-                _logger.info("Detected %s encoding" % encoding)
-                return encoding
-
-        raise UnicodeError("Can not determine encoding of input files")
-
 # rcount = root count (from corpus)
 # count = total count of the node
 # splitloc = list of location of the possible splits for virtual
@@ -393,7 +30,7 @@ ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
 
-class BaselineModel:
+class BaselineModel(object):
     """Morfessor Baseline model class.
 
     Implements training of and segmenting with a Morfessor model. The model
@@ -404,7 +41,7 @@ class BaselineModel:
     penalty = -9999.9
 
     def __init__(self, forcesplit_list=None, corpusweight=1.0,
-                 use_skips=False):
+                 use_skips=False, nosplit_re=None):
         """Initialize a new model instance.
 
         Arguments:
@@ -437,6 +74,10 @@ class BaselineModel:
             self.forcesplit_list = []
         else:
             self.forcesplit_list = forcesplit_list
+        if nosplit_re is None:
+            self.nosplit_re = None
+        else:
+            self.nosplit_re = re.compile(nosplit_re, re.UNICODE)
 
     @property
     def tokens(self):
@@ -652,6 +293,9 @@ class BaselineModel:
         self._modify_construction_count(construction, -count)
         splitloc = []
         for i in range(1, len(construction)):
+            if (self.nosplit_re and
+                    self.nosplit_re.match(construction[(i-1):(i+1)])):
+                    continue
             prefix = construction[:i]
             suffix = construction[i:]
             self._modify_construction_count(prefix, count)
@@ -794,16 +438,17 @@ class BaselineModel:
             if c > 0:
                 yield c, self.segment(w)
 
-    def load_data(self, corpus, freqthreshold=1, cfunc=lambda x: x,
+    def load_data(self, data, freqthreshold=1, count_modifier=None,
                   init_rand_split=None):
         """Load data to initialize the model for batch training.
 
         Arguments:
+            data -- iterator/generator of (count, compound, atoms) tuples
             corpus -- corpus instance
             freqthreshold -- discard compounds that occur less than
                              given times in the corpus (default 1)
-            cfunc -- function (int -> int) for modifying the counts
-                     (defaults to identity function)
+            count_modifier -- function for adjusting the counts of each
+                              compound
             init_rand_split -- If given, random split the word with
                                init_rand_split as the probability for each
                                split
@@ -812,10 +457,18 @@ class BaselineModel:
         the total cost.
 
         """
-        for count, _, atoms in corpus:
+        totalcount = collections.Counter()
+        for count, _, atoms in data:
+            if len(atoms) > 0:
+                totalcount[atoms] += count
+
+        for atoms, count in totalcount.items():
             if count < freqthreshold:
                 continue
-            self._add_compound(atoms, cfunc(count))
+            if count_modifier is not None:
+                self._add_compound(atoms, count_modifier(count))
+            else:
+                self._add_compound(atoms, count)
 
             if init_rand_split is not None and init_rand_split > 0:
                 parts = self._random_split(atoms, init_rand_split)
@@ -959,7 +612,7 @@ class BaselineModel:
         are recalculated if applicable.
 
         Arguments:
-            data -- iterator/generator of (_,_, compound) tuples. The first
+            data -- iterator/generator of (_, _, compound) tuples. The first
                     two arguments are ignored, as every occurence of the
                     compound is taken with count 1
             count_modifier -- function for adjusting the counts of each
@@ -993,6 +646,10 @@ class BaselineModel:
                 except StopIteration:
                     more_tokens = False
                     break
+
+                if len(w) == 0:
+                    # Newline in corpus
+                    continue
 
                 if count_modifier is not None:
                     if not w in counts:
@@ -1048,8 +705,10 @@ class BaselineModel:
         """
         clen = len(compound)
         grid = [(0.0, None)]
-        if self._corpus_coding.tokens + addcount > 0:
-            logtokens = math.log(self._corpus_coding.tokens + addcount)
+        if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
+                addcount > 0:
+            logtokens = math.log(self._corpus_coding.tokens +
+                                 self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
         badlikelihood = clen * logtokens + 1.0
@@ -1059,6 +718,10 @@ class BaselineModel:
             # Note that we can come from any node in history.
             bestpath = None
             bestcost = None
+            if self.nosplit_re and t < clen and \
+                    self.nosplit_re.match(compound[(t-1):(t+1)]):
+                grid.append((clen*badlikelihood, t-1))
+                continue
             for pt in range(max(0, t - maxlen), t):
                 if grid[pt][0] is None:
                     continue
@@ -1087,13 +750,17 @@ class BaselineModel:
                                    math.log(self._lexicon_coding.boundaries
                                             + addcount))
                                   - (self._lexicon_coding.boundaries
-                                     * math.log(
-                                     self._lexicon_coding.boundaries))
+                                     * math.log(self._lexicon_coding.boundaries
+                                                ))
                                   + self._lexicon_coding.get_codelength(
                                       construction))
                                  / self._corpus_coding.weight)
                 elif len(construction) == 1:
                     cost += badlikelihood
+                elif self.nosplit_re:
+                    # Some splits are forbidden, so longer unknown
+                    # constructions have to be allowed
+                    cost += len(construction) * badlikelihood
                 else:
                     continue
                 if bestcost is None or cost < bestcost:
@@ -1109,7 +776,166 @@ class BaselineModel:
             path = grid[t][1]
             lt = t
         constructions.reverse()
+        # Add boundary cost
+        cost += (math.log(self._corpus_coding.tokens +
+                          self._corpus_coding.boundaries) -
+                 math.log(self._corpus_coding.boundaries))
         return constructions, cost
+
+    def forward_logprob(self, compound):
+        """Find log-probability of a compound using the forward algorithm.
+
+        Arguments:
+          compound -- compound to process
+
+        Returns the (negative) log-probability of the compound. If the
+        probability is zero, returns a number that is larger than the
+        value defined by the penalty attribute of the model object.
+
+        """
+        clen = len(compound)
+        grid = [0.0]
+        if self._corpus_coding.tokens + self._corpus_coding.boundaries > 0:
+            logtokens = math.log(self._corpus_coding.tokens +
+                                 self._corpus_coding.boundaries)
+        else:
+            logtokens = 0
+        # Forward main loop
+        for t in range(1, clen + 1):
+            # Sum probabilities from all paths to the current node.
+            # Note that we can come from any node in history.
+            psum = 0.0
+            for pt in range(0, t):
+                cost = grid[pt]
+                construction = compound[pt:t]
+                if (construction in self._analyses and
+                        len(self._analyses[construction].splitloc) == 0):
+                    if self._analyses[construction].count <= 0:
+                        raise MorfessorException(
+                            "Construction count of '%s' is %s" %
+                            (construction,
+                             self._analyses[construction].count))
+                    cost += (logtokens -
+                             math.log(self._analyses[construction].count))
+                else:
+                    continue
+                psum += math.exp(-cost)
+            if psum > 0:
+                grid.append(-math.log(psum))
+            else:
+                grid.append(-self.penalty)
+        cost = grid[-1]
+        # Add boundary cost
+        cost += (math.log(self._corpus_coding.tokens +
+                          self._corpus_coding.boundaries) -
+                 math.log(self._corpus_coding.boundaries))
+        return cost
+
+    def viterbi_nbest(self, compound, n, addcount=1.0, maxlen=30):
+        """Find top-n optimal segmentations using the Viterbi algorithm.
+
+        Arguments:
+          compound -- compound to be segmented
+          addcount -- constant for additive smoothing (0 = no smoothing)
+          maxlen -- maximum length for the constructions
+
+        If additive smoothing is applied, new complex construction types can
+        be selected during the search. Without smoothing, only new
+        single-atom constructions can be selected.
+
+        Returns the n most probable segmentations and their
+        log-probabilities.
+
+        """
+        clen = len(compound)
+        grid = [[(0.0, None, None)]]
+        if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
+                addcount > 0:
+            logtokens = math.log(self._corpus_coding.tokens +
+                                 self._corpus_coding.boundaries + addcount)
+        else:
+            logtokens = 0
+        badlikelihood = clen * logtokens + 1.0
+        # Viterbi main loop
+        for t in range(1, clen + 1):
+            # Select the best path to current node.
+            # Note that we can come from any node in history.
+            bestn = []
+            if self.nosplit_re and t < clen and \
+                    self.nosplit_re.match(compound[(t-1):(t+1)]):
+                grid.append([(-clen*badlikelihood, t-1, -1)])
+                continue
+            for pt in range(max(0, t - maxlen), t):
+                for k in range(len(grid[pt])):
+                    if grid[pt][k][0] is None:
+                        continue
+                    cost = grid[pt][k][0]
+                    construction = compound[pt:t]
+                    if (construction in self._analyses and
+                            len(self._analyses[construction].splitloc) == 0):
+                        if self._analyses[construction].count <= 0:
+                            raise MorfessorException(
+                                "Construction count of '%s' is %s" %
+                                (construction,
+                                 self._analyses[construction].count))
+                        cost -= (logtokens -
+                                 math.log(self._analyses[construction].count +
+                                          addcount))
+                    elif addcount > 0:
+                        if self._corpus_coding.tokens == 0:
+                            cost -= (addcount * math.log(addcount) +
+                                     self._lexicon_coding.get_codelength(
+                                         construction)
+                                     / self._corpus_coding.weight)
+                        else:
+                            cost -= (logtokens - math.log(addcount) +
+                                     (((self._lexicon_coding.boundaries +
+                                        addcount) *
+                                       math.log(self._lexicon_coding.boundaries
+                                                + addcount))
+                                      - (self._lexicon_coding.boundaries
+                                         * math.log(self._lexicon_coding.
+                                                    boundaries))
+                                      + self._lexicon_coding.get_codelength(
+                                          construction))
+                                     / self._corpus_coding.weight)
+                    elif len(construction) == 1:
+                        cost -= badlikelihood
+                    elif self.nosplit_re:
+                        # Some splits are forbidden, so longer unknown
+                        # constructions have to be allowed
+                        cost -= len(construction) * badlikelihood
+                    else:
+                        continue
+                    if len(bestn) < n:
+                        heapq.heappush(bestn, (cost, pt, k))
+                    else:
+                        heapq.heappushpop(bestn, (cost, pt, k))
+            grid.append(bestn)
+        results = []
+        for k in range(len(grid[-1])):
+            constructions = []
+            cost, path, ki = grid[-1][k]
+            lt = clen + 1
+            while path is not None:
+                t = path
+                constructions.append(compound[t:lt])
+                path = grid[t][ki][1]
+                ki = grid[t][ki][2]
+                lt = t
+            constructions.reverse()
+            # Add boundary cost
+            cost -= (math.log(self._corpus_coding.tokens +
+                              self._corpus_coding.boundaries) -
+                     math.log(self._corpus_coding.boundaries))
+            results.append((-cost, constructions))
+        return [(constr, cost) for cost, constr in sorted(results)]
+
+    def get_corpus_coding_weight(self):
+        return self._corpus_coding.weight
+
+    def set_corpus_coding_weight(self, weight):
+        self._corpus_coding.weight = weight
 
 
 class AnnotationsModelUpdate:
@@ -1136,12 +962,13 @@ class AnnotationsModelUpdate:
         d = self._estimate_segmentation_dir(segments, annotations)
 
         if d != 0:
+            weight = self.model.get_corpus_coding_weight()
             if d > 0:
-                self.model._corpus_coding.weight *= 1 + 2.0 / epochs
+                weight *= 1 + 2.0 / epochs
             else:
-                self.model._corpus_coding.weight *= 1.0 / (1 + 2.0 / epochs)
-            _logger.info("Corpus weight set to %s" %
-                         self.model._corpus_coding.weight)
+                weight *= 1.0 / (1 + 2.0 / epochs)
+            self.model.set_corpus_coding_weight(weight)
+            _logger.info("Corpus weight set to {}".format(weight))
             return True
         return False
 
@@ -1252,9 +1079,9 @@ class Encoding(object):
         return n * logn - n + 0.5 * (logn + cls._log2pi)
 
     def frequency_distribution_cost(self):
-        """Calculate -log[(M - 1)! (N - M)! / (N - 1)!]
+        """Calculate -log[(u - 1)! (v - u)! / (v - 1)!]
 
-        M is the number of tokens+boundaries and N the number of types
+        v is the number of tokens+boundaries and u the number of types
 
         """
         if self.types < 2:
@@ -1473,432 +1300,3 @@ class LexiconEncoding(Encoding):
                 c = 1
             cost -= math.log(c)
         return cost
-
-
-def get_default_argparser():
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        prog='morfessor.py',
-        description="""
-Morfessor %s
-
-Copyright (c) 2012, Sami Virpioja and Peter Smit
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions
-are met:
-
-1.  Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
-
-2.  Redistributions in binary form must reproduce the above
-    copyright notice, this list of conditions and the following
-    disclaimer in the documentation and/or other materials provided
-    with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
-
-Command-line arguments:
-""" % __version__,
-        epilog="""
-Simple usage examples (training and testing):
-
-  %(prog)s -t training_corpus.txt -s model.pickled
-  %(prog)s -l model.pickled -T test_corpus.txt -o test_corpus.segmented
-
-Interactive use (read corpus from user):
-
-  %(prog)s -m online -v 2 -t -
-
-""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        add_help=False)
-
-    # Options for input data files
-    add_arg = parser.add_argument_group('input data files').add_argument
-    add_arg('-l', '--load', dest="loadfile", default=None, metavar='<file>',
-            help="load existing model from file (pickled model object)")
-    add_arg('-L', '--load-segmentation', dest="loadsegfile", default=None,
-            metavar='<file>',
-            help="load existing model from segmentation "
-                 "file (Morfessor 1.0 format)")
-    add_arg('-t', '--traindata', dest='trainfiles', action='append',
-            default=[], metavar='<file>',
-            help="input corpus file(s) for training (text or gzipped text; "
-                 "use '-' for standard input; add several times in order to "
-                 "append multiple files)")
-    add_arg('-T', '--testdata', dest='testfiles', action='append',
-            default=[], metavar='<file>',
-            help="input corpus file(s) to analyze (text or gzipped text;  "
-                 "use '-' for standard input; add several times in order to "
-                 "append multiple files)")
-
-    # Options for output data files
-    add_arg = parser.add_argument_group('output data files').add_argument
-    add_arg('-o', '--output', dest="outfile", default='-', metavar='<file>',
-            help="output file for test data results (for standard output, "
-                 "use '-'; default '%(default)s')")
-    add_arg('-s', '--save', dest="savefile", default=None, metavar='<file>',
-            help="save final model to file (pickled model object)")
-    add_arg('-S', '--save-segmentation', dest="savesegfile", default=None,
-            metavar='<file>',
-            help="save model segmentations to file (Morfessor 1.0 format)")
-    add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
-            help="output final lexicon to given file")
-
-    # Options for data formats
-    add_arg = parser.add_argument_group(
-        'data format options').add_argument
-    add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
-            help="encoding of input and output files (if none is given, "
-                 "both the local encoding and UTF-8 are tried)")
-    add_arg('--traindata-list', dest="list", default=False,
-            action='store_true',
-            help="input file(s) for batch training are lists "
-                 "(one compound per line, optionally count as a prefix)")
-    add_arg('--atom-separator', dest="separator", type=str, default=None,
-            metavar='<regexp>',
-            help="atom separator regexp (default %(default)s)")
-    add_arg('--compound-separator', dest="cseparator", type=str, default='\s+',
-            metavar='<regexp>',
-            help="compound separator regexp (default '%(default)s')")
-    add_arg('--analysis-separator', dest='analysisseparator', type=str,
-            default=',', metavar='<str>',
-            help="separator for different analyses in an annotation file. Use"
-                 "  NONE for only allowing one analysis per line")
-    add_arg('--output-format', dest='outputformat', type=str,
-            default=r'{analysis}\n', metavar='<format>',
-            help="format string for --output file (default: '%(default)s'). "
-            "Valid keywords are: "
-            "{analysis} = constructions of the compound, "
-            "{compound} = compound string, "
-            "{count} = count of the compound (currently always 1), and "
-            "{logprob} = log-probability of the compound. Valid escape "
-            "sequences are '\\n' (newline) and '\\t' (tabular)")
-    add_arg('--output-format-separator', dest='outputformatseparator',
-            type=str, default=' ', metavar='<str>',
-            help="construction separator for analysis in --output file "
-            "(default: '%(default)s')")
-
-    # Options for model training
-    add_arg = parser.add_argument_group(
-        'training and segmentation options').add_argument
-    add_arg('-m', '--mode', dest="trainmode", default='init+batch',
-            metavar='<mode>',
-            choices=['none', 'batch', 'init', 'init+batch', 'online',
-                     'online+batch'],
-            help="training mode ('none', 'init', 'batch', 'init+batch', "
-                 "'online', or 'online+batch'; default '%(default)s')")
-    add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
-            metavar='<algorithm>', choices=['recursive', 'viterbi'],
-            help="algorithm type ('recursive', 'viterbi'; default "
-                 "'%(default)s')")
-    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
-            metavar='<type>', choices=['none', 'log', 'ones'],
-            help="frequency dampening for training data ('none', 'log', or "
-                 "'ones'; default '%(default)s')")
-    add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
-            metavar='<list>',
-            help="force split on given atoms (default %(default)s)")
-    add_arg('-F', '--finish-threshold', dest='finish_threshold', type=float,
-            default=0.005, metavar='<float>',
-            help="Stopping threshold. Training stops when "
-                 "the improvement of the last iteration is"
-                 "smaller then finish_threshold * #boundaries; "
-                 "(default '%(default)s')")
-    add_arg('-r', '--randseed', dest="randseed", default=None,
-            metavar='<seed>',
-            help="seed for random number generator")
-    add_arg('-R', '--randsplit', dest="splitprob", default=None, type=float,
-            metavar='<float>',
-            help="initialize new words by random splitting using the given "
-                 "split probability (default no splitting)")
-    add_arg('--skips', dest="skips", default=False, action='store_true',
-            help="use random skips for frequently seen compounds to speed up "
-                 "training")
-    add_arg('--batch-minfreq', dest="freqthreshold", type=int, default=1,
-            metavar='<int>',
-            help="compound frequency threshold for batch training (default "
-                 "%(default)s)")
-    add_arg('--max-epochs', dest='maxepochs', type=int, default=None,
-            metavar='<int>',
-            help='hard maximum of epochs in training')
-    add_arg('--online-epochint', dest="epochinterval", type=int,
-            default=10000, metavar='<int>',
-            help="epoch interval for online training (default %(default)s)")
-    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
-            type=float, metavar='<float>',
-            help="additive smoothing parameter for Viterbi training "
-                 "and segmentation (default %(default)s)")
-    add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
-            type=int, metavar='<int>',
-            help="maximum construction length in Viterbi training "
-                 "and segmentation (default %(default)s)")
-
-    # Options for semi-supervised model training
-    add_arg = parser.add_argument_group(
-        'semi-supervised training options').add_argument
-    add_arg('-A', '--annotations', dest="annofile", default=None,
-            metavar='<file>',
-            help="load annotated data for semi-supervised learning")
-    add_arg('-D', '--develset', dest="develfile", default=None,
-            metavar='<file>',
-            help="load annotated data for tuning the corpus weight parameter")
-    add_arg('-w', '--corpusweight', dest="corpusweight", type=float,
-            default=1.0, metavar='<float>',
-            help="corpus weight parameter (default %(default)s); "
-                 "sets the initial value if --develset is used")
-    add_arg('-W', '--annotationweight', dest="annotationweight",
-            type=float, default=None, metavar='<float>',
-            help="corpus weight parameter for annotated data (if unset, the "
-                 "weight is set to balance the number of tokens in annotated "
-                 "and unannotated data sets)")
-
-    # Options for logging
-    add_arg = parser.add_argument_group('logging options').add_argument
-    add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
-            metavar='<int>',
-            help="verbose level; controls what is written to the standard "
-                 "error stream or log file (default %(default)s)")
-    add_arg('--logfile', dest='log_file', metavar='<file>',
-            help="write log messages to file in addition to standard "
-                 "error stream")
-    add_arg('--progressbar', dest='progress', default=False,
-            action='store_true',
-            help="Force the progressbar to be displayed (possibly lowers the "
-                 "log level for the standard error stream)")
-
-    add_arg = parser.add_argument_group('other options').add_argument
-    add_arg('-h', '--help', action='help',
-            help="show this help message and exit")
-    add_arg('--version', action='version',
-            version='%(prog)s ' + __version__,
-            help="show version number and exit")
-
-    return parser
-
-
-def main(args):
-    if args.verbose >= 2:
-        loglevel = logging.DEBUG
-    elif args.verbose >= 1:
-        loglevel = logging.INFO
-    else:
-        loglevel = logging.WARNING
-
-    logging_format = '%(asctime)s - %(message)s'
-    date_format = '%Y-%m-%d %H:%M:%S'
-    default_formatter = logging.Formatter(logging_format, date_format)
-    plain_formatter = logging.Formatter('%(message)s')
-    logging.basicConfig(level=loglevel)
-    _logger.propagate = False  # do not forward messages to the root logger
-
-    # Basic settings for logging to the error stream
-    ch = logging.StreamHandler()
-    ch.setLevel(loglevel)
-    ch.setFormatter(plain_formatter)
-    _logger.addHandler(ch)
-
-    # Settings for when log_file is present
-    if args.log_file is not None:
-        fh = logging.FileHandler(args.log_file, 'w')
-        fh.setLevel(loglevel)
-        fh.setFormatter(default_formatter)
-        _logger.addHandler(fh)
-        # If logging to a file, make INFO the highest level for the
-        # error stream
-        ch.setLevel(max(loglevel, logging.INFO))
-
-    # If debug messages are printed to screen or if stderr is not a tty (but
-    # a pipe or a file), don't show the progressbar
-    global show_progress_bar
-    if (ch.level > logging.INFO or
-            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
-        show_progress_bar = False
-
-    if args.progress:
-        show_progress_bar = True
-        ch.setLevel(min(ch.level, logging.INFO))
-
-    if (args.loadfile is None and
-            args.loadsegfile is None and
-            len(args.trainfiles) == 0):
-        raise ArgumentException("either model file or training data should "
-                                "be defined")
-
-    if args.randseed is not None:
-        random.seed(args.randseed)
-
-    io = MorfessorIO(encoding=args.encoding,
-                     compound_separator=args.cseparator,
-                     atom_separator=args.separator)
-
-    # Load exisiting model or create a new one
-    if args.loadfile is not None:
-        model = io.read_binary_model_file(args.loadfile)
-
-    else:
-        model = BaselineModel(forcesplit_list=args.forcesplit,
-                              corpusweight=args.corpusweight,
-                              use_skips=args.skips)
-
-    if args.loadsegfile is not None:
-        model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
-
-    analysis_sep = (args.analysisseparator
-                    if args.analysisseparator != 'NONE' else None)
-
-    if args.annofile is not None:
-        annotations = io.read_annotations_file(args.annofile,
-                                               analysis_sep=analysis_sep)
-        model.set_annotations(annotations, args.annotationweight)
-
-    if args.develfile is not None:
-        develannots = io.read_annotations_file(args.develfile,
-                                               analysis_sep=analysis_sep)
-    else:
-        develannots = None
-
-    # Set frequency dampening function
-    if args.dampening == 'none':
-        dampfunc = lambda x: x
-    elif args.dampening == 'log':
-        dampfunc = lambda x: int(round(math.log(x + 1, 2)))
-    elif args.dampening == 'ones':
-        dampfunc = lambda x: 1
-    else:
-        raise ArgumentException("unknown dampening type '%s'" % args.dampening)
-
-    # Set algorithm parameters
-    if args.algorithm == 'viterbi':
-        algparams = (args.viterbismooth, args.viterbimaxlen)
-    else:
-        algparams = ()
-
-    # Train model
-    if args.trainmode == 'none':
-        pass
-    elif args.trainmode == 'batch':
-        if len(model.get_compounds()) == 0:
-            _logger.warning("Model contains no compounds for batch training."
-                            " Use 'init+batch' mode to add new data.")
-        else:
-            if len(args.trainfiles) > 0:
-                _logger.warning("Training mode 'batch' ignores new data "
-                                "files. Use 'init+batch' or 'online' to "
-                                "add new compounds.")
-            ts = time.time()
-            e, c = model.train_batch(args.algorithm, algparams, develannots,
-                                     args.finish_threshold, args.maxepochs)
-            te = time.time()
-            _logger.info("Epochs: %s" % e)
-            _logger.info("Final cost: %s" % c)
-            _logger.info("Training time: %.3fs" % (te - ts))
-    elif len(args.trainfiles) > 0:
-        ts = time.time()
-        if args.trainmode == 'init':
-            for f in args.trainfiles:
-                if args.list:
-                    data = io.read_corpus_list_file(f)
-                else:
-                    data = io.read_corpus_file(f)
-            c = model.load_data(data, args.freqthreshold, dampfunc,
-                                args.splitprob)
-        elif args.trainmode == 'init+batch':
-            for f in args.trainfiles:
-                if args.list:
-                    data = io.read_corpus_list_file(f)
-                else:
-                    data = io.read_corpus_file(f)
-                model.load_data(data, args.freqthreshold, dampfunc,
-                                args.splitprob)
-            e, c = model.train_batch(args.algorithm, algparams, develannots,
-                                     args.finish_threshold, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
-        elif args.trainmode == 'online':
-            data = io.read_corpus_files(args.trainfiles)
-            e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams,
-                                      args.splitprob, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
-        elif args.trainmode == 'online+batch':
-            data = io.read_corpus_files(args.trainfiles)
-            e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams,
-                                      args.splitprob, args.maxepochs)
-            e, c = model.train_batch(args.algorithm, algparams, develannots,
-                                     args.finish_threshold, args.maxepochs - e)
-            _logger.info("Epochs: %s" % e)
-        else:
-            raise ArgumentException("unknown training mode '%s'"
-                                    % args.trainmode)
-        te = time.time()
-        _logger.info("Final cost: %s" % c)
-        _logger.info("Training time: %.3fs" % (te - ts))
-    else:
-        _logger.warning("No training data files specified.")
-
-    # Save model
-    if args.savefile is not None:
-        io.write_binary_model_file(args.savefile, model)
-
-    if args.savesegfile is not None:
-        io.write_segmentation_file(args.savesegfile, model.get_segmentations())
-
-    # Output lexicon
-    if args.lexfile is not None:
-        io.write_lexicon_file(args.lexfile, model.get_constructions())
-
-    # Segment test data
-    if len(args.testfiles) > 0:
-        _logger.info("Segmenting test data...")
-        outformat = args.outputformat
-        csep = args.outputformatseparator
-        if not PY3:
-            outformat = unicode(outformat)
-            csep = unicode(csep)
-        outformat = outformat.replace(r"\n", "\n")
-        outformat = outformat.replace(r"\t", "\t")
-        with io._open_text_file_write(args.outfile) as fobj:
-            testdata = io.read_corpus_files(args.testfiles)
-            i = 0
-            for count, compound, atoms in testdata:
-                constructions, logp = model.viterbi_segment(
-                    atoms, args.viterbismooth, args.viterbimaxlen)
-                analysis = csep.join(constructions)
-                fobj.write(outformat.format(
-                           analysis=analysis, compound=compound,
-                           count=count, logprob=logp))
-                i += 1
-                if i % 10000 == 0:
-                    sys.stderr.write(".")
-            sys.stderr.write("\n")
-        _logger.info("Done.")
-
-
-class ArgumentException(Exception):
-    pass
-
-if __name__ == "__main__":
-    parser = get_default_argparser()
-    try:
-        args = parser.parse_args(sys.argv[1:])
-        main(args)
-    except ArgumentException as e:
-        parser.error(e)
-    except Exception as e:
-        _logger.error("Fatal Error %s %s" % (type(e), e))
-        raise
