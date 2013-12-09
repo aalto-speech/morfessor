@@ -6,6 +6,8 @@ IO classes
 .. automodule:: morfessor.io
    :members:
 
+.. _baseline-model-label:
+
 Model class
 -----------
 .. automodule:: morfessor.baseline

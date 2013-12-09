@@ -14,6 +14,7 @@ Contents:
    license
    general
    installation
+   filetypes
    cmdtools
    libinterface
 
