@@ -35,4 +35,7 @@ setup(name='Morfessor',
                'scripts/morfessor-evaluate',
                ],
       install_requires=requires,
+      extras_require={
+          'docs': ['sphinx', 'sphinxcontrib-napoleon']
+      }
       )
