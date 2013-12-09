@@ -35,7 +35,8 @@ class BaselineModel(object):
 
     Implements training of and segmenting with a Morfessor model. The model
     is complete agnostic to whether it is used with lists of strings (finding
-     phrases in sentences) or strings of characters (finding morphs in words).
+    phrases in sentences) or strings of characters (finding morphs in words).
+
     """
 
     penalty = -9999.9

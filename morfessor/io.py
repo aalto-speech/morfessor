@@ -103,7 +103,7 @@ class MorfessorIO:
         """Read one corpus file.
 
         For each compound, yield (1, compound, compound_atoms).
-        After each line, yield (0, "\n", ()).
+        After each line, yield (0, \"\\n\", ()).
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)

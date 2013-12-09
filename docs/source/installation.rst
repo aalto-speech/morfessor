@@ -14,7 +14,7 @@ described on http://virtualenv.org.
 
 
 Installation from tarball or zip file
------------------------
+-------------------------------------
 
 The Morfessor 2.0 tarball and zip files can be downloaded from the
 `Morpho project homepage`_ (latest stable version) or from the
