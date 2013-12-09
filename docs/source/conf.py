@@ -244,7 +244,8 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
   ('index', 'Morfessor', u'Morfessor Documentation',
-   u'Sami Virpioja and Peter Smit', 'Morfessor', 'One line description of project.',
+   u'Sami Virpioja and Peter Smit', 'Morfessor',
+   'Tool for unsupervised and semi-supervised morphological segmentation.',
    'Miscellaneous'),
 ]
 
