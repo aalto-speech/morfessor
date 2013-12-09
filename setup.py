@@ -36,6 +36,6 @@ setup(name='Morfessor',
                ],
       install_requires=requires,
       extras_require={
-          'docs': ['sphinx', 'sphinxcontrib-napoleon']
+          'docs': [l.strip() for l in open('docs/build_requirements.txt')]
       }
       )
