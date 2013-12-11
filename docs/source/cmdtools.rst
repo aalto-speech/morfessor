@@ -10,66 +10,71 @@ and segmenting test data.
 
 Loading existing model
 ~~~~~~~~~~~~~~~~~~~~~~
-========= ==============================
--l <file> load binary model
--L <file> load Morfessor 1.0 style model
-========= ==============================
+-l <file>
+    load binary model
+-L <file>
+    load Morfessor 1.0 style model
+
 
 Loading data
 ~~~~~~~~~~~~
-================== == ===================
---traindata <file> -t input corpus file(s) for training (text or bz2/gzipped text; use '-' for standard input; add several times in order to append multiple files)
---traindata-list      input file(s) for batch training are lists (one compound per line, optionally count as a prefix)
---testdata <file>  -T input corpus file(s) to analyze (text or bz2/gzipped text; use '-' for standard input; add several times in order to append multiple files)
-================== == ===================
+--traindata <file> -t
+    input corpus file(s) for training (text or bz2/gzipped text; use '-'
+    for standard input; add several times in order to append multiple files)
+--traindata-list
+    input file(s) for batch training are lists (one compound per line, optionally count as a prefix)
+--testdata <file>  -T
+    input corpus file(s) to analyze (text or bz2/gzipped text; use '-' for standard input; add several times in order to append multiple files)
+
 
 Training model options
 ~~~~~~~~~~~~~~~~~~~~~~
-  -m <mode>, --mode <mode>
-                        training mode ('none', 'init', 'batch', 'init+batch',
-                        'online', or 'online+batch'; default 'init+batch')
-  -a <algorithm>, --algorithm <algorithm>
-                        algorithm type ('recursive', 'viterbi'; default
-                        'recursive')
-  -d <type>, --dampening <type>
-                        frequency dampening for training data ('none', 'log',
-                        or 'ones'; default 'none')
-  -f <list>, --forcesplit <list>
-                        force split on given atoms (default ['-'])
-  -F <float>, --finish-threshold <float>
-                        Stopping threshold. Training stops when the
-                        improvement of the last iteration issmaller then
-                        finish_threshold * #boundaries; (default '0.005')
-  -r <seed>, --randseed <seed>
-                        seed for random number generator
-  -R <float>, --randsplit <float>
-                        initialize new words by random splitting using the
-                        given split probability (default no splitting)
-  --skips               use random skips for frequently seen compounds to
-                        speed up training
-  --batch-minfreq <int>
-                        compound frequency threshold for batch training
-                        (default 1)
-  --max-epochs <int>    hard maximum of epochs in training
-  --nosplit-re <regexp>
-                        if the expression matches the two surrounding
-                        characters, do not allow splitting (default None)
-  --online-epochint <int>
-                        epoch interval for online training (default 10000)
-  --viterbi-smoothing <float>
-                        additive smoothing parameter for Viterbi training and
-                        segmentation (default 0)
-  --viterbi-maxlen <int>
-                        maximum construction length in Viterbi training and
-                        segmentation (default 30)
+-m <mode>, --mode <mode>
+    training mode ('none', 'init', 'batch', 'init+batch', 'online', or 'online+batch'; default 'init+batch')
+-a <algorithm>, --algorithm <algorithm>
+    algorithm type ('recursive', 'viterbi'; default'recursive')
+-d <type>, --dampening <type>
+    frequency dampening for training data ('none', 'log',
+    or 'ones'; default 'none')
+-f <list>, --forcesplit <list>
+    force split on given atoms (default ['-'])
+-F <float>, --finish-threshold <float>
+    Stopping threshold. Training stops when the
+    improvement of the last iteration issmaller then
+    finish_threshold * #boundaries; (default '0.005')
+-r <seed>, --randseed <seed>
+    seed for random number generator
+-R <float>, --randsplit <float>
+    initialize new words by random splitting using the
+    given split probability (default no splitting)
+--skips
+    use random skips for frequently seen compounds to
+    speed up training
+--batch-minfreq <int>
+    compound frequency threshold for batch training
+    (default 1)
+--max-epochs <int>
+    hard maximum of epochs in training
+--nosplit-re <regexp>
+    if the expression matches the two surrounding
+    characters, do not allow splitting (default None)
+--online-epochint <int>
+    epoch interval for online training (default 10000)
+--viterbi-smoothing <float>
+    additive smoothing parameter for Viterbi training and
+    segmentation (default 0)
+--viterbi-maxlen <int>
+    maximum construction length in Viterbi training and
+    segmentation (default 30)
 
 
 Saving model
 ~~~~~~~~~~~~
-========= ==============================
--s <file> save binary model
--S <file> save Morfessor 1.0 style model
-========= ==============================
+-s <file>
+    save binary model
+-S <file>
+    save Morfessor 1.0 style model
+
 
 morfessor-train
 ---------------
@@ -82,10 +87,11 @@ The basic command structure is: ::
 
 The arguments are identical to the ones for the `morfessor`_ command. The most relevant are:
 
-========= ==============================
--s <file> save binary model
--S <file> save Morfessor 1.0 style model
-========= ==============================
+-s <file>
+    save binary model
+-S <file>
+    save Morfessor 1.0 style model
+
 
 
 
