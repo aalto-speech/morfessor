@@ -35,7 +35,8 @@ class BaselineModel(object):
 
     Implements training of and segmenting with a Morfessor model. The model
     is complete agnostic to whether it is used with lists of strings (finding
-     phrases in sentences) or strings of characters (finding morphs in words).
+    phrases in sentences) or strings of characters (finding morphs in words).
+
     """
 
     penalty = -9999.9
@@ -45,10 +46,10 @@ class BaselineModel(object):
         """Initialize a new model instance.
 
         Arguments:
-            forcesplit_list -- force segmentations on the characters in
+            forcesplit_list: force segmentations on the characters in
                                the given list
-            corpusweight -- weight for the corpus cost
-            use_skips -- randomly skip frequently occurring constructions
+            corpusweight: weight for the corpus cost
+            use_skips: randomly skip frequently occurring constructions
                          to speed up training
 
         """
@@ -107,8 +108,8 @@ class BaselineModel(object):
         """Return a random split for compound.
 
         Arguments:
-            compound -- compound to split
-            threshold -- probability of splitting at each position
+            compound: compound to split
+            threshold: probability of splitting at each position
 
         """
         splitloc = [i for i in range(1, len(compound))
@@ -119,9 +120,9 @@ class BaselineModel(object):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
-            compound -- compound to split
-            parts -- desired constructions of the compound
-            ptype -- type of the parse tree to use
+            compound: compound to split
+            parts: desired constructions of the compound
+            ptype: type of the parse tree to use
 
         If ptype is 'rbranch', the analysis is stored internally as a
         right-branching tree. If ptype is 'flat', the analysis is stored
@@ -231,9 +232,9 @@ class BaselineModel(object):
         """Optimize segmentation of the compound using the Viterbi algorithm.
 
         Arguments:
-          compound -- compound to optimize
-          addcount -- constant for additive smoothing of Viterbi probs
-          maxlen -- maximum length for a construction
+          compound: compound to optimize
+          addcount: constant for additive smoothing of Viterbi probs
+          maxlen: maximum length for a construction
 
         Returns list of segments.
 
@@ -443,13 +444,13 @@ class BaselineModel(object):
         """Load data to initialize the model for batch training.
 
         Arguments:
-            data -- iterator/generator of (count, compound, atoms) tuples
-            corpus -- corpus instance
-            freqthreshold -- discard compounds that occur less than
+            data: iterator/generator of (count, compound, atoms) tuples
+            corpus: corpus instance
+            freqthreshold: discard compounds that occur less than
                              given times in the corpus (default 1)
-            count_modifier -- function for adjusting the counts of each
+            count_modifier: function for adjusting the counts of each
                               compound
-            init_rand_split -- If given, random split the word with
+            init_rand_split: If given, random split the word with
                                init_rand_split as the probability for each
                                split
 
@@ -523,7 +524,7 @@ class BaselineModel(object):
         """Train the model in batch fashion.
 
         The model is trained with the data already loaded into the model (by
-        using an existing model or calling one of the load_ methods).
+        using an existing model or calling one of the load\_ methods).
 
         In each iteration (epoch) all compounds in the training data are
         optimized once, in a random order. If applicable, corpus weight,
@@ -531,14 +532,14 @@ class BaselineModel(object):
         each iteration.
 
         Arguments:
-            algorithm -- string in ('recursive', 'viterbi') that indicates
+            algorithm: string in ('recursive', 'viterbi') that indicates
                          the splitting algorithm used.
-            algorithm_params -- parameters passed to the splitting algorithm.
-            devel_annotations -- an annotated dataset (iterator of
+            algorithm_params: parameters passed to the splitting algorithm.
+            devel_annotations: an annotated dataset (iterator of
                                  (compound, [analyses]) tuples) used for
                                  controlling the weight of the corpus
                                  encoding.
-            finish_threshold -- the stopping threshold. Training stops when
+            finish_threshold: the stopping threshold. Training stops when
                                 the improvement of the last iteration is
                                 smaller then finish_threshold * #boundaries
 
@@ -602,7 +603,7 @@ class BaselineModel(object):
 
         The model is trained with the data provided in the data argument.
         As example the data could come from a generator linked to standard in
-         for live monitoring of the splitting.
+        for live monitoring of the splitting.
 
         All compounds from data are only optimized once. After online
         training, batch training could be used for further optimization.
@@ -612,17 +613,17 @@ class BaselineModel(object):
         are recalculated if applicable.
 
         Arguments:
-            data -- iterator/generator of (_, _, compound) tuples. The first
+            data: iterator/generator of (_, _, compound) tuples. The first
                     two arguments are ignored, as every occurence of the
                     compound is taken with count 1
-            count_modifier -- function for adjusting the counts of each
+            count_modifier: function for adjusting the counts of each
                               compound
-            epoch_interval -- number of compounds to process before starting
+            epoch_interval: number of compounds to process before starting
                               a new epoch
-            algorithm -- string in ('recursive', 'viterbi') that indicates
+            algorithm: string in ('recursive', 'viterbi') that indicates
                          the splitting algorithm used.
-            algorithm_params -- parameters passed to the splitting algorithm.
-            init_rand_split -- probability for random splitting a compound to
+            algorithm_params: parameters passed to the splitting algorithm.
+            init_rand_split: probability for random splitting a compound to
                                at any point for initializing the model. None
                                or 0 means no random splitting.
 
@@ -692,9 +693,9 @@ class BaselineModel(object):
         """Find optimal segmentation using the Viterbi algorithm.
 
         Arguments:
-          compound -- compound to be segmented
-          addcount -- constant for additive smoothing (0 = no smoothing)
-          maxlen -- maximum length for the constructions
+          compound: compound to be segmented
+          addcount: constant for additive smoothing (0 = no smoothing)
+          maxlen: maximum length for the constructions
 
         If additive smoothing is applied, new complex construction types can
         be selected during the search. Without smoothing, only new
@@ -786,7 +787,7 @@ class BaselineModel(object):
         """Find log-probability of a compound using the forward algorithm.
 
         Arguments:
-          compound -- compound to process
+          compound: compound to process
 
         Returns the (negative) log-probability of the compound. If the
         probability is zero, returns a number that is larger than the
@@ -835,9 +836,9 @@ class BaselineModel(object):
         """Find top-n optimal segmentations using the Viterbi algorithm.
 
         Arguments:
-          compound -- compound to be segmented
-          addcount -- constant for additive smoothing (0 = no smoothing)
-          maxlen -- maximum length for the constructions
+          compound: compound to be segmented
+          addcount: constant for additive smoothing (0 = no smoothing)
+          maxlen: maximum length for the constructions
 
         If additive smoothing is applied, new complex construction types can
         be selected during the search. Without smoothing, only new
@@ -947,8 +948,8 @@ class AnnotationsModelUpdate:
         """Initialize class with the development data and the model to update.
 
         Arguments:
-            data -- iterator of (compound, [analyses,]) tuples.
-            model -- BaselineModel to update
+            data: iterator of (compound, [analyses,]) tuples.
+            model: BaselineModel to update
         """
         self.data = data
         self.model = model
@@ -1013,9 +1014,9 @@ class AnnotationsModelUpdate:
         and recall values for the given sample of segmented data.
 
         Arguments:
-          segments -- list of predicted segmentations
-          annotations -- list of reference segmentations
-          threshold -- maximum threshold for the difference between
+          segments: list of predicted segmentations
+          annotations: list of reference segmentations
+          threshold: maximum threshold for the difference between
                        predictions and reference
 
         Return 1 in the case of oversegmentation, -1 in the case of
@@ -1045,7 +1046,7 @@ class Encoding(object):
         """Initizalize class
 
         Arguments:
-            weight -- weight used for this encoding
+            weight: weight used for this encoding
         """
         self.logtokensum = 0.0
         self.tokens = 0
@@ -1173,12 +1174,12 @@ class AnnotatedCorpusEncoding(Encoding):
         Initialize encoding with appropriate meta data
 
         Arguments:
-            corpus_coding -- CorpusEncoding instance used for retrieving the
+            corpus_coding: CorpusEncoding instance used for retrieving the
                              number of tokens and boundaries in the corpus
-            weight -- The weight of this encoding. If the weight is None,
+            weight: The weight of this encoding. If the weight is None,
                       it is updated automatically to be in balance with the
                       corpus
-            penalty -- log penalty used for missing constructions
+            penalty: log penalty used for missing constructions
 
         """
         super(AnnotatedCorpusEncoding, self).__init__()
