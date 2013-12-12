@@ -20,7 +20,7 @@ User instructions for Morfessor 2.0 are available in the docs directory
 as Sphinx source files (see http://sphinx-doc.org/). Instructions how
 to build the documentation can be found in docs/README.
 
-The documentation is also available on-line at XXX
+The documentation is also available on-line at http://morfessor.readthedocs.org/
 
 Details of the implemented algorithms and methods and a set of
 experiments are described in the following technical report:

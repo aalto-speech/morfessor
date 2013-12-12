@@ -29,6 +29,22 @@ Evaluation classes
 Code Examples for using library interface
 =========================================
 
+Segmenting new data using an existing model
+-------------------------------------------
+::
+
+    import morfessor
+
+    io = morfessor.MorfessorIO()
+
+    model = io.read_binary_model('model.bin')
+
+    words = ['words', 'segmenting', 'morfessor', 'unsupervised']
+
+    for word in words:
+        print(model.viterbi_segment(word))
+
+
 Testing type vs token models
 ----------------------------
 ::

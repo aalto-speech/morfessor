@@ -47,7 +47,8 @@ Training model options
     model. The modes are:
 
     none
-        Do not do any actions
+        Do initialize or train a model. Can be used when just loading a model
+        for segmenting new data
     init
         Create new model and load input data. Does not train the model
     batch
@@ -113,15 +114,15 @@ Training model options
 ``--max-epochs <int>``
     Hard maximum of epochs in training
 ``--nosplit-re <regexp>``
-    if the expression matches the two surrounding
+    If the expression matches the two surrounding
     characters, do not allow splitting (default None)
 ``--online-epochint <int>``
-    epoch interval for online training (default 10000)
+    Epoch interval for online training (default 10000)
 ``--viterbi-smoothing <float>``
-    additive smoothing parameter for Viterbi training and
-    segmentation (default 0)
+    Additive smoothing parameter for Viterbi training and
+    segmentation (default 0).
 ``--viterbi-maxlen <int>``
-    maximum construction length in Viterbi training and
+    Maximum construction length in Viterbi training and
     segmentation (default 30)
 
 
@@ -220,8 +221,13 @@ Universal command line options
 
 
 
-Features
-========
+Morfessor features
+==================
+
+All features below are described in a short format, mainly to guide making the
+right choice for a certain parameter. These features are explained in detail in
+the Morfessor 2.0 Technical Report.
+
 
 .. _`batch-training`:
 
@@ -239,7 +245,7 @@ Run through data incrementally
 
 Recursive training
 ------------------
-Recursive splitting explained
+Recur
 
 .. _`viterbi-training`:
 

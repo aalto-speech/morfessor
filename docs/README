@@ -15,3 +15,5 @@ formats using the Makefile or make.bat in the directory "docs". For
 example, to generate a PDF file, type "make latexpdf", and to generate
 a single HTML file, type "make singlehtml". Type "make help" to see
 all available formats.
+
+The documentation can also be read online on http://morfessor.readthedocs.org/

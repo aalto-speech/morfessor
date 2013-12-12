@@ -1,6 +1,18 @@
 General
 =======
 
+.. _morfessor-tech-report:
+
+Morfessor 2.0 Technical Report
+------------------------------
+
+The work done in Morfessor 2.0 is described in detail in the Morfessor 2.0
+Technical Report [TechRep]_. The report is available for download from
+AaltoDoc_.
+
+.. _AaltoDoc: https://aaltodoc.aalto.fi/
+
+
 Terminology
 -----------
 
