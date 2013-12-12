@@ -37,7 +37,7 @@ Segmenting new data using an existing model
 
     io = morfessor.MorfessorIO()
 
-    model = io.read_binary_model('model.bin')
+    model = io.read_binary_model_file('model.bin')
 
     words = ['words', 'segmenting', 'morfessor', 'unsupervised']
 

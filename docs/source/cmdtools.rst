@@ -130,10 +130,16 @@ Saving model
 ~~~~~~~~~~~~
 
 ``-s <file>``
-    save binary model
+    save  :ref:`binary-model-def`
 ``-S <file>``
-    save Morfessor 1.0 style model
+    save  :ref:`morfessor1-model-def`
 
+Examples
+~~~~~~~~
+Training a model from inputdata.txt, saving a :ref:`morfessor1-model-def` and
+segmenting the test.txt set: ::
+
+    morfessor -t inputdata.txt -S model.segm -T test.txt
 
 morfessor-train
 ---------------
@@ -144,15 +150,20 @@ The basic command structure is: ::
 
     morfessor-train [arguments] traindata-file [traindata-file ...]
 
-The arguments are identical to the ones for the `morfessor`_ command. The most relevant are:
+The arguments are identical to the ones for the `morfessor`_ command. The most
+relevant are:
 
 ``-s <file>``
     save binary model
 ``-S <file>``
     save Morfessor 1.0 style model
 
+Examples
+~~~~~~~~
+Train a morfessor model from a wordcount list in ISO_8859-15, doing type based
+training, writing the log to logfile and saving them model as model.bin: ::
 
-
+    morfessor-train --encoding=ISO_8859-15 --traindata-list --logfile=log.log -s model.bin -d ones traindata.txt
 
 morfessor-segment
 -----------------
@@ -163,19 +174,69 @@ The basic command structure is: ::
 
     morfessor-segment [arguments] testcorpus-file [testcorpus-file ...]
 
-The arguments are identical to the ones for the `morfessor`_ command. The most relevant are:
+The arguments are identical to the ones for the `morfessor`_ command. The most
+ relevant are:
 
 ``-l <file>``
     load binary model
 ``-L <file>``
     load Morfessor 1.0 style model
 
+Examples
+~~~~~~~~
+Loading a binary model and segmenting the words in testdata.txt: ::
+
+    morfessor-segment -l model.bin testdata.txt
 
 morfessor-evaluate
 ------------------
 The morfessor-evaluate command is used for evaluating a morfessor model against
 a gold-standard. If multiple models are evaluated, it reports statistical
 significant differences between them.
+
+The basic command structure is: ::
+
+    morfessor-evaluate [arguments] <goldstandard> <model> [<model> ...]
+
+
+Positional arguments
+~~~~~~~~~~~~~~~~~~~~
+``<goldstandard>``
+    gold standard file in standard annotation format
+``<model>``
+    model files to segment (either binary or Morfessor 1.0 style segmentation
+    models).
+
+Optional arguments
+~~~~~~~~~~~~~~~~~~
+``-t TEST_SEGMENTATIONS, --testsegmentation TEST_SEGMENTATIONS``
+    Segmentation of the test set. Note that all words in the gold-standard must
+     be segmented
+
+``--num-samples <int>``
+    number of samples to take for testing
+``--sample-size <int>``
+    size of each testing samples
+``--format-string <format>``
+    Python new style format string used to report evaluation results. The
+    following variables are a value and and action separated with and
+    underscore. E.g. fscore_avg for the average f-score. The available
+    values are "precision", "recall", "fscore", "samplesize" and the available
+    actions: "avg", "max", "min", "values", "count". A last meta-data variable
+    (without action) is "name", the filename of the model. See also the
+    format-template option for predefined strings.
+``--format-template <template>``
+    Uses a template string for the format-string options. Available templates
+    are: default, table and latex. If format-string is defined this option is
+    ignored.
+
+Examples
+~~~~~~~~
+
+Evaluating three different models against a golden standard, outputting the
+results in latex table format:::
+
+    morfessor-evaluate --format-template=latex goldstd.txt model1.bin model2.segm model3.bin
 
 .. _data-format-options:
 
@@ -184,20 +245,27 @@ Data format command line options
 
 
 ``--encoding <encoding>``
-    encoding of input and output files (if none is given, both the local
-    encoding and UTF-8 are tried)
+    Encoding of input and output files (if none is given, both the local
+    encoding and UTF-8 are tried).
 ``--lowercase``
     lowercase input data
 ``--traindata-list``
-    input file(s) for batch training are lists (one compound per line, optionally count as a prefix)
+    input file(s) for batch training are lists (one compound per line,
+    optionally count as a prefix)
 ``--atom-separator <regexp>``
     atom separator regexp (default None)
 ``--compound-separator <regexp>``
     compound separator regexp (default '\s+')
 ``--analysis-separator <str>``
-    separator for different analyses in an annotation file. Use NONE for only allowing one analysis per line
+    separator for different analyses in an annotation file. Use NONE for only
+    allowing one analysis per line
 ``--output-format <format>``
-    format string for --output file (default: '{analysis}\n'). Valid keywords are: {analysis} = constructions of the compound, {compound} = compound string, {count} = count of the compound (currently always 1), {logprob} = log-probability of the analysis, and {clogprob} = log-probability of the compound. Valid escape sequences are '\n' (newline) and '\t' (tabular)
+    format string for --output file (default: '{analysis}\\n'). Valid keywords
+    are: ``{analysis}`` = constructions of the compound, ``{compound}`` =
+    compound string, {count} = count of the compound (currently always 1),
+    ``{logprob}`` = log-probability of the analysis, and ``{clogprob}`` =
+    log-probability of the compound. Valid escape sequences are ``\n`` (newline)
+    and ``\t`` (tabular)
 ``--output-format-separator <str>``
     construction separator for analysis in --output file (default: ' ')
 ``--output-newlines``

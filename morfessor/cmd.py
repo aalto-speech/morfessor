@@ -511,7 +511,7 @@ def get_evaluation_argparser():
                  'average f-score. The available values are "precision", '
                  '"recall", "fscore", "samplesize" and the available actions: '
                  '"avg", "max", "min", "values", "count". A last meta-data '
-                 'variable (withoug action) is "name", the filename of the '
+                 'variable (without action) is "name", the filename of the '
                  'model See also the format-template option for predefined '
                  'strings')
     add_arg('--format-template', dest='template', metavar='<template>',
