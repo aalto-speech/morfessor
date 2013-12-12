@@ -12,52 +12,106 @@ Loading existing model
 ~~~~~~~~~~~~~~~~~~~~~~
 
 ``-l <file>``
-    load binary model
+    load :ref:`binary-model-def`
 ``-L <file>``
-    load Morfessor 1.0 style model
+    load :ref:`morfessor1-model-def`
 
 
 Loading data
 ~~~~~~~~~~~~
 
-``--traindata <file>``
-    input corpus file(s) for training (text or bz2/gzipped text; use '-'
-    for standard input; add several times in order to append multiple files)
+``-t <file>, --traindata <file>``
+    Input corpus file(s) for training (text or bz2/gzipped text; use '-'
+    for standard input; add several times in order to append multiple files).
+    Standard, all sentences are split on whitespace and the tokens are used as
+    compounds. The ``--traindata-list`` option can be used to read all input
+    files as a list of compounds, one compound per line optionally prefixed by
+    a count. See :ref:`data-format-options` for changing the delimiters used for
+    separating compounds and atoms.
 ``--traindata-list``
-    input file(s) for batch training are lists (one compound per line, optionally count as a prefix)
-``--testdata <file> \-T``
-    input corpus file(s) to analyze (text or bz2/gzipped text; use '-' for standard input; add several times in order to append multiple files)
+    Interpret all training files as list files instead of corpus files. A list
+    file contains one compound per line with optionally a count as prefix.
+``-T <file>, --testdata <file>``
+    Input corpus file(s) to analyze (text or bz2/gzipped text; use '-' for
+    standard input; add several times in order to append multiple files). The
+    file is read in the same manner as an input corpus file. See
+    :ref:`data-format-options` for changing the delimiters used for
+    separating compounds and atoms.
 
 
 Training model options
 ~~~~~~~~~~~~~~~~~~~~~~
 
 ``-m <mode>, --mode <mode>``
-    training mode ('none', 'init', 'batch', 'init+batch', 'online', or 'online+batch'; default 'init+batch')
+    Morfessor can run in different modes, each doing different actions on the
+    model. The modes are:
+
+    none
+        Do not do any actions
+    init
+        Create new model and load input data. Does not train the model
+    batch
+        Loads an existing model (which is already initialized with training
+        data) and run :ref:`batch-training`
+    init+batch
+        Create a new model, load input data and run :ref:`batch-training`.
+        **Default**
+    online
+        Create a new model, read and train the model concurrently as described
+        in :ref:`online-training`
+    online+batch
+        First read and train the model concurrently as described in
+        :ref:`online-training` and after that retrain the model using
+        :ref:`batch-training`
+
+
 ``-a <algorithm>, --algorithm <algorithm>``
-    algorithm type ('recursive', 'viterbi'; default'recursive')
+    Algorithm to use for training:
+
+    recursive
+        Recursive as descirbed in :ref:`recursive-training` **Default**
+    viterbi
+        Viterbi as described in :ref:`viterbi-training`
+
 ``-d <type>, --dampening <type>``
-    frequency dampening for training data ('none', 'log',
-    or 'ones'; default 'none')
+    Method for changing the compound counts in the input data. Options:
+
+    none
+        Do not alter the counts of compounds (token based training)
+    log
+        Change the count :math:`x` of a compound to :math:`\log(x)` (log-token
+        based training)
+    ones
+        Treat all compounds as if they only occured once (type based training)
+
 ``-f <list>, --forcesplit <list>``
-    force split on given atoms (default ['-'])
+    A list of atoms that would always cause the compound to be split. By
+    default only hyphens (``-``) would force a split. Note the notation of the
+    argument list. To have no force split characters, use as an empty string as
+    argument (``-f ""``). To split, for example, both hyphen (``-``) and
+    apostrophe (``'``) use ``-f "-'"``
+
 ``-F <float>, --finish-threshold <float>``
-    Stopping threshold. Training stops when the
-    improvement of the last iteration issmaller then
-    finish_threshold * #boundaries; (default '0.005')
+    Stopping threshold. Training stops when the decrease in model cost of the
+    last iteration is smaller then finish_threshold * #boundaries; (default
+    '0.005')
+
 ``-r <seed>, --randseed <seed>``
-    seed for random number generator
+    Seed for random number generator
+
 ``-R <float>, --randsplit <float>``
-    initialize new words by random splitting using the
-    given split probability (default no splitting)
+    Initialize new words by random splitting using the
+    given split probability (default no splitting). See :ref:`rand-init`
+
 ``--skips``
-    use random skips for frequently seen compounds to
-    speed up training
+    Use random skips for frequently seen compounds to
+    speed up training. See :ref:`rand-init`
+
 ``--batch-minfreq <int>``
-    compound frequency threshold for batch training
+    Compound frequency threshold for batch training
     (default 1)
 ``--max-epochs <int>``
-    hard maximum of epochs in training
+    Hard maximum of epochs in training
 ``--nosplit-re <regexp>``
     if the expression matches the two surrounding
     characters, do not allow splitting (default None)
@@ -122,6 +176,7 @@ The morfessor-evaluate command is used for evaluating a morfessor model against
 a gold-standard. If multiple models are evaluated, it reports statistical
 significant differences between them.
 
+.. _data-format-options:
 
 Data format command line options
 --------------------------------
@@ -162,3 +217,42 @@ Universal command line options
     -h show this help message and exit
 ``--version``
     show version number and exit
+
+
+
+Features
+========
+
+.. _`batch-training`:
+
+Batch training
+--------------
+Run over all data at once
+
+.. _`online-training`:
+
+Online training
+---------------
+Run through data incrementally
+
+.. _`recursive-training`:
+
+Recursive training
+------------------
+Recursive splitting explained
+
+.. _`viterbi-training`:
+
+Viterbi training
+----------------
+Viterbi training explained
+
+.. _`rand-skips`:
+
+Random skips
+------------
+
+.. _`rand-init`:
+
+Random initialization
+---------------------

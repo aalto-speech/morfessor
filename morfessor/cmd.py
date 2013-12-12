@@ -165,7 +165,8 @@ Interactive use (read corpus from user):
                  "'ones'; default '%(default)s')")
     add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
             metavar='<list>',
-            help="force split on given atoms (default %(default)s)")
+            help="force split on given atoms (default '-'). The list argument "
+                 "is a string of characthers, use '' for no forced splits.")
     add_arg('-F', '--finish-threshold', dest='finish_threshold', type=float,
             default=0.005, metavar='<float>',
             help="Stopping threshold. Training stops when "
