@@ -226,39 +226,65 @@ Morfessor features
 
 All features below are described in a short format, mainly to guide making the
 right choice for a certain parameter. These features are explained in detail in
-the Morfessor 2.0 Technical Report.
+the :ref:`morfessor-tech-report`.
 
 
 .. _`batch-training`:
 
 Batch training
 --------------
-Run over all data at once
+In batch training, each epoch consists of an iteration over the full training
+data. Epochs are repeated until the model cost is converged. All training data
+needed in the training needs to be loaded before the training starts.
 
 .. _`online-training`:
 
 Online training
 ---------------
-Run through data incrementally
+In online training the model is updated while the data is being added. This
+allows for rapid testing and prototyping. All data is only processed once,
+hence it is advisable to run :ref:`batch-training` afterwards. The size of an
+epoch is a fixed, predefined number of compounds processed. The only use of an
+epoch for online training is to select the best annotations in semi-supervised
+training.
 
 .. _`recursive-training`:
 
 Recursive training
 ------------------
-Recur
+In recursive training, each compound is processed in the following manner. The
+current split for the compound is removed from the model and its constructions
+are updated accordingly. After this, all possible splits are tried, by choosing
+one split and running the algorithm recursively on the created constructions.
+
+In the end, the best split is selected and the training continues with the next
+compound.
 
 .. _`viterbi-training`:
 
-Viterbi training
-----------------
-Viterbi training explained
+Local Viterbi training
+----------------------
+In Local Viterbi training the compounds are processed sequentially. Each
+compound is removed from the corpus and afterwards segmented using Viterbi
+segmentation. The result is put back into the model.
+
+In order to allow new constructions to be created, the smoothing parameter
+must be given some non-zero value.
 
 .. _`rand-skips`:
 
 Random skips
 ------------
+In Random skips, frequently seen compounds are skipped in training with a
+random probability. As shown in the :ref:`morfessor-tech-report` this speeds
+up the training considerably with only a minor loss in model performance.
 
 .. _`rand-init`:
 
 Random initialization
 ---------------------
+In random initialization all compounds are split randomly. Each possible
+boundary is made a split with the given probability.
+
+Selecting a good random initialization parameter helps in finding local optima
+as long as the split probability is high enough.

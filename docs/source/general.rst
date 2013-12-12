@@ -8,9 +8,7 @@ Morfessor 2.0 Technical Report
 
 The work done in Morfessor 2.0 is described in detail in the Morfessor 2.0
 Technical Report [TechRep]_. The report is available for download from
-AaltoDoc_.
-
-.. _AaltoDoc: https://aaltodoc.aalto.fi/
+http://urn.fi/URN:ISBN:978-952-60-5501-5.
 
 
 Terminology
@@ -34,9 +32,14 @@ words.
 Citing
 ------
 
-The authors do kindly ask that you cite the Morfessor 2.0 techical report [TechRep]_ when using this tool in academic publications.
+The authors do kindly ask that you cite the Morfessor 2.0 techical report
+ [TechRep]_ when using this tool in academic publications.
 
-In addition, when you refer to the Morfessor algorithms, you should cite the respective publications where they have been introduced. For example, the first Morfessor algorithm was published in [Creutz2002]_ and the semi-supervised extension in [Kohonen2010]_. See [TechRep]_ for further information on the relevant publications.
+In addition, when you refer to the Morfessor algorithms, you should cite the
+respective publications where they have been introduced. For example, the first
+Morfessor algorithm was published in [Creutz2002]_ and the semi-supervised
+extension in [Kohonen2010]_. See [TechRep]_ for further information on the
+relevant publications.
 
 .. [TechRep] Sami Virpioja, Peter Smit, Stig-Arne Grönroos, and Mikko Kurimo. Morfessor 2.0: Python Implementation and Extensions for Morfessor Baseline. Aalto University publication series SCIENCE + TECHNOLOGY, 25/2013. Aalto University, Helsinki, 2013. ISBN 978-952-60-5501-5.
 
