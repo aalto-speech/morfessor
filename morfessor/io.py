@@ -42,7 +42,7 @@ class MorfessorIO:
             self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
         self.lowercase = lowercase
 
-    def read_segmentation_file(self, file_name, **kwargs):
+    def read_segmentation_file(self, file_name, has_counts=True, **kwargs):
         """Read segmentation file.
 
         File format:
@@ -51,7 +51,10 @@ class MorfessorIO:
         """
         _logger.info("Reading segmentations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
-            count, compound = line.split(' ', 1)
+            if has_counts:
+                count, compound = line.split(' ', 1)
+            else:
+                count, compound = 1, line
             yield int(count), compound.split(self.construction_separator)
         _logger.info("Done.")
 
@@ -100,7 +103,7 @@ class MorfessorIO:
         """Read one corpus file.
 
         For each compound, yield (1, compound, compound_atoms).
-        After each line, yield (0, "\n", ()).
+        After each line, yield (0, \"\\n\", ()).
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
@@ -151,8 +154,9 @@ class MorfessorIO:
 
             if analysis_sep is not None:
                 for analysis in analyses_line.split(analysis_sep):
+                    analysis = analysis.strip()
                     annotations[compound].append(
-                        analysis.split(construction_separator))
+                        analysis.strip().split(construction_separator))
             else:
                 annotations[compound].append(
                     analyses_line.split(construction_separator))
@@ -182,6 +186,23 @@ class MorfessorIO:
         with open(file_name, 'wb') as fobj:
             pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
         _logger.info("Done.")
+
+    def read_any_model(self, file_name):
+        """Read a file that is either a binary model or a Morfessor 1.0 style
+        model segmentation. This method can not be used on standard input as
+        data might need to be read multiple times"""
+        try:
+            model = self.read_binary_model_file(file_name)
+            _logger.info("%s was read as a binary model" % file_name)
+            return model
+        except BaseException:
+            pass
+
+        from morfessor import BaselineModel
+        model = BaselineModel()
+        model.load_segmentations(self.read_segmentation_file(file_name))
+        _logger.info("%s was read as a segmentation" % file_name)
+        return model
 
     def _split_atoms(self, construction):
         """Split construction to its atoms."""

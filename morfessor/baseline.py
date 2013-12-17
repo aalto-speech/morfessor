@@ -1,4 +1,5 @@
 import collections
+import heapq
 import logging
 import math
 import random
@@ -34,7 +35,8 @@ class BaselineModel(object):
 
     Implements training of and segmenting with a Morfessor model. The model
     is complete agnostic to whether it is used with lists of strings (finding
-     phrases in sentences) or strings of characters (finding morphs in words).
+    phrases in sentences) or strings of characters (finding morphs in words).
+
     """
 
     penalty = -9999.9
@@ -44,10 +46,10 @@ class BaselineModel(object):
         """Initialize a new model instance.
 
         Arguments:
-            forcesplit_list -- force segmentations on the characters in
+            forcesplit_list: force segmentations on the characters in
                                the given list
-            corpusweight -- weight for the corpus cost
-            use_skips -- randomly skip frequently occurring constructions
+            corpusweight: weight for the corpus cost
+            use_skips: randomly skip frequently occurring constructions
                          to speed up training
 
         """
@@ -106,8 +108,8 @@ class BaselineModel(object):
         """Return a random split for compound.
 
         Arguments:
-            compound -- compound to split
-            threshold -- probability of splitting at each position
+            compound: compound to split
+            threshold: probability of splitting at each position
 
         """
         splitloc = [i for i in range(1, len(compound))
@@ -118,9 +120,9 @@ class BaselineModel(object):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
-            compound -- compound to split
-            parts -- desired constructions of the compound
-            ptype -- type of the parse tree to use
+            compound: compound to split
+            parts: desired constructions of the compound
+            ptype: type of the parse tree to use
 
         If ptype is 'rbranch', the analysis is stored internally as a
         right-branching tree. If ptype is 'flat', the analysis is stored
@@ -230,9 +232,9 @@ class BaselineModel(object):
         """Optimize segmentation of the compound using the Viterbi algorithm.
 
         Arguments:
-          compound -- compound to optimize
-          addcount -- constant for additive smoothing of Viterbi probs
-          maxlen -- maximum length for a construction
+          compound: compound to optimize
+          addcount: constant for additive smoothing of Viterbi probs
+          maxlen: maximum length for a construction
 
         Returns list of segments.
 
@@ -442,13 +444,13 @@ class BaselineModel(object):
         """Load data to initialize the model for batch training.
 
         Arguments:
-            data -- iterator/generator of (count, compound, atoms) tuples
-            corpus -- corpus instance
-            freqthreshold -- discard compounds that occur less than
+            data: iterator/generator of (count, compound, atoms) tuples
+            corpus: corpus instance
+            freqthreshold: discard compounds that occur less than
                              given times in the corpus (default 1)
-            count_modifier -- function for adjusting the counts of each
+            count_modifier: function for adjusting the counts of each
                               compound
-            init_rand_split -- If given, random split the word with
+            init_rand_split: If given, random split the word with
                                init_rand_split as the probability for each
                                split
 
@@ -522,7 +524,7 @@ class BaselineModel(object):
         """Train the model in batch fashion.
 
         The model is trained with the data already loaded into the model (by
-        using an existing model or calling one of the load_ methods).
+        using an existing model or calling one of the load\_ methods).
 
         In each iteration (epoch) all compounds in the training data are
         optimized once, in a random order. If applicable, corpus weight,
@@ -530,14 +532,14 @@ class BaselineModel(object):
         each iteration.
 
         Arguments:
-            algorithm -- string in ('recursive', 'viterbi') that indicates
+            algorithm: string in ('recursive', 'viterbi') that indicates
                          the splitting algorithm used.
-            algorithm_params -- parameters passed to the splitting algorithm.
-            devel_annotations -- an annotated dataset (iterator of
+            algorithm_params: parameters passed to the splitting algorithm.
+            devel_annotations: an annotated dataset (iterator of
                                  (compound, [analyses]) tuples) used for
                                  controlling the weight of the corpus
                                  encoding.
-            finish_threshold -- the stopping threshold. Training stops when
+            finish_threshold: the stopping threshold. Training stops when
                                 the improvement of the last iteration is
                                 smaller then finish_threshold * #boundaries
 
@@ -601,7 +603,7 @@ class BaselineModel(object):
 
         The model is trained with the data provided in the data argument.
         As example the data could come from a generator linked to standard in
-         for live monitoring of the splitting.
+        for live monitoring of the splitting.
 
         All compounds from data are only optimized once. After online
         training, batch training could be used for further optimization.
@@ -611,17 +613,17 @@ class BaselineModel(object):
         are recalculated if applicable.
 
         Arguments:
-            data -- iterator/generator of (_, _, compound) tuples. The first
+            data: iterator/generator of (_, _, compound) tuples. The first
                     two arguments are ignored, as every occurence of the
                     compound is taken with count 1
-            count_modifier -- function for adjusting the counts of each
+            count_modifier: function for adjusting the counts of each
                               compound
-            epoch_interval -- number of compounds to process before starting
+            epoch_interval: number of compounds to process before starting
                               a new epoch
-            algorithm -- string in ('recursive', 'viterbi') that indicates
+            algorithm: string in ('recursive', 'viterbi') that indicates
                          the splitting algorithm used.
-            algorithm_params -- parameters passed to the splitting algorithm.
-            init_rand_split -- probability for random splitting a compound to
+            algorithm_params: parameters passed to the splitting algorithm.
+            init_rand_split: probability for random splitting a compound to
                                at any point for initializing the model. None
                                or 0 means no random splitting.
 
@@ -691,9 +693,9 @@ class BaselineModel(object):
         """Find optimal segmentation using the Viterbi algorithm.
 
         Arguments:
-          compound -- compound to be segmented
-          addcount -- constant for additive smoothing (0 = no smoothing)
-          maxlen -- maximum length for the constructions
+          compound: compound to be segmented
+          addcount: constant for additive smoothing (0 = no smoothing)
+          maxlen: maximum length for the constructions
 
         If additive smoothing is applied, new complex construction types can
         be selected during the search. Without smoothing, only new
@@ -706,7 +708,7 @@ class BaselineModel(object):
         grid = [(0.0, None)]
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
                 addcount > 0:
-            logtokens = math.log(self._corpus_coding.tokens + 
+            logtokens = math.log(self._corpus_coding.tokens +
                                  self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
@@ -749,8 +751,8 @@ class BaselineModel(object):
                                    math.log(self._lexicon_coding.boundaries
                                             + addcount))
                                   - (self._lexicon_coding.boundaries
-                                     * math.log(
-                                     self._lexicon_coding.boundaries))
+                                     * math.log(self._lexicon_coding.boundaries
+                                                ))
                                   + self._lexicon_coding.get_codelength(
                                       construction))
                                  / self._corpus_coding.weight)
@@ -776,10 +778,159 @@ class BaselineModel(object):
             lt = t
         constructions.reverse()
         # Add boundary cost
-        cost += math.log(self._corpus_coding.tokens + 
-                         self._corpus_coding.boundaries) - \
-                         math.log(self._corpus_coding.boundaries)
+        cost += (math.log(self._corpus_coding.tokens +
+                          self._corpus_coding.boundaries) -
+                 math.log(self._corpus_coding.boundaries))
         return constructions, cost
+
+    def forward_logprob(self, compound):
+        """Find log-probability of a compound using the forward algorithm.
+
+        Arguments:
+          compound: compound to process
+
+        Returns the (negative) log-probability of the compound. If the
+        probability is zero, returns a number that is larger than the
+        value defined by the penalty attribute of the model object.
+
+        """
+        clen = len(compound)
+        grid = [0.0]
+        if self._corpus_coding.tokens + self._corpus_coding.boundaries > 0:
+            logtokens = math.log(self._corpus_coding.tokens +
+                                 self._corpus_coding.boundaries)
+        else:
+            logtokens = 0
+        # Forward main loop
+        for t in range(1, clen + 1):
+            # Sum probabilities from all paths to the current node.
+            # Note that we can come from any node in history.
+            psum = 0.0
+            for pt in range(0, t):
+                cost = grid[pt]
+                construction = compound[pt:t]
+                if (construction in self._analyses and
+                        len(self._analyses[construction].splitloc) == 0):
+                    if self._analyses[construction].count <= 0:
+                        raise MorfessorException(
+                            "Construction count of '%s' is %s" %
+                            (construction,
+                             self._analyses[construction].count))
+                    cost += (logtokens -
+                             math.log(self._analyses[construction].count))
+                else:
+                    continue
+                psum += math.exp(-cost)
+            if psum > 0:
+                grid.append(-math.log(psum))
+            else:
+                grid.append(-self.penalty)
+        cost = grid[-1]
+        # Add boundary cost
+        cost += (math.log(self._corpus_coding.tokens +
+                          self._corpus_coding.boundaries) -
+                 math.log(self._corpus_coding.boundaries))
+        return cost
+
+    def viterbi_nbest(self, compound, n, addcount=1.0, maxlen=30):
+        """Find top-n optimal segmentations using the Viterbi algorithm.
+
+        Arguments:
+          compound: compound to be segmented
+          addcount: constant for additive smoothing (0 = no smoothing)
+          maxlen: maximum length for the constructions
+
+        If additive smoothing is applied, new complex construction types can
+        be selected during the search. Without smoothing, only new
+        single-atom constructions can be selected.
+
+        Returns the n most probable segmentations and their
+        log-probabilities.
+
+        """
+        clen = len(compound)
+        grid = [[(0.0, None, None)]]
+        if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
+                addcount > 0:
+            logtokens = math.log(self._corpus_coding.tokens +
+                                 self._corpus_coding.boundaries + addcount)
+        else:
+            logtokens = 0
+        badlikelihood = clen * logtokens + 1.0
+        # Viterbi main loop
+        for t in range(1, clen + 1):
+            # Select the best path to current node.
+            # Note that we can come from any node in history.
+            bestn = []
+            if self.nosplit_re and t < clen and \
+                    self.nosplit_re.match(compound[(t-1):(t+1)]):
+                grid.append([(-clen*badlikelihood, t-1, -1)])
+                continue
+            for pt in range(max(0, t - maxlen), t):
+                for k in range(len(grid[pt])):
+                    if grid[pt][k][0] is None:
+                        continue
+                    cost = grid[pt][k][0]
+                    construction = compound[pt:t]
+                    if (construction in self._analyses and
+                            len(self._analyses[construction].splitloc) == 0):
+                        if self._analyses[construction].count <= 0:
+                            raise MorfessorException(
+                                "Construction count of '%s' is %s" %
+                                (construction,
+                                 self._analyses[construction].count))
+                        cost -= (logtokens -
+                                 math.log(self._analyses[construction].count +
+                                          addcount))
+                    elif addcount > 0:
+                        if self._corpus_coding.tokens == 0:
+                            cost -= (addcount * math.log(addcount) +
+                                     self._lexicon_coding.get_codelength(
+                                         construction)
+                                     / self._corpus_coding.weight)
+                        else:
+                            cost -= (logtokens - math.log(addcount) +
+                                     (((self._lexicon_coding.boundaries +
+                                        addcount) *
+                                       math.log(self._lexicon_coding.boundaries
+                                                + addcount))
+                                      - (self._lexicon_coding.boundaries
+                                         * math.log(self._lexicon_coding.
+                                                    boundaries))
+                                      + self._lexicon_coding.get_codelength(
+                                          construction))
+                                     / self._corpus_coding.weight)
+                    elif len(construction) == 1:
+                        cost -= badlikelihood
+                    elif self.nosplit_re:
+                        # Some splits are forbidden, so longer unknown
+                        # constructions have to be allowed
+                        cost -= len(construction) * badlikelihood
+                    else:
+                        continue
+                    if len(bestn) < n:
+                        heapq.heappush(bestn, (cost, pt, k))
+                    else:
+                        heapq.heappushpop(bestn, (cost, pt, k))
+            grid.append(bestn)
+        results = []
+        for k in range(len(grid[-1])):
+            constructions = []
+            cost, path, ki = grid[-1][k]
+            lt = clen + 1
+            while path is not None:
+                t = path
+                constructions.append(compound[t:lt])
+                path = grid[t][ki][1]
+                ki = grid[t][ki][2]
+                lt = t
+            constructions.reverse()
+            # Add boundary cost
+            cost -= (math.log(self._corpus_coding.tokens +
+                              self._corpus_coding.boundaries) -
+                     math.log(self._corpus_coding.boundaries))
+            results.append((-cost, constructions))
+        return [(constr, cost) for cost, constr in sorted(results)]
 
     def get_corpus_coding_weight(self):
         return self._corpus_coding.weight
@@ -797,8 +948,8 @@ class AnnotationsModelUpdate:
         """Initialize class with the development data and the model to update.
 
         Arguments:
-            data -- iterator of (compound, [analyses,]) tuples.
-            model -- BaselineModel to update
+            data: iterator of (compound, [analyses,]) tuples.
+            model: BaselineModel to update
         """
         self.data = data
         self.model = model
@@ -863,9 +1014,9 @@ class AnnotationsModelUpdate:
         and recall values for the given sample of segmented data.
 
         Arguments:
-          segments -- list of predicted segmentations
-          annotations -- list of reference segmentations
-          threshold -- maximum threshold for the difference between
+          segments: list of predicted segmentations
+          annotations: list of reference segmentations
+          threshold: maximum threshold for the difference between
                        predictions and reference
 
         Return 1 in the case of oversegmentation, -1 in the case of
@@ -895,7 +1046,7 @@ class Encoding(object):
         """Initizalize class
 
         Arguments:
-            weight -- weight used for this encoding
+            weight: weight used for this encoding
         """
         self.logtokensum = 0.0
         self.tokens = 0
@@ -1023,12 +1174,12 @@ class AnnotatedCorpusEncoding(Encoding):
         Initialize encoding with appropriate meta data
 
         Arguments:
-            corpus_coding -- CorpusEncoding instance used for retrieving the
+            corpus_coding: CorpusEncoding instance used for retrieving the
                              number of tokens and boundaries in the corpus
-            weight -- The weight of this encoding. If the weight is None,
+            weight: The weight of this encoding. If the weight is None,
                       it is updated automatically to be in balance with the
                       corpus
-            penalty -- log penalty used for missing constructions
+            penalty: log penalty used for missing constructions
 
         """
         super(AnnotatedCorpusEncoding, self).__init__()

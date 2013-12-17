@@ -1,13 +1,17 @@
 import logging
 import math
 import random
+import os.path
 import sys
 import time
+import string
 
 from . import get_version
 from .baseline import BaselineModel
 from .exception import ArgumentException
 from .io import MorfessorIO
+from .evaluation import MorfessorEvaluation, EvaluationConfig, \
+    WilcoxonSignedRank, FORMAT_STRINGS
 
 PY3 = sys.version_info.major == 3
 
@@ -97,6 +101,8 @@ Interactive use (read corpus from user):
             help="save model segmentations to file (Morfessor 1.0 format)")
     add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
             help="output final lexicon to given file")
+    add_arg('--nbest', dest="nbest", default=1, type=int, metavar='<int>',
+            help="output n-best viterbi results")
 
     # Options for data formats
     add_arg = parser.add_argument_group(
@@ -127,8 +133,9 @@ Interactive use (read corpus from user):
             "Valid keywords are: "
             "{analysis} = constructions of the compound, "
             "{compound} = compound string, "
-            "{count} = count of the compound (currently always 1), and "
-            "{logprob} = log-probability of the compound. Valid escape "
+            "{count} = count of the compound (currently always 1), "
+            "{logprob} = log-probability of the analysis, and "
+            "{clogprob} = log-probability of the compound. Valid escape "
             "sequences are '\\n' (newline) and '\\t' (tabular)")
     add_arg('--output-format-separator', dest='outputformatseparator',
             type=str, default=' ', metavar='<str>',
@@ -158,7 +165,8 @@ Interactive use (read corpus from user):
                  "'ones'; default '%(default)s')")
     add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
             metavar='<list>',
-            help="force split on given atoms (default %(default)s)")
+            help="force split on given atoms (default '-'). The list argument "
+                 "is a string of characthers, use '' for no forced splits.")
     add_arg('-F', '--finish-threshold', dest='finish_threshold', type=float,
             default=0.005, metavar='<float>',
             help="Stopping threshold. Training stops when "
@@ -216,6 +224,12 @@ Interactive use (read corpus from user):
             help="corpus weight parameter for annotated data (if unset, the "
                  "weight is set to balance the number of tokens in annotated "
                  "and unannotated data sets)")
+
+    # Options for evaluation
+    add_arg = parser.add_argument_group('Evaluation options').add_argument
+    add_arg('-G', '--goldstandard', dest='goldstandard', default=None,
+            metavar='<file>',
+            help='If provided, evaluate the model against the gold standard')
 
     # Options for logging
     add_arg = parser.add_argument_group('logging options').add_argument
@@ -422,6 +436,7 @@ def main(args):
             csep = unicode(csep)
         outformat = outformat.replace(r"\n", "\n")
         outformat = outformat.replace(r"\t", "\t")
+        keywords = [x[1] for x in string.Formatter().parse(outformat)]
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
@@ -431,14 +446,188 @@ def main(args):
                     if args.outputnewlines:
                         fobj.write("\n")
                     continue
-                constructions, logp = model.viterbi_segment(
-                    atoms, args.viterbismooth, args.viterbimaxlen)
-                analysis = csep.join(constructions)
-                fobj.write(outformat.format(
-                           analysis=analysis, compound=compound,
-                           count=count, logprob=logp))
+                if "clogprob" in keywords:
+                    clogprob = model.forward_logprob(atoms)
+                else:
+                    clogprob = 0
+                if args.nbest > 1:
+                    nbestlist = model.viterbi_nbest(atoms, args.nbest,
+                                                    args.viterbismooth,
+                                                    args.viterbimaxlen)
+                    for constructions, logp in nbestlist:
+                        analysis = csep.join(constructions)
+                        fobj.write(outformat.format(analysis=analysis,
+                                                    compound=compound,
+                                                    count=count, logprob=logp,
+                                                    clogprob=clogprob))
+                else:
+                    constructions, logp = model.viterbi_segment(
+                        atoms, args.viterbismooth, args.viterbimaxlen)
+                    analysis = csep.join(constructions)
+                    fobj.write(outformat.format(analysis=analysis,
+                                                compound=compound,
+                                                count=count, logprob=logp,
+                                                clogprob=clogprob))
                 i += 1
                 if i % 10000 == 0:
                     sys.stderr.write(".")
             sys.stderr.write("\n")
         _logger.info("Done.")
+
+    if args.goldstandard is not None:
+        _logger.info("Evaluating Model")
+        e = MorfessorEvaluation(io.read_annotations_file(args.goldstandard))
+        result = e.evaluate_model(model, meta_data={'name': 'MODEL'})
+        print(result.format(FORMAT_STRINGS['default']))
+        _logger.info("Done")
+
+
+def get_evaluation_argparser():
+    import argparse
+    #TODO factor out redundancies with get_default_argparser()
+    standard_parser = get_default_argparser()
+    parser = argparse.ArgumentParser(
+        prog="morfessor-evaluate",
+        epilog="""Simple usage example:
+
+  %(prog)s gold_standard model1 model2
+""",
+        description=standard_parser.description,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False
+    )
+
+    add_arg = parser.add_argument_group('evaluation options').add_argument
+    add_arg('--num-samples', dest='numsamples', type=int, metavar='<int>',
+            default=10, help='number of samples to take for testing')
+    add_arg('--sample-size', dest='samplesize', type=int, metavar='<int>',
+            default=1000, help='size of each testing samples')
+
+    add_arg = parser.add_argument_group('formatting options').add_argument
+    add_arg('--format-string', dest='formatstring', metavar='<format>',
+            help='Python new style format string used to report evaluation '
+                 'results. The following variables are a value and and action '
+                 'separated with and underscore. E.g. fscore_avg for the '
+                 'average f-score. The available values are "precision", '
+                 '"recall", "fscore", "samplesize" and the available actions: '
+                 '"avg", "max", "min", "values", "count". A last meta-data '
+                 'variable (without action) is "name", the filename of the '
+                 'model See also the format-template option for predefined '
+                 'strings')
+    add_arg('--format-template', dest='template', metavar='<template>',
+            default='default',
+            help='Uses a template string for the format-string options. '
+                 'Available templates are: default, table and latex. '
+                 'If format-string is defined this option is ignored')
+
+    add_arg = parser.add_argument_group('file options').add_argument
+    add_arg('--construction-separator', dest="cseparator", type=str,
+            default=' ', metavar='<regexp>',
+            help="construction separator for test segmentation files"
+                 " (default '%(default)s')")
+    add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
+            help="encoding of input and output files (if none is given, "
+                 "both the local encoding and UTF-8 are tried)")
+
+    add_arg = parser.add_argument_group('logging options').add_argument
+    add_arg('-v', '--verbose', dest="verbose", type=int, default=1,
+            metavar='<int>',
+            help="verbose level; controls what is written to the standard "
+                 "error stream or log file (default %(default)s)")
+    add_arg('--logfile', dest='log_file', metavar='<file>',
+            help="write log messages to file in addition to standard "
+                 "error stream")
+
+    add_arg = parser.add_argument_group('other options').add_argument
+    add_arg('-h', '--help', action='help',
+            help="show this help message and exit")
+    add_arg('--version', action='version',
+            version='%(prog)s ' + get_version(),
+            help="show version number and exit")
+
+    add_arg = parser.add_argument
+    add_arg('goldstandard', metavar='<goldstandard>', nargs=1,
+            help='gold standard file in standard annotation format')
+    add_arg('models', metavar='<model>', nargs='+',
+            help='model files to segment (either binary or Morfessor 1.0 style'
+                 ' segmentation models).')
+    add_arg('-t', '--testsegmentation', dest='test_segmentations', default=[],
+            action='append',
+            help='Segmentation of the test set. Note that all words in the '
+                 'gold-standard must be segmented')
+
+    return parser
+
+
+def main_evaluation(args):
+    """ Separate main for running evaluation and statistical significance
+    testing. Takes as argument the results of an get_evaluation_argparser()
+    """
+    #TODO refactor out redundancies with main()
+    if args.verbose >= 2:
+        loglevel = logging.DEBUG
+    elif args.verbose >= 1:
+        loglevel = logging.INFO
+    else:
+        loglevel = logging.WARNING
+
+    logging_format = '%(asctime)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+    default_formatter = logging.Formatter(logging_format, date_format)
+    plain_formatter = logging.Formatter('%(message)s')
+    logging.basicConfig(level=loglevel)
+    _logger.propagate = False  # do not forward messages to the root logger
+
+    # Basic settings for logging to the error stream
+    ch = logging.StreamHandler()
+    ch.setLevel(loglevel)
+    ch.setFormatter(plain_formatter)
+    _logger.addHandler(ch)
+
+    # Settings for when log_file is present
+    if args.log_file is not None:
+        fh = logging.FileHandler(args.log_file, 'w')
+        fh.setLevel(loglevel)
+        fh.setFormatter(default_formatter)
+        _logger.addHandler(fh)
+        # If logging to a file, make INFO the highest level for the
+        # error stream
+        ch.setLevel(max(loglevel, logging.INFO))
+
+    io = MorfessorIO(encoding=args.encoding)
+
+    ev = MorfessorEvaluation(io.read_annotations_file(args.goldstandard[0]))
+
+    results = []
+
+    sample_size = args.samplesize
+    num_samples = args.numsamples
+
+    f_string = args.formatstring
+    if f_string is None:
+        f_string = FORMAT_STRINGS[args.template]
+
+    for f in args.models:
+        result = ev.evaluate_model(io.read_any_model(f),
+                                   configuration=EvaluationConfig(num_samples,
+                                                                  sample_size),
+                                   meta_data={'name': os.path.basename(f)})
+        results.append(result)
+        print(result.format(f_string))
+
+    io.construction_separator = args.cseparator
+    for f in args.test_segmentations:
+        segmentation = io.read_segmentation_file(f, False)
+        result = ev.evaluate_segmentation(segmentation,
+                                          configuration=
+                                          EvaluationConfig(num_samples,
+                                                           sample_size),
+                                          meta_data={'name':
+                                                     os.path.basename(f)})
+        results.append(result)
+        print(result.format(f_string))
+
+    if len(results) > 1:
+        wsr = WilcoxonSignedRank()
+        r = wsr.significance_test(results)
+        WilcoxonSignedRank.print_table(r)
