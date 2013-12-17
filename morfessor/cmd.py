@@ -152,7 +152,7 @@ Interactive use (read corpus from user):
             metavar='<algorithm>', choices=['recursive', 'viterbi'],
             help="algorithm type ('recursive', 'viterbi'; default "
                  "'%(default)s')")
-    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
+    add_arg('-d', '--dampening', dest="dampening", type=str, default='ones',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
                  "'ones'; default '%(default)s')")
