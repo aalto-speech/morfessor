@@ -103,7 +103,7 @@ class MorfessorIO:
         """Read one corpus file.
 
         For each compound, yield (1, compound, compound_atoms).
-        After each line, yield (0, "\n", ()).
+        After each line, yield (0, \"\\n\", ()).
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
@@ -154,6 +154,7 @@ class MorfessorIO:
 
             if analysis_sep is not None:
                 for analysis in analyses_line.split(analysis_sep):
+                    analysis = analysis.strip()
                     annotations[compound].append(
                         analysis.strip().split(construction_separator))
             else:

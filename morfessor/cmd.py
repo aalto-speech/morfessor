@@ -159,13 +159,14 @@ Interactive use (read corpus from user):
             metavar='<algorithm>', choices=['recursive', 'viterbi'],
             help="algorithm type ('recursive', 'viterbi'; default "
                  "'%(default)s')")
-    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
+    add_arg('-d', '--dampening', dest="dampening", type=str, default='ones',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
                  "'ones'; default '%(default)s')")
     add_arg('-f', '--forcesplit', dest="forcesplit", type=list, default=['-'],
             metavar='<list>',
-            help="force split on given atoms (default %(default)s)")
+            help="force split on given atoms (default '-'). The list argument "
+                 "is a string of characthers, use '' for no forced splits.")
     add_arg('-F', '--finish-threshold', dest='finish_threshold', type=float,
             default=0.005, metavar='<float>',
             help="Stopping threshold. Training stops when "
@@ -510,7 +511,7 @@ def get_evaluation_argparser():
                  'average f-score. The available values are "precision", '
                  '"recall", "fscore", "samplesize" and the available actions: '
                  '"avg", "max", "min", "values", "count". A last meta-data '
-                 'variable (withoug action) is "name", the filename of the '
+                 'variable (without action) is "name", the filename of the '
                  'model See also the format-template option for predefined '
                  'strings')
     add_arg('--format-template', dest='template', metavar='<template>',

@@ -102,7 +102,7 @@ class Sparse(dict):
     def __init__(self, *pargs, **kwargs):
         """Create a new Sparse datastructure.
         Keyword arguments:
-            default -- Default value. Unlike defaultdict this should be a
+            default: Default value. Unlike defaultdict this should be a
                        prototype immutable, not a factory.
         """
 
