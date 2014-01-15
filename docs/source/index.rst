@@ -6,6 +6,10 @@
 Morfessor 2.0 documentation
 =====================================
 
+.. note:: The Morfessor 2.0 documentation is still a work in progress and
+  contains some unfinished parts
+
+
 Contents:
 
 .. toctree::

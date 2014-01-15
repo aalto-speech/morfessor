@@ -1,1 +1,2 @@
 include LICENSE
+include ez_setup.py
