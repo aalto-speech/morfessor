@@ -489,7 +489,7 @@ class BaselineModel(object):
             self._add_compound(comp, count)
             self._set_compound_analysis(comp, segmentation)
 
-    def set_annotations(self, annotations, annotatedcorpusweight):
+    def set_annotations(self, annotations, annotatedcorpusweight=None):
         """Prepare model for semi-supervised learning with given
          annotations.
 
