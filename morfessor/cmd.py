@@ -26,7 +26,7 @@ def get_default_argparser():
         description="""
 Morfessor %s
 
-Copyright (c) 2012, Sami Virpioja and Peter Smit
+Copyright (c) 2012-2014, Sami Virpioja and Peter Smit
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
