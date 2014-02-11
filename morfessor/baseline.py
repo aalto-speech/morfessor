@@ -42,7 +42,7 @@ class BaselineModel(object):
 
     penalty = -9999.9
 
-    def __init__(self, forcesplit_list=None, corpusweight=1.0,
+    def __init__(self, forcesplit_list=None, corpusweight=None,
                  use_skips=False, nosplit_re=None):
         """Initialize a new model instance.
 
@@ -62,9 +62,16 @@ class BaselineModel(object):
 
         # Cost variables
         self._lexicon_coding = LexiconEncoding()
-        self._corpus_coding = CorpusEncoding(self._lexicon_coding,
-                                             corpusweight)
+        self._corpus_coding = CorpusEncoding(self._lexicon_coding)
         self._annot_coding = None
+
+        #Set corpus weight updater
+        if corpusweight is None:
+            self._corpus_weight_updater = FixedCorpusWeight(1.0)
+        elif isinstance(corpusweight, numbers.Number):
+            self._corpus_weight_updater = FixedCorpusWeight(corpusweight)
+        else:
+            self._corpus_weight_updater = corpusweight
 
         # Configuration variables
         self._use_skips = use_skips  # Random skips for frequent constructions
@@ -379,11 +386,17 @@ class BaselineModel(object):
         epoch number argument as 0).
 
         """
+        forced_epochs = 0
+        if self._corpus_weight_updater.update(self, epoch_num):
+            forced_epochs += 2
+
         if self._use_skips:
             self._counter = collections.Counter()
         if self._supervised:
             self._update_annotation_choices()
             self._annot_coding.update_weight()
+
+        return forced_epochs
 
     @staticmethod
     def _segmentation_to_splitloc(constructions):
@@ -549,18 +562,16 @@ class BaselineModel(object):
                                 smaller then finish_threshold * #boundaries
 
         """
-        self._epoch_update(0)
+        epochs = 0
+        forced_epochs = max(1, self._epoch_update(epochs))
         newcost = self.get_cost()
         compounds = list(self.get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
                      (len(compounds), self._corpus_coding.boundaries))
 
-        corpus_weight_updater = AnnotationsModelUpdate(devel_annotations, self)
-
-        epochs = 0
         _logger.info("Starting batch training")
         _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
-        forced_epochs = 1  # force this many epochs before stopping
+
         while True:
             # One epoch
             random.shuffle(compounds)
@@ -578,15 +589,9 @@ class BaselineModel(object):
             epochs += 1
 
             _logger.debug("Cost before epoch update: %s" % self.get_cost())
-            self._epoch_update(epochs)
+            forced_epochs = max(forced_epochs, self._epoch_update(epochs))
             oldcost = newcost
             newcost = self.get_cost()
-
-            if devel_annotations is not None:
-                if corpus_weight_updater.update_model(epochs):
-                    self._epoch_update(epochs)
-                    forced_epochs = max(forced_epochs, 2)
-                    newcost = self.get_cost()
 
             _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
             if (forced_epochs == 0 and
@@ -944,39 +949,48 @@ class BaselineModel(object):
         self._corpus_coding.weight = weight
 
 
-class AnnotationsModelUpdate(object):
+class CorpusWeight(object):
+    @classmethod
+    def move_direction(cls, model, direction, epoch):
+        if direction != 0:
+            weight = model.get_corpus_coding_weight()
+            if direction > 0:
+                weight *= 1 + 2.0 / epoch
+            else:
+                weight *= 1.0 / (1 + 2.0 / epoch)
+            model.set_corpus_coding_weight(weight)
+            _logger.info("Corpus weight set to {}".format(weight))
+            return True
+        return False
+
+
+class FixedCorpusWeight(CorpusWeight):
+    def __init__(self, weight):
+        self.weight = weight
+
+    def update(self, model, _):
+        model.set_corpus_coding_weight(self.weight)
+        return False
+
+
+class AnnotationCorpusWeight(CorpusWeight):
     """Class for using development annotations to update the corpus weight
     during batch training
 
     """
-    def __init__(self, data, model):
-        """Initialize class with the development data and the model to update.
 
-        Arguments:
-            data: iterator of (compound, [analyses,]) tuples.
-            model: BaselineModel to update
-        """
-        self.data = data
-        self.model = model
+    def __init__(self, devel_set):
+        self.data = devel_set
 
-    def update_model(self, epochs):
+    def update(self, model, epoch):
         """Tune model corpus weight based on the precision and
         recall of the development data, trying to keep them equal"""
         tmp = self.data.items()
         wlist, annotations = zip(*tmp)
-        segments = [self.model.viterbi_segment(w)[0] for w in wlist]
+        segments = [model.viterbi_segment(w)[0] for w in wlist]
         d = self._estimate_segmentation_dir(segments, annotations)
 
-        if d != 0:
-            weight = self.model.get_corpus_coding_weight()
-            if d > 0:
-                weight *= 1 + 2.0 / epochs
-            else:
-                weight *= 1.0 / (1 + 2.0 / epochs)
-            self.model.set_corpus_coding_weight(weight)
-            _logger.info("Corpus weight set to {}".format(weight))
-            return True
-        return False
+        return self.move_direction(model, d, epoch)
 
     @classmethod
     def _boundary_recall(cls, prediction, reference):
@@ -1038,6 +1052,36 @@ class AnnotationsModelUpdate(object):
             return 1
         else:
             return -1
+
+
+class MorphLengthCorpusWeight(CorpusWeight):
+    def __init__(self, morph_lenght, threshold=0.1):
+        self.morph_length = morph_lenght
+        self.threshold = threshold
+
+    def update(self, model, epoch):
+        cur_length = self.calc_morph_length(model)
+        if abs(self.morph_length - cur_length) > self.threshold:
+            d = abs(self.morph_length - cur_length) / (self.morph_length
+                                                       - cur_length)
+            return self.move_direction(model, d, epoch)
+        return False
+
+    @classmethod
+    def calc_morph_length(cls, model):
+        tot = 0
+        count = 0
+        for k,v in model._analyses.items():
+            _, _, splitloc = v
+            if splitloc == 0:
+                tot += len(k)
+                count += 1
+
+        return float(tot) / count
+
+
+class NumMorphCorpusWeight(CorpusWeight):
+    pass
 
 
 class Encoding(object):
