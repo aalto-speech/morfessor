@@ -222,7 +222,6 @@ Interactive use (read corpus from user):
             help="tune the corpusweight to obtain the desired number of morph "
                  "types")
 
-
     # Options for semi-supervised model training
     add_arg = parser.add_argument_group(
         'semi-supervised training options').add_argument
@@ -244,7 +243,6 @@ Interactive use (read corpus from user):
             help="corpus weight parameter for annotated data (if unset, the "
                  "weight is set to balance the number of tokens in annotated "
                  "and unannotated data sets)")
-
 
     # Options for evaluation
     add_arg = parser.add_argument_group('Evaluation options').add_argument
@@ -367,6 +365,8 @@ def main(args):
         updater = NumMorphCorpusWeight(args.morphtypes, args.threshold)
         model.set_corpus_weight_updater(updater)
 
+    start_corpus_weight = model.get_corpus_coding_weight()
+
     # Set frequency dampening function
     if args.dampening == 'none':
         dampfunc = None
@@ -421,6 +421,13 @@ def main(args):
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs)
             _logger.info("Epochs: %s" % e)
+            if args.fullretrain:
+                if abs(model.get_corpus_coding_weight() - start_corpus_weight) > 0.1:
+                    model.clear_segmentation()
+                    e, c = model.train_batch(args.algorithm, algparams,
+                                             args.finish_threshold,
+                                             args.maxepochs)
+                    _logger.info("Retrain Epochs: %s" % e)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
@@ -435,6 +442,14 @@ def main(args):
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs - e)
             _logger.info("Epochs: %s" % e)
+            if args.fullretrain:
+                if abs(model.get_corpus_coding_weight() -
+                        start_corpus_weight) > 0.1:
+                    model.clear_segmentation()
+                    e, c = model.train_batch(args.algorithm, algparams,
+                                             args.finish_threshold,
+                                             args.maxepochs)
+                    _logger.info("Retrain Epochs: %s" % e)
         else:
             raise ArgumentException("unknown training mode '%s'"
                                     % args.trainmode)

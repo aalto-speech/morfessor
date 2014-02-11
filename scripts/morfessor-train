@@ -23,6 +23,7 @@ Interactive use (read corpus from user):
 
     keep_options = ['savesegfile', 'savefile', 'trainmode', 'dampening',
                     'encoding', 'list', 'skips', 'annofile', 'develfile',
+                    'fullretrain', 'threshold', 'morphtypes', 'morphlength',
                     'corpusweight', 'annotationweight', 'help', 'version']
     for action_group in parser._action_groups:
         for arg in action_group._group_actions:
