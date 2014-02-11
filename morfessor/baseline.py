@@ -91,6 +91,8 @@ class BaselineModel(object):
         else:
             self._corpus_weight_updater = corpus_weight
 
+        self._corpus_weight_updater.update()
+
     @property
     def tokens(self):
         """Return the number of construction tokens."""
@@ -949,6 +951,10 @@ class BaselineModel(object):
 
     def set_corpus_coding_weight(self, weight):
         self._corpus_coding.weight = weight
+
+    def clear_segmentation(self):
+        for compound in list(self.get_compounds()):
+            self._set_compound_analysis(compound, [compound])
 
 
 class CorpusWeight(object):
