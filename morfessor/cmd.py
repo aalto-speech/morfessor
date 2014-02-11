@@ -7,7 +7,8 @@ import time
 import string
 
 from . import get_version
-from .baseline import BaselineModel
+from .baseline import BaselineModel, AnnotationCorpusWeight, \
+    MorphLengthCorpusWeight, NumMorphCorpusWeight
 from .exception import ArgumentException
 from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
@@ -206,24 +207,44 @@ Interactive use (read corpus from user):
             help="maximum construction length in Viterbi training "
                  "and segmentation (default %(default)s)")
 
-    # Options for semi-supervised model training
-    add_arg = parser.add_argument_group(
-        'semi-supervised training options').add_argument
-    add_arg('-A', '--annotations', dest="annofile", default=None,
-            metavar='<file>',
-            help="load annotated data for semi-supervised learning")
+    # Options for corpusweight tuning
+    add_arg = parser.add_mutually_exclusive_group(
+        'Corpusweight tuning options').add_argument
     add_arg('-D', '--develset', dest="develfile", default=None,
             metavar='<file>',
             help="load annotated data for tuning the corpus weight parameter")
+    add_arg('--morph-length', dest='morphlength', default=None, type=float,
+            metavar='<float>',
+            help="tune the corpusweight to obtain the desired average morph "
+                 "length")
+    add_arg('--num-morph-types', dest='morphtypes', default=None, type=float,
+            metavar='<float>',
+            help="tune the corpusweight to obtain the desired number of morph "
+                 "types")
+
+
+    # Options for semi-supervised model training
+    add_arg = parser.add_argument_group(
+        'semi-supervised training options').add_argument
     add_arg('-w', '--corpusweight', dest="corpusweight", type=float,
             default=1.0, metavar='<float>',
             help="corpus weight parameter (default %(default)s); "
-                 "sets the initial value if --develset is used")
+                 "sets the initial value if other tuning options are used")
+    add_arg('--weight-threshold', dest='threshold', default=0.01,
+            metavar='<float>', type=float,
+            help='percentual stopping threshold for corpusweight updaters')
+    add_arg('--full-retrain', dest='fullretrain', action='store_true',
+            default=False,
+            help='do a full retrain after any weights have converged')
+    add_arg('-A', '--annotations', dest="annofile", default=None,
+            metavar='<file>',
+            help="load annotated data for semi-supervised learning")
     add_arg('-W', '--annotationweight', dest="annotationweight",
             type=float, default=None, metavar='<float>',
             help="corpus weight parameter for annotated data (if unset, the "
                  "weight is set to balance the number of tokens in annotated "
                  "and unannotated data sets)")
+
 
     # Options for evaluation
     add_arg = parser.add_argument_group('Evaluation options').add_argument
@@ -335,8 +356,16 @@ def main(args):
     if args.develfile is not None:
         develannots = io.read_annotations_file(args.develfile,
                                                analysis_sep=analysis_sep)
-    else:
-        develannots = None
+        updater = AnnotationCorpusWeight(develannots, args.threshold)
+        model.set_corpus_weight_updater(updater)
+
+    if args.morphlength is not None:
+        updater = MorphLengthCorpusWeight(args.morphlength, args.threshold)
+        model.set_corpus_weight_updater(updater)
+
+    if args.morphtypes is not None:
+        updater = NumMorphCorpusWeight(args.morphtypes, args.threshold)
+        model.set_corpus_weight_updater(updater)
 
     # Set frequency dampening function
     if args.dampening == 'none':
@@ -367,7 +396,7 @@ def main(args):
                                 "files. Use 'init+batch' or 'online' to "
                                 "add new compounds.")
             ts = time.time()
-            e, c = model.train_batch(args.algorithm, algparams, develannots,
+            e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs)
             te = time.time()
             _logger.info("Epochs: %s" % e)
@@ -389,7 +418,7 @@ def main(args):
                 data = io.read_corpus_files(args.trainfiles)
             c = model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
-            e, c = model.train_batch(args.algorithm, algparams, develannots,
+            e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs)
             _logger.info("Epochs: %s" % e)
         elif args.trainmode == 'online':
@@ -403,7 +432,7 @@ def main(args):
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams,
                                       args.splitprob, args.maxepochs)
-            e, c = model.train_batch(args.algorithm, algparams, develannots,
+            e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs - e)
             _logger.info("Epochs: %s" % e)
         else:
