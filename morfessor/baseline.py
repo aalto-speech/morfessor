@@ -66,12 +66,7 @@ class BaselineModel(object):
         self._annot_coding = None
 
         #Set corpus weight updater
-        if corpusweight is None:
-            self._corpus_weight_updater = FixedCorpusWeight(1.0)
-        elif isinstance(corpusweight, numbers.Number):
-            self._corpus_weight_updater = FixedCorpusWeight(corpusweight)
-        else:
-            self._corpus_weight_updater = corpusweight
+        self.set_corpus_weight_updater(corpusweight)
 
         # Configuration variables
         self._use_skips = use_skips  # Random skips for frequent constructions
@@ -87,6 +82,14 @@ class BaselineModel(object):
             self.nosplit_re = None
         else:
             self.nosplit_re = re.compile(nosplit_re, re.UNICODE)
+
+    def set_corpus_weight_updater(self, corpus_weight):
+        if corpus_weight is None:
+            self._corpus_weight_updater = FixedCorpusWeight(1.0)
+        elif isinstance(corpus_weight, numbers.Number):
+            self._corpus_weight_updater = FixedCorpusWeight(corpus_weight)
+        else:
+            self._corpus_weight_updater = corpus_weight
 
     @property
     def tokens(self):
@@ -537,8 +540,7 @@ class BaselineModel(object):
         return constructions
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
-                    devel_annotations=None, finish_threshold=0.005,
-                    max_epochs=None):
+                    finish_threshold=0.005, max_epochs=None):
         """Train the model in batch fashion.
 
         The model is trained with the data already loaded into the model (by
@@ -979,8 +981,9 @@ class AnnotationCorpusWeight(CorpusWeight):
 
     """
 
-    def __init__(self, devel_set):
+    def __init__(self, devel_set, threshold=0.01):
         self.data = devel_set
+        self.threshold = threshold
 
     def update(self, model, epoch):
         """Tune model corpus weight based on the precision and
@@ -1025,8 +1028,7 @@ class AnnotationCorpusWeight(CorpusWeight):
         f = 2.0 * pre * rec / (pre + rec)
         return pre, rec, f
 
-    @classmethod
-    def _estimate_segmentation_dir(cls, segments, annotations, threshold=0.01):
+    def _estimate_segmentation_dir(self, segments, annotations):
         """Estimate if the given compounds are under- or oversegmented.
 
         The decision is based on the difference between boundary precision
@@ -1035,18 +1037,16 @@ class AnnotationCorpusWeight(CorpusWeight):
         Arguments:
           segments: list of predicted segmentations
           annotations: list of reference segmentations
-          threshold: maximum threshold for the difference between
-                       predictions and reference
 
         Return 1 in the case of oversegmentation, -1 in the case of
         undersegmentation, and 0 if no changes are required.
 
         """
-        pre, rec, f = cls._bpr_evaluation([[x] for x in segments],
-                                          annotations)
+        pre, rec, f = self._bpr_evaluation([[x] for x in segments],
+                                           annotations)
         _logger.info("Boundary evaluation: precision %.4f; recall %.4f" %
                      (pre, rec))
-        if abs(pre - rec) < threshold:
+        if abs(pre - rec) < self.threshold:
             return 0
         elif rec > pre:
             return 1
@@ -1055,13 +1055,14 @@ class AnnotationCorpusWeight(CorpusWeight):
 
 
 class MorphLengthCorpusWeight(CorpusWeight):
-    def __init__(self, morph_lenght, threshold=0.1):
+    def __init__(self, morph_lenght, threshold=0.01):
         self.morph_length = morph_lenght
         self.threshold = threshold
 
     def update(self, model, epoch):
         cur_length = self.calc_morph_length(model)
-        if abs(self.morph_length - cur_length) > self.threshold:
+        if (abs(self.morph_length - cur_length) / self.morph_length >
+                self.threshold):
             d = abs(self.morph_length - cur_length) / (self.morph_length
                                                        - cur_length)
             return self.move_direction(model, d, epoch)
@@ -1081,8 +1082,18 @@ class MorphLengthCorpusWeight(CorpusWeight):
 
 
 class NumMorphCorpusWeight(CorpusWeight):
-    pass
+    def __init__(self, num_morph_types, threshold=0.01):
+        self.num_morph_types = num_morph_types
+        self.threshold = threshold
 
+    def update(self, model, epoch):
+        cur_morph_types = model._lexicon_boundaries.boundaries
+        if (abs(self.num_morph_types - cur_morph_types) / self.num_morph_types
+                > self.threshold):
+            d = (abs(self.num_morph_types - cur_morph_types) /
+                 (self.num_morph_types - cur_morph_types))
+            return self.move_direction(model, d, epoch)
+        return False
 
 class Encoding(object):
     """Base class for calculating the entropy (encoding length) of a corpus
