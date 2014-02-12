@@ -112,8 +112,8 @@ class BaselineModel(object):
             threshold: probability of splitting at each position
 
         """
-        splitloc = [i for i in range(1, len(compound))
-                    if random.random() < threshold]
+        splitloc = tuple(i for i in range(1, len(compound))
+                         if random.random() < threshold)
         return self._splitloc_to_segmentation(compound, splitloc)
 
     def _set_compound_analysis(self, compound, parts, ptype='flat'):
@@ -131,7 +131,7 @@ class BaselineModel(object):
         """
         if len(parts) == 1:
             rcount, count = self._remove(compound)
-            self._analyses[compound] = ConstrNode(rcount, 0, [])
+            self._analyses[compound] = ConstrNode(rcount, 0, tuple())
             self._modify_construction_count(compound, count)
         elif ptype == 'flat':
             rcount, count = self._remove(compound)
@@ -145,12 +145,14 @@ class BaselineModel(object):
                 rcount, count = self._remove(construction)
                 prefix = parts[p]
                 if p == len(parts) - 1:
-                    self._analyses[construction] = ConstrNode(rcount, 0, [])
+                    self._analyses[construction] = ConstrNode(rcount, 0,
+                                                              tuple())
                     self._modify_construction_count(construction, count)
                 else:
                     suffix = self._join_constructions(parts[p + 1:])
                     self._analyses[construction] = ConstrNode(rcount, count,
-                                                              [len(prefix)])
+                                                              tuple(
+                                                                  len(prefix)))
                     self._modify_construction_count(prefix, count)
                     self._modify_construction_count(suffix, count)
                     construction = suffix
@@ -310,7 +312,8 @@ class BaselineModel(object):
 
         if len(splitloc) > 0:
             # Virtual construction
-            self._analyses[construction] = ConstrNode(rcount, count, splitloc)
+            self._analyses[construction] = ConstrNode(rcount, count,
+                                                      tuple(splitloc))
             prefix = construction[:splitloc[0]]
             suffix = construction[splitloc[0]:]
             self._modify_construction_count(prefix, count)
@@ -322,7 +325,7 @@ class BaselineModel(object):
                 return lp + lp
         else:
             # Real construction
-            self._analyses[construction] = ConstrNode(rcount, 0, [])
+            self._analyses[construction] = ConstrNode(rcount, 0, tuple())
             self._modify_construction_count(construction, count)
             return [construction]
 
@@ -337,7 +340,7 @@ class BaselineModel(object):
         if construction in self._analyses:
             rcount, count, splitloc = self._analyses[construction]
         else:
-            rcount, count, splitloc = 0, 0, []
+            rcount, count, splitloc = 0, 0, tuple()
         newcount = count + dcount
         if newcount == 0:
             del self._analyses[construction]
@@ -390,7 +393,7 @@ class BaselineModel(object):
         for c in constructions:
             i += len(c)
             splitloc.append(i)
-        return splitloc[:-1]
+        return tuple(splitloc[:-1])
 
     @staticmethod
     def _splitloc_to_segmentation(compound, splitloc):
