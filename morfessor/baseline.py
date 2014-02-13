@@ -25,8 +25,8 @@ def _constructions_to_str(constructions):
 
 # rcount = root count (from corpus)
 # count = total count of the node
-# splitloc = list of location of the possible splits for virtual
-#            constructions; empty if real construction
+# splitloc = integer or tuple. Location(s) of the possible splits for virtual
+#            constructions; empty tuple or 0 if real construction
 ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
