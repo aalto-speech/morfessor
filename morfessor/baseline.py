@@ -958,8 +958,15 @@ class BaselineModel(object):
         self._corpus_coding.weight = weight
 
     def make_segment_only(self):
+        """Reduce the size of this model by removing all non-morphs from the
+        analyses. After calling this method it is not possible anymore to call
+        any other method that would change the state of the model. Anyway
+        doing so would throw an exception.
+
+        """
         self._segment_only = True
         self._analyses = {k: v for (k, v) in self._analyses if not v.splitloc}
+
 
 class AnnotationsModelUpdate:
     """Class for using development annotations to update the corpus weight
