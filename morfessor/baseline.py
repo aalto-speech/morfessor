@@ -117,7 +117,7 @@ class BaselineModel(object):
                          if random.random() < threshold)
         return self._splitloc_to_segmentation(compound, splitloc)
 
-    def _set_compound_analysis(self, compound, parts, ptype='flat'):
+    def _set_compound_analysis(self, compound, parts, ptype='rbranch'):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
