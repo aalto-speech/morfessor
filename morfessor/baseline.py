@@ -7,7 +7,7 @@ import random
 import re
 
 from .utils import _progress
-from .exception import MorfessorException
+from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
 
@@ -80,6 +80,12 @@ class BaselineModel(object):
             self.nosplit_re = None
         else:
             self.nosplit_re = re.compile(nosplit_re, re.UNICODE)
+
+        self._segment_only = False
+
+    def _check_segment_only(self):
+        if self._segment_only:
+            raise SegmentOnlyModelException()
 
     @property
     def tokens(self):
@@ -421,6 +427,7 @@ class BaselineModel(object):
 
     def get_compounds(self):
         """Return the compound types stored by the model."""
+        self._check_segment_only()
         return [w for w, node in self._analyses.items()
                 if node.rcount > 0]
 
@@ -439,6 +446,7 @@ class BaselineModel(object):
 
     def get_segmentations(self):
         """Retrieve segmentations for all compounds encoded by the model."""
+        self._check_segment_only()
         for w in sorted(self._analyses.keys()):
             c = self._analyses[w].rcount
             if c > 0:
@@ -463,6 +471,7 @@ class BaselineModel(object):
         the total cost.
 
         """
+        self._check_segment_only()
         totalcount = collections.Counter()
         for count, _, atoms in data:
             if len(atoms) > 0:
@@ -489,6 +498,7 @@ class BaselineModel(object):
         segmentation.
 
         """
+        self._check_segment_only()
         for count, segmentation in segmentations:
             comp = "".join(segmentation)
             self._add_compound(comp, count)
@@ -499,6 +509,7 @@ class BaselineModel(object):
          annotations.
 
          """
+        self._check_segment_only()
         self._supervised = True
         self.annotations = annotations
         self._annot_coding = AnnotatedCorpusEncoding(self._corpus_coding,
@@ -513,6 +524,7 @@ class BaselineModel(object):
         data. For segmenting new words, use viterbi_segment(compound).
 
         """
+        self._check_segment_only()
         rcount, count, splitloc = self._analyses[compound]
         constructions = []
         if splitloc:
@@ -633,6 +645,7 @@ class BaselineModel(object):
                                or 0 means no random splitting.
 
         """
+        self._check_segment_only()
         if count_modifier is not None:
             counts = {}
 
@@ -941,8 +954,12 @@ class BaselineModel(object):
         return self._corpus_coding.weight
 
     def set_corpus_coding_weight(self, weight):
+        self._check_segment_only()
         self._corpus_coding.weight = weight
 
+    def make_segment_only(self):
+        self._segment_only = True
+        self._analyses = {k: v for (k, v) in self._analyses if not v.splitloc}
 
 class AnnotationsModelUpdate:
     """Class for using development annotations to update the corpus weight
