@@ -253,7 +253,7 @@ class BaselineModel(object):
         for part in parts:
             constructions += self.viterbi_segment(part, addcount=addcount,
                                                   maxlen=maxlen)[0]
-        self._set_compound_analysis(compound, constructions)
+        self._set_compound_analysis(compound, constructions, ptype='flat')
         return constructions
 
     def _recursive_optimize(self, compound):
