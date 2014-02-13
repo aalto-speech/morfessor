@@ -133,6 +133,8 @@ Saving model
     save  :ref:`binary-model-def`
 ``-S <file>``
     save  :ref:`morfessor1-model-def`
+``--save-reduced``
+    save :ref:`binary-reduced-model-def`
 
 Examples
 ~~~~~~~~
@@ -157,6 +159,8 @@ relevant are:
     save binary model
 ``-S <file>``
     save Morfessor 1.0 style model
+``--save-reduced``
+    save reduced binary model
 
 Examples
 ~~~~~~~~
@@ -178,7 +182,7 @@ The arguments are identical to the ones for the `morfessor`_ command. The most
  relevant are:
 
 ``-l <file>``
-    load binary model
+    load binary model (normal or reduced)
 ``-L <file>``
     load Morfessor 1.0 style model
 

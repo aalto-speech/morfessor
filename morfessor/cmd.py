@@ -99,6 +99,11 @@ Interactive use (read corpus from user):
     add_arg('-S', '--save-segmentation', dest="savesegfile", default=None,
             metavar='<file>',
             help="save model segmentations to file (Morfessor 1.0 format)")
+    add_arg('--save-reduced', dest="savereduced", default=None,
+            metavar='<file>',
+            help="save final model to file in reduced form (pickled model "
+            "object). A model in reduced form can only be used for "
+            "segmentation of new words.")
     add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
             help="output final lexicon to given file")
     add_arg('--nbest', dest="nbest", default=1, type=int, metavar='<int>',
@@ -425,6 +430,10 @@ def main(args):
     # Output lexicon
     if args.lexfile is not None:
         io.write_lexicon_file(args.lexfile, model.get_constructions())
+
+    if args.savereduced is not None:
+        model.make_segment_only()
+        io.write_binary_model_file(args.savereduced, model)
 
     # Segment test data
     if len(args.testfiles) > 0:
