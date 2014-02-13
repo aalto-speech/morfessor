@@ -965,7 +965,8 @@ class BaselineModel(object):
 
         """
         self._segment_only = True
-        self._analyses = {k: v for (k, v) in self._analyses if not v.splitloc}
+        self._analyses = {k: v for (k, v) in self._analyses.items()
+                          if not v.splitloc}
 
 
 class AnnotationsModelUpdate:
