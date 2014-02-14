@@ -1085,9 +1085,9 @@ class MorphLengthCorpusWeight(CorpusWeight):
     def calc_morph_length(cls, model):
         tot = 0
         count = 0
-        for k,v in model._analyses.items():
+        for k, v in model._analyses.items():
             _, _, splitloc = v
-            if splitloc == 0:
+            if not splitloc:
                 tot += len(k)
                 count += 1
         if count > 0:
