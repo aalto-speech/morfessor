@@ -91,7 +91,7 @@ class BaselineModel(object):
         else:
             self._corpus_weight_updater = corpus_weight
 
-        self._corpus_weight_updater.update()
+        self._corpus_weight_updater.update(self, 0)
 
     @property
     def tokens(self):
@@ -994,6 +994,8 @@ class AnnotationCorpusWeight(CorpusWeight):
     def update(self, model, epoch):
         """Tune model corpus weight based on the precision and
         recall of the development data, trying to keep them equal"""
+        if epoch < 1:
+            return False
         tmp = self.data.items()
         wlist, annotations = zip(*tmp)
         segments = [model.viterbi_segment(w)[0] for w in wlist]
@@ -1066,7 +1068,12 @@ class MorphLengthCorpusWeight(CorpusWeight):
         self.threshold = threshold
 
     def update(self, model, epoch):
+        if epoch < 1:
+            return False
         cur_length = self.calc_morph_length(model)
+
+        _logger.info("Current morph-length: {}".format(cur_length))
+
         if (abs(self.morph_length - cur_length) / self.morph_length >
                 self.threshold):
             d = abs(self.morph_length - cur_length) / (self.morph_length
@@ -1083,8 +1090,10 @@ class MorphLengthCorpusWeight(CorpusWeight):
             if splitloc == 0:
                 tot += len(k)
                 count += 1
-
-        return float(tot) / count
+        if count > 0:
+            return float(tot) / count
+        else:
+            return 0
 
 
 class NumMorphCorpusWeight(CorpusWeight):

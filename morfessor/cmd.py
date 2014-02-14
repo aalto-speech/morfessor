@@ -208,8 +208,7 @@ Interactive use (read corpus from user):
                  "and segmentation (default %(default)s)")
 
     # Options for corpusweight tuning
-    add_arg = parser.add_mutually_exclusive_group(
-        'Corpusweight tuning options').add_argument
+    add_arg = parser.add_mutually_exclusive_group().add_argument
     add_arg('-D', '--develset', dest="develfile", default=None,
             metavar='<file>',
             help="load annotated data for tuning the corpus weight parameter")
