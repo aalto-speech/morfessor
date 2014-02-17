@@ -356,3 +356,23 @@ boundary is made a split with the given probability.
 
 Selecting a good random initialization parameter helps in finding local optima
 as long as the split probability is high enough.
+
+.. _`corpusweight`:
+
+Corpusweight (alpha) tuning
+---------------------------
+An important parameter of the Morfessor Baseline model is the corpusweight
+(:math:`\alpha`), which balances the cost of the lexicon and the corpus. There
+are different options available for tuning this weight:
+
+Fixed weight (``--corpusweight``)
+    The weight is set fixed on the beginning of the training and does not change
+Development set (``--develset``)
+    A development set is used to balance the corpusweight so that the precision
+    and recall of segmenting the developmentset will be equal
+Morph length (``--morph-length``)
+    The corpusweight is tuned so that the average length of morphs in the
+    lexicon will be as desired
+Num morph types (``--num-morph-types``)
+    The corpusweight is tuned so that there will be approximate the number of
+    desired morph types in the lexicon
