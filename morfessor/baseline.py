@@ -1102,7 +1102,13 @@ class NumMorphCorpusWeight(CorpusWeight):
         self.threshold = threshold
 
     def update(self, model, epoch):
-        cur_morph_types = model._lexicon_boundaries.boundaries
+        if epoch < 1:
+            return False
+        cur_morph_types = model._lexicon_coding.boundaries
+
+        _logger.info("Number of morph types: {}".format(cur_morph_types))
+
+
         if (abs(self.num_morph_types - cur_morph_types) / self.num_morph_types
                 > self.threshold):
             d = (abs(self.num_morph_types - cur_morph_types) /
