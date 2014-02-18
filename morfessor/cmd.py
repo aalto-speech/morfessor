@@ -8,7 +8,7 @@ import string
 
 from . import get_version
 from .baseline import BaselineModel, AnnotationCorpusWeight, \
-    MorphLengthCorpusWeight, NumMorphCorpusWeight
+    MorphLengthCorpusWeight, NumMorphCorpusWeight, FixedCorpusWeight
 from .exception import ArgumentException
 from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
@@ -422,6 +422,8 @@ def main(args):
             _logger.info("Epochs: %s" % e)
             if args.fullretrain:
                 if abs(model.get_corpus_coding_weight() - start_corpus_weight) > 0.1:
+                    model.set_corpus_weight_updater(
+                        FixedCorpusWeight(model.get_corpus_coding_weight()))
                     model.clear_segmentation()
                     e, c = model.train_batch(args.algorithm, algparams,
                                              args.finish_threshold,
