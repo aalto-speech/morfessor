@@ -36,7 +36,7 @@ class MorfessorIO:
         self.encoding = encoding
         self.construction_separator = construction_separator
         self.comment_start = comment_start
-        self.compound_separator = compound_separator
+        self.compound_sep_re = re.compile(compound_separator, re.UNICODE)
         self.atom_separator = atom_separator
         if atom_separator is not None:
             self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
@@ -107,9 +107,8 @@ class MorfessorIO:
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
-        compound_sep = re.compile(self.compound_separator, re.UNICODE)
         for line in self._read_text_file(file_name):
-            for compound in compound_sep.split(line):
+            for compound in self.compound_sep_re.split(line):
                 if len(compound) > 0:
                     yield 1, compound, self._split_atoms(compound)
             yield 0, "\n", ()
@@ -146,7 +145,6 @@ class MorfessorIO:
         annotations = {}
         _logger.info("Reading annotations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
-            analyses = []
             compound, analyses_line = line.split(None, 1)
 
             if compound not in annotations:
@@ -175,17 +173,52 @@ class MorfessorIO:
     def read_binary_model_file(self, file_name):
         """Read a pickled model from file."""
         _logger.info("Loading model from '%s'..." % file_name)
-        with open(file_name, 'rb') as fobj:
-            model = pickle.load(fobj)
+        model = self.read_binary_file(file_name)
         _logger.info("Done.")
         return model
+
+    def read_binary_file(self, file_name):
+        """Read a pickled object from a file."""
+        with open(file_name, 'rb') as fobj:
+            obj = pickle.load(fobj)
+        return obj
 
     def write_binary_model_file(self, file_name, model):
         """Pickle a model to a file."""
         _logger.info("Saving model to '%s'..." % file_name)
-        with open(file_name, 'wb') as fobj:
-            pickle.dump(model, fobj, pickle.HIGHEST_PROTOCOL)
+        self.write_binary_file(file_name, model)
         _logger.info("Done.")
+
+    def write_binary_file(self, file_name, obj):
+        """Pickle an object into a file."""
+        with open(file_name, 'wb') as fobj:
+            pickle.dump(obj, fobj, pickle.HIGHEST_PROTOCOL)
+
+    def write_parameter_file(self, file_name, params):
+        """Write learned or estimated parameters to a file"""
+        with self._open_text_file_write(file_name) as file_obj:
+            d = datetime.datetime.now().replace(microsecond=0)
+            file_obj.write(
+                '# Parameters for Morfessor {}, {}\n'.format(
+                    get_version(), d))
+            for (key, val) in params.items():
+                file_obj.write('{}:\t{}\n'.format(key, val))
+
+    def read_parameter_file(self, file_name):
+        """Read learned or estimated parameters from a file"""
+        params = {}
+        line_re = re.compile(r'^(.*)\s*:\s*(.*)$')
+        for line in self._read_text_file(file_name):
+            m = line_re.match(line.rstrip())
+            if m:
+                key = m.group(1)
+                val = m.group(2)
+                try:
+                    val = float(val)
+                except ValueError:
+                    pass
+                params[key] = val
+        return params
 
     def read_any_model(self, file_name):
         """Read a file that is either a binary model or a Morfessor 1.0 style
