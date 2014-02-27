@@ -20,7 +20,7 @@ PY3 = sys.version_info.major == 3
 _logger = logging.getLogger(__name__)
 
 
-class MorfessorIO:
+class MorfessorIO(object):
     """Definition for all input and output files. Also handles all
     encoding issues.
 
