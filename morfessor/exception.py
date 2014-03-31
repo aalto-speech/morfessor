@@ -31,3 +31,9 @@ class UnsupportedConfigurationError(MorfessorException):
         super(UnsupportedConfigurationError, self).__init__(
             self, ('This operation is not supported in this program ' +
                    'configuration. Reason: {}.').format(reason))
+
+
+class SegmentOnlyModelException(MorfessorException):
+    def __init__(self):
+        super(SegmentOnlyModelException, self).__init__(
+            self, 'This model has been reduced to a segment-only model')

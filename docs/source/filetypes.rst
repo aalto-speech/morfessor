@@ -18,6 +18,15 @@ the :ref:`BaselineModel <baseline-model-label>` object. This ensures that all
 training-data, annotation-data and weights are exactly the same as when the
 model was saved.
 
+.. _binary-reduced-model-def:
+
+Reduced Binary model
+--------------------
+A reduced Morfessor model contains only that information that is necessary for
+segmenting new words using (nbest) viterbi segmentation. Reduced binary models
+much smaller that the full models, but no model modificating actions can be
+performed.
+
 .. _morfessor1-model-def:
 
 Morfessor 1.0 style text model
