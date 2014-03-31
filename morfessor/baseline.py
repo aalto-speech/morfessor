@@ -2,6 +2,7 @@ import collections
 import heapq
 import logging
 import math
+import numbers
 import random
 import re
 
@@ -24,8 +25,8 @@ def _constructions_to_str(constructions):
 
 # rcount = root count (from corpus)
 # count = total count of the node
-# splitloc = list of location of the possible splits for virtual
-#            constructions; empty if real construction
+# splitloc = integer or tuple. Location(s) of the possible splits for virtual
+#            constructions; empty tuple or 0 if real construction
 ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
@@ -112,11 +113,11 @@ class BaselineModel(object):
             threshold: probability of splitting at each position
 
         """
-        splitloc = [i for i in range(1, len(compound))
-                    if random.random() < threshold]
+        splitloc = tuple(i for i in range(1, len(compound))
+                         if random.random() < threshold)
         return self._splitloc_to_segmentation(compound, splitloc)
 
-    def _set_compound_analysis(self, compound, parts, ptype='flat'):
+    def _set_compound_analysis(self, compound, parts, ptype='rbranch'):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
@@ -131,7 +132,7 @@ class BaselineModel(object):
         """
         if len(parts) == 1:
             rcount, count = self._remove(compound)
-            self._analyses[compound] = ConstrNode(rcount, 0, [])
+            self._analyses[compound] = ConstrNode(rcount, 0, tuple())
             self._modify_construction_count(compound, count)
         elif ptype == 'flat':
             rcount, count = self._remove(compound)
@@ -145,12 +146,13 @@ class BaselineModel(object):
                 rcount, count = self._remove(construction)
                 prefix = parts[p]
                 if p == len(parts) - 1:
-                    self._analyses[construction] = ConstrNode(rcount, 0, [])
+                    self._analyses[construction] = ConstrNode(rcount, 0,
+                                                              0)
                     self._modify_construction_count(construction, count)
                 else:
                     suffix = self._join_constructions(parts[p + 1:])
                     self._analyses[construction] = ConstrNode(rcount, count,
-                                                              [len(prefix)])
+                                                              len(prefix))
                     self._modify_construction_count(prefix, count)
                     self._modify_construction_count(suffix, count)
                     construction = suffix
@@ -182,7 +184,7 @@ class BaselineModel(object):
         self._annot_coding.set_constructions(constructions)
         for m, f in constructions.items():
             count = 0
-            if m in self._analyses and len(self._analyses[m].splitloc) == 0:
+            if m in self._analyses and not self._analyses[m].splitloc:
                 count = self._analyses[m].count
             self._annot_coding.set_count(m, count)
 
@@ -251,7 +253,7 @@ class BaselineModel(object):
         for part in parts:
             constructions += self.viterbi_segment(part, addcount=addcount,
                                                   maxlen=maxlen)[0]
-        self._set_compound_analysis(compound, constructions)
+        self._set_compound_analysis(compound, constructions, ptype='flat')
         return constructions
 
     def _recursive_optimize(self, compound):
@@ -292,7 +294,7 @@ class BaselineModel(object):
         self._modify_construction_count(construction, count)
         mincost = self.get_cost()
         self._modify_construction_count(construction, -count)
-        splitloc = []
+        splitloc = 0
         for i in range(1, len(construction)):
             if (self.nosplit_re and
                     self.nosplit_re.match(construction[(i-1):(i+1)])):
@@ -306,13 +308,14 @@ class BaselineModel(object):
             self._modify_construction_count(suffix, -count)
             if cost <= mincost:
                 mincost = cost
-                splitloc = [i]
+                splitloc = i
 
-        if len(splitloc) > 0:
+        if splitloc:
             # Virtual construction
-            self._analyses[construction] = ConstrNode(rcount, count, splitloc)
-            prefix = construction[:splitloc[0]]
-            suffix = construction[splitloc[0]:]
+            self._analyses[construction] = ConstrNode(rcount, count,
+                                                      splitloc)
+            prefix = construction[:splitloc]
+            suffix = construction[splitloc:]
             self._modify_construction_count(prefix, count)
             self._modify_construction_count(suffix, count)
             lp = self._recursive_split(prefix)
@@ -322,7 +325,7 @@ class BaselineModel(object):
                 return lp + lp
         else:
             # Real construction
-            self._analyses[construction] = ConstrNode(rcount, 0, [])
+            self._analyses[construction] = ConstrNode(rcount, 0, tuple())
             self._modify_construction_count(construction, count)
             return [construction]
 
@@ -337,14 +340,14 @@ class BaselineModel(object):
         if construction in self._analyses:
             rcount, count, splitloc = self._analyses[construction]
         else:
-            rcount, count, splitloc = 0, 0, []
+            rcount, count, splitloc = 0, 0, 0
         newcount = count + dcount
         if newcount == 0:
             del self._analyses[construction]
         else:
             self._analyses[construction] = ConstrNode(rcount, newcount,
                                                       splitloc)
-        if len(splitloc) > 0:
+        if splitloc:
             # Virtual construction
             children = self._splitloc_to_segmentation(construction, splitloc)
             for child in children:
@@ -390,11 +393,13 @@ class BaselineModel(object):
         for c in constructions:
             i += len(c)
             splitloc.append(i)
-        return splitloc[:-1]
+        return tuple(splitloc[:-1])
 
     @staticmethod
     def _splitloc_to_segmentation(compound, splitloc):
         """Return segmentation corresponding to the list of split locations."""
+        if isinstance(splitloc, numbers.Number):
+            return [compound[:splitloc], compound[splitloc:]]
         parts = []
         startpos = 0
         endpos = 0
@@ -422,7 +427,7 @@ class BaselineModel(object):
     def get_constructions(self):
         """Return a list of the present constructions and their counts."""
         return sorted((c, node.count) for c, node in self._analyses.items()
-                      if len(node.splitloc) == 0)
+                      if not node.splitloc)
 
     def get_cost(self):
         """Return current model encoding cost."""
@@ -510,7 +515,7 @@ class BaselineModel(object):
         """
         rcount, count, splitloc = self._analyses[compound]
         constructions = []
-        if len(splitloc) > 0:
+        if splitloc:
             for child in self._splitloc_to_segmentation(compound,
                                                         splitloc):
                 constructions += self.segment(child)
@@ -729,7 +734,7 @@ class BaselineModel(object):
                 cost = grid[pt][0]
                 construction = compound[pt:t]
                 if (construction in self._analyses and
-                        len(self._analyses[construction].splitloc) == 0):
+                        not self._analyses[construction].splitloc):
                     if self._analyses[construction].count <= 0:
                         raise MorfessorException(
                             "Construction count of '%s' is %s" %
@@ -810,7 +815,7 @@ class BaselineModel(object):
                 cost = grid[pt]
                 construction = compound[pt:t]
                 if (construction in self._analyses and
-                        len(self._analyses[construction].splitloc) == 0):
+                        not self._analyses[construction].splitloc):
                     if self._analyses[construction].count <= 0:
                         raise MorfessorException(
                             "Construction count of '%s' is %s" %
@@ -873,7 +878,7 @@ class BaselineModel(object):
                     cost = grid[pt][k][0]
                     construction = compound[pt:t]
                     if (construction in self._analyses and
-                            len(self._analyses[construction].splitloc) == 0):
+                            not self._analyses[construction].splitloc):
                         if self._analyses[construction].count <= 0:
                             raise MorfessorException(
                                 "Construction count of '%s' is %s" %
