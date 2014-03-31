@@ -60,6 +60,9 @@ class BaselineModel(object):
         # have no split locations.
         self._analyses = {}
 
+        # Flag to indicate the model is only useful for segmentation
+        self._segment_only = False
+
         # Cost variables
         self._lexicon_coding = LexiconEncoding()
         self._corpus_coding = CorpusEncoding(self._lexicon_coding)
@@ -82,8 +85,6 @@ class BaselineModel(object):
             self.nosplit_re = None
         else:
             self.nosplit_re = re.compile(nosplit_re, re.UNICODE)
-
-        self._segment_only = False
 
     def set_corpus_weight_updater(self, corpus_weight):
         if corpus_weight is None:
