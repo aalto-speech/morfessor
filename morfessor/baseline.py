@@ -975,6 +975,8 @@ class BaselineModel(object):
 
         """
         self._segment_only = True
+        self._num_compounds = len(self.get_compounds())
+
         self._analyses = {k: v for (k, v) in self._analyses.items()
                           if not v.splitloc}
 
