@@ -7,10 +7,12 @@ class MorfessorException(Exception):
 
 
 class ArgumentException(Exception):
+    """Exception in command line argument parsing."""
     pass
 
 
 class InvalidCategoryError(MorfessorException):
+    """Attempt to load data using a different categorization scheme."""
     def __init__(self, category):
         super(InvalidCategoryError, self).__init__(
             self, 'This model does not recognize the category {}'.format(

@@ -297,8 +297,8 @@ class BaselineModel(object):
         splitloc = 0
         for i in range(1, len(construction)):
             if (self.nosplit_re and
-                    self.nosplit_re.match(construction[(i-1):(i+1)])):
-                    continue
+                    self.nosplit_re.match(construction[(i - 1):(i + 1)])):
+                continue
             prefix = construction[:i]
             suffix = construction[i:]
             self._modify_construction_count(prefix, count)
@@ -671,8 +671,8 @@ class BaselineModel(object):
                 else:
                     self._add_compound(w, 1)
                 if init_rand_split is not None and init_rand_split > 0:
-                        parts = self._random_split(w, init_rand_split)
-                        self._set_compound_analysis(w, parts)
+                    parts = self._random_split(w, init_rand_split)
+                    self._set_compound_analysis(w, parts)
                 if algorithm == 'recursive':
                     segments = self._recursive_optimize(w, *algorithm_params)
                 elif algorithm == 'viterbi':
@@ -944,7 +944,7 @@ class BaselineModel(object):
         self._corpus_coding.weight = weight
 
 
-class AnnotationsModelUpdate:
+class AnnotationsModelUpdate(object):
     """Class for using development annotations to update the corpus weight
     during batch training
 
