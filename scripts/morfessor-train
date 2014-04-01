@@ -39,7 +39,7 @@ Interactive use (read corpus from user):
     except morfessor.ArgumentException as e:
         parser.error(e)
     except Exception as e:
-        _logger.error("Fatal Error %s %s" % (type(e), e))
+        _logger.error("Fatal Error {} {}".format(type(e), e))
         raise
 
 
