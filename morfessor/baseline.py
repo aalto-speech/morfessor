@@ -233,7 +233,8 @@ class BaselineModel(object):
         parts = []
         for i in range(1, clen):
             if compound[i] in self.forcesplit_list:
-                parts.append(compound[j:i])
+                if len(compound[j:i]) > 0:
+                    parts.append(compound[j:i])
                 parts.append(compound[i:i + 1])
                 j = i + 1
         if j < clen:
