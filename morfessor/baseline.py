@@ -1112,17 +1112,17 @@ class MorphLengthCorpusWeight(CorpusWeight):
 
     @classmethod
     def calc_morph_length(cls, model):
-        tot = 0
-        count = 0
-        for k, v in model._analyses.items():
-            _, _, splitloc = v
-            if not splitloc:
-                tot += len(k)
-                count += 1
-        if count > 0:
-            return float(tot) / count
+        total_constructions = 0
+        total_atoms = 0
+        for compound in model.get_compounds():
+            constructions = model.segment(compound)
+            for construction in constructions:
+                total_constructions += 1
+                total_atoms += len(construction)
+        if total_constructions > 0:
+            return float(total_atoms) / total_constructions
         else:
-            return 0
+            return 0.0
 
 
 class NumMorphCorpusWeight(CorpusWeight):
