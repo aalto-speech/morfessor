@@ -2,11 +2,12 @@ import collections
 import heapq
 import logging
 import math
+import numbers
 import random
 import re
 
 from .utils import _progress
-from .exception import MorfessorException
+from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
 
@@ -24,8 +25,8 @@ def _constructions_to_str(constructions):
 
 # rcount = root count (from corpus)
 # count = total count of the node
-# splitloc = list of location of the possible splits for virtual
-#            constructions; empty if real construction
+# splitloc = integer or tuple. Location(s) of the possible splits for virtual
+#            constructions; empty tuple or 0 if real construction
 ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
@@ -41,7 +42,7 @@ class BaselineModel(object):
 
     penalty = -9999.9
 
-    def __init__(self, forcesplit_list=None, corpusweight=1.0,
+    def __init__(self, forcesplit_list=None, corpusweight=None,
                  use_skips=False, nosplit_re=None):
         """Initialize a new model instance.
 
@@ -59,11 +60,16 @@ class BaselineModel(object):
         # have no split locations.
         self._analyses = {}
 
+        # Flag to indicate the model is only useful for segmentation
+        self._segment_only = False
+
         # Cost variables
         self._lexicon_coding = LexiconEncoding()
-        self._corpus_coding = CorpusEncoding(self._lexicon_coding,
-                                             corpusweight)
+        self._corpus_coding = CorpusEncoding(self._lexicon_coding)
         self._annot_coding = None
+
+        #Set corpus weight updater
+        self.set_corpus_weight_updater(corpusweight)
 
         # Configuration variables
         self._use_skips = use_skips  # Random skips for frequent constructions
@@ -79,6 +85,20 @@ class BaselineModel(object):
             self.nosplit_re = None
         else:
             self.nosplit_re = re.compile(nosplit_re, re.UNICODE)
+
+    def set_corpus_weight_updater(self, corpus_weight):
+        if corpus_weight is None:
+            self._corpus_weight_updater = FixedCorpusWeight(1.0)
+        elif isinstance(corpus_weight, numbers.Number):
+            self._corpus_weight_updater = FixedCorpusWeight(corpus_weight)
+        else:
+            self._corpus_weight_updater = corpus_weight
+
+        self._corpus_weight_updater.update(self, 0)
+
+    def _check_segment_only(self):
+        if self._segment_only:
+            raise SegmentOnlyModelException()
 
     @property
     def tokens(self):
@@ -112,11 +132,11 @@ class BaselineModel(object):
             threshold: probability of splitting at each position
 
         """
-        splitloc = [i for i in range(1, len(compound))
-                    if random.random() < threshold]
+        splitloc = tuple(i for i in range(1, len(compound))
+                         if random.random() < threshold)
         return self._splitloc_to_segmentation(compound, splitloc)
 
-    def _set_compound_analysis(self, compound, parts, ptype='flat'):
+    def _set_compound_analysis(self, compound, parts, ptype='rbranch'):
         """Set analysis of compound to according to given segmentation.
 
         Arguments:
@@ -131,7 +151,7 @@ class BaselineModel(object):
         """
         if len(parts) == 1:
             rcount, count = self._remove(compound)
-            self._analyses[compound] = ConstrNode(rcount, 0, [])
+            self._analyses[compound] = ConstrNode(rcount, 0, tuple())
             self._modify_construction_count(compound, count)
         elif ptype == 'flat':
             rcount, count = self._remove(compound)
@@ -145,12 +165,13 @@ class BaselineModel(object):
                 rcount, count = self._remove(construction)
                 prefix = parts[p]
                 if p == len(parts) - 1:
-                    self._analyses[construction] = ConstrNode(rcount, 0, [])
+                    self._analyses[construction] = ConstrNode(rcount, 0,
+                                                              0)
                     self._modify_construction_count(construction, count)
                 else:
                     suffix = self._join_constructions(parts[p + 1:])
                     self._analyses[construction] = ConstrNode(rcount, count,
-                                                              [len(prefix)])
+                                                              len(prefix))
                     self._modify_construction_count(prefix, count)
                     self._modify_construction_count(suffix, count)
                     construction = suffix
@@ -182,7 +203,7 @@ class BaselineModel(object):
         self._annot_coding.set_constructions(constructions)
         for m, f in constructions.items():
             count = 0
-            if m in self._analyses and len(self._analyses[m].splitloc) == 0:
+            if m in self._analyses and not self._analyses[m].splitloc:
                 count = self._analyses[m].count
             self._annot_coding.set_count(m, count)
 
@@ -212,7 +233,8 @@ class BaselineModel(object):
         parts = []
         for i in range(1, clen):
             if compound[i] in self.forcesplit_list:
-                parts.append(compound[j:i])
+                if len(compound[j:i]) > 0:
+                    parts.append(compound[j:i])
                 parts.append(compound[i:i + 1])
                 j = i + 1
         if j < clen:
@@ -251,7 +273,7 @@ class BaselineModel(object):
         for part in parts:
             constructions += self.viterbi_segment(part, addcount=addcount,
                                                   maxlen=maxlen)[0]
-        self._set_compound_analysis(compound, constructions)
+        self._set_compound_analysis(compound, constructions, ptype='flat')
         return constructions
 
     def _recursive_optimize(self, compound):
@@ -292,11 +314,11 @@ class BaselineModel(object):
         self._modify_construction_count(construction, count)
         mincost = self.get_cost()
         self._modify_construction_count(construction, -count)
-        splitloc = []
+        splitloc = 0
         for i in range(1, len(construction)):
             if (self.nosplit_re and
-                    self.nosplit_re.match(construction[(i-1):(i+1)])):
-                    continue
+                    self.nosplit_re.match(construction[(i - 1):(i + 1)])):
+                continue
             prefix = construction[:i]
             suffix = construction[i:]
             self._modify_construction_count(prefix, count)
@@ -306,13 +328,14 @@ class BaselineModel(object):
             self._modify_construction_count(suffix, -count)
             if cost <= mincost:
                 mincost = cost
-                splitloc = [i]
+                splitloc = i
 
-        if len(splitloc) > 0:
+        if splitloc:
             # Virtual construction
-            self._analyses[construction] = ConstrNode(rcount, count, splitloc)
-            prefix = construction[:splitloc[0]]
-            suffix = construction[splitloc[0]:]
+            self._analyses[construction] = ConstrNode(rcount, count,
+                                                      splitloc)
+            prefix = construction[:splitloc]
+            suffix = construction[splitloc:]
             self._modify_construction_count(prefix, count)
             self._modify_construction_count(suffix, count)
             lp = self._recursive_split(prefix)
@@ -322,7 +345,7 @@ class BaselineModel(object):
                 return lp + lp
         else:
             # Real construction
-            self._analyses[construction] = ConstrNode(rcount, 0, [])
+            self._analyses[construction] = ConstrNode(rcount, 0, tuple())
             self._modify_construction_count(construction, count)
             return [construction]
 
@@ -337,14 +360,14 @@ class BaselineModel(object):
         if construction in self._analyses:
             rcount, count, splitloc = self._analyses[construction]
         else:
-            rcount, count, splitloc = 0, 0, []
+            rcount, count, splitloc = 0, 0, 0
         newcount = count + dcount
         if newcount == 0:
             del self._analyses[construction]
         else:
             self._analyses[construction] = ConstrNode(rcount, newcount,
                                                       splitloc)
-        if len(splitloc) > 0:
+        if splitloc:
             # Virtual construction
             children = self._splitloc_to_segmentation(construction, splitloc)
             for child in children:
@@ -376,11 +399,17 @@ class BaselineModel(object):
         epoch number argument as 0).
 
         """
+        forced_epochs = 0
+        if self._corpus_weight_updater.update(self, epoch_num):
+            forced_epochs += 2
+
         if self._use_skips:
             self._counter = collections.Counter()
         if self._supervised:
             self._update_annotation_choices()
             self._annot_coding.update_weight()
+
+        return forced_epochs
 
     @staticmethod
     def _segmentation_to_splitloc(constructions):
@@ -390,11 +419,13 @@ class BaselineModel(object):
         for c in constructions:
             i += len(c)
             splitloc.append(i)
-        return splitloc[:-1]
+        return tuple(splitloc[:-1])
 
     @staticmethod
     def _splitloc_to_segmentation(compound, splitloc):
         """Return segmentation corresponding to the list of split locations."""
+        if isinstance(splitloc, numbers.Number):
+            return [compound[:splitloc], compound[splitloc:]]
         parts = []
         startpos = 0
         endpos = 0
@@ -416,13 +447,14 @@ class BaselineModel(object):
 
     def get_compounds(self):
         """Return the compound types stored by the model."""
+        self._check_segment_only()
         return [w for w, node in self._analyses.items()
                 if node.rcount > 0]
 
     def get_constructions(self):
         """Return a list of the present constructions and their counts."""
         return sorted((c, node.count) for c, node in self._analyses.items()
-                      if len(node.splitloc) == 0)
+                      if not node.splitloc)
 
     def get_cost(self):
         """Return current model encoding cost."""
@@ -434,6 +466,7 @@ class BaselineModel(object):
 
     def get_segmentations(self):
         """Retrieve segmentations for all compounds encoded by the model."""
+        self._check_segment_only()
         for w in sorted(self._analyses.keys()):
             c = self._analyses[w].rcount
             if c > 0:
@@ -458,6 +491,7 @@ class BaselineModel(object):
         the total cost.
 
         """
+        self._check_segment_only()
         totalcount = collections.Counter()
         for count, _, atoms in data:
             if len(atoms) > 0:
@@ -484,16 +518,18 @@ class BaselineModel(object):
         segmentation.
 
         """
+        self._check_segment_only()
         for count, segmentation in segmentations:
             comp = "".join(segmentation)
             self._add_compound(comp, count)
             self._set_compound_analysis(comp, segmentation)
 
-    def set_annotations(self, annotations, annotatedcorpusweight):
+    def set_annotations(self, annotations, annotatedcorpusweight=None):
         """Prepare model for semi-supervised learning with given
          annotations.
 
          """
+        self._check_segment_only()
         self._supervised = True
         self.annotations = annotations
         self._annot_coding = AnnotatedCorpusEncoding(self._corpus_coding,
@@ -508,9 +544,10 @@ class BaselineModel(object):
         data. For segmenting new words, use viterbi_segment(compound).
 
         """
+        self._check_segment_only()
         rcount, count, splitloc = self._analyses[compound]
         constructions = []
-        if len(splitloc) > 0:
+        if splitloc:
             for child in self._splitloc_to_segmentation(compound,
                                                         splitloc):
                 constructions += self.segment(child)
@@ -519,8 +556,7 @@ class BaselineModel(object):
         return constructions
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
-                    devel_annotations=None, finish_threshold=0.005,
-                    max_epochs=None):
+                    finish_threshold=0.005, max_epochs=None):
         """Train the model in batch fashion.
 
         The model is trained with the data already loaded into the model (by
@@ -544,18 +580,16 @@ class BaselineModel(object):
                                 smaller then finish_threshold * #boundaries
 
         """
-        self._epoch_update(0)
+        epochs = 0
+        forced_epochs = max(1, self._epoch_update(epochs))
         newcost = self.get_cost()
         compounds = list(self.get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
                      (len(compounds), self._corpus_coding.boundaries))
 
-        corpus_weight_updater = AnnotationsModelUpdate(devel_annotations, self)
-
-        epochs = 0
         _logger.info("Starting batch training")
         _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
-        forced_epochs = 1  # force this many epochs before stopping
+
         while True:
             # One epoch
             random.shuffle(compounds)
@@ -573,15 +607,9 @@ class BaselineModel(object):
             epochs += 1
 
             _logger.debug("Cost before epoch update: %s" % self.get_cost())
-            self._epoch_update(epochs)
+            forced_epochs = max(forced_epochs, self._epoch_update(epochs))
             oldcost = newcost
             newcost = self.get_cost()
-
-            if devel_annotations is not None:
-                if corpus_weight_updater.update_model(epochs):
-                    self._epoch_update(epochs)
-                    forced_epochs = max(forced_epochs, 2)
-                    newcost = self.get_cost()
 
             _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
             if (forced_epochs == 0 and
@@ -628,6 +656,7 @@ class BaselineModel(object):
                                or 0 means no random splitting.
 
         """
+        self._check_segment_only()
         if count_modifier is not None:
             counts = {}
 
@@ -666,8 +695,8 @@ class BaselineModel(object):
                 else:
                     self._add_compound(w, 1)
                 if init_rand_split is not None and init_rand_split > 0:
-                        parts = self._random_split(w, init_rand_split)
-                        self._set_compound_analysis(w, parts)
+                    parts = self._random_split(w, init_rand_split)
+                    self._set_compound_analysis(w, parts)
                 if algorithm == 'recursive':
                     segments = self._recursive_optimize(w, *algorithm_params)
                 elif algorithm == 'viterbi':
@@ -729,7 +758,7 @@ class BaselineModel(object):
                 cost = grid[pt][0]
                 construction = compound[pt:t]
                 if (construction in self._analyses and
-                        len(self._analyses[construction].splitloc) == 0):
+                        not self._analyses[construction].splitloc):
                     if self._analyses[construction].count <= 0:
                         raise MorfessorException(
                             "Construction count of '%s' is %s" %
@@ -810,7 +839,7 @@ class BaselineModel(object):
                 cost = grid[pt]
                 construction = compound[pt:t]
                 if (construction in self._analyses and
-                        len(self._analyses[construction].splitloc) == 0):
+                        not self._analyses[construction].splitloc):
                     if self._analyses[construction].count <= 0:
                         raise MorfessorException(
                             "Construction count of '%s' is %s" %
@@ -873,7 +902,7 @@ class BaselineModel(object):
                     cost = grid[pt][k][0]
                     construction = compound[pt:t]
                     if (construction in self._analyses and
-                            len(self._analyses[construction].splitloc) == 0):
+                            not self._analyses[construction].splitloc):
                         if self._analyses[construction].count <= 0:
                             raise MorfessorException(
                                 "Construction count of '%s' is %s" %
@@ -936,42 +965,72 @@ class BaselineModel(object):
         return self._corpus_coding.weight
 
     def set_corpus_coding_weight(self, weight):
+        self._check_segment_only()
         self._corpus_coding.weight = weight
 
+    def make_segment_only(self):
+        """Reduce the size of this model by removing all non-morphs from the
+        analyses. After calling this method it is not possible anymore to call
+        any other method that would change the state of the model. Anyway
+        doing so would throw an exception.
 
-class AnnotationsModelUpdate:
+        """
+        self._num_compounds = len(self.get_compounds())
+        self._segment_only = True
+
+        self._analyses = {k: v for (k, v) in self._analyses.items()
+                          if not v.splitloc}
+
+    def clear_segmentation(self):
+        for compound in list(self.get_compounds()):
+            self._set_compound_analysis(compound, [compound])
+
+
+class CorpusWeight(object):
+    @classmethod
+    def move_direction(cls, model, direction, epoch):
+        if direction != 0:
+            weight = model.get_corpus_coding_weight()
+            if direction > 0:
+                weight *= 1 + 2.0 / epoch
+            else:
+                weight *= 1.0 / (1 + 2.0 / epoch)
+            model.set_corpus_coding_weight(weight)
+            _logger.info("Corpus weight set to {}".format(weight))
+            return True
+        return False
+
+
+class FixedCorpusWeight(CorpusWeight):
+    def __init__(self, weight):
+        self.weight = weight
+
+    def update(self, model, _):
+        model.set_corpus_coding_weight(self.weight)
+        return False
+
+
+class AnnotationCorpusWeight(CorpusWeight):
     """Class for using development annotations to update the corpus weight
     during batch training
 
     """
-    def __init__(self, data, model):
-        """Initialize class with the development data and the model to update.
 
-        Arguments:
-            data: iterator of (compound, [analyses,]) tuples.
-            model: BaselineModel to update
-        """
-        self.data = data
-        self.model = model
+    def __init__(self, devel_set, threshold=0.01):
+        self.data = devel_set
+        self.threshold = threshold
 
-    def update_model(self, epochs):
+    def update(self, model, epoch):
         """Tune model corpus weight based on the precision and
         recall of the development data, trying to keep them equal"""
+        if epoch < 1:
+            return False
         tmp = self.data.items()
         wlist, annotations = zip(*tmp)
-        segments = [self.model.viterbi_segment(w)[0] for w in wlist]
+        segments = [model.viterbi_segment(w)[0] for w in wlist]
         d = self._estimate_segmentation_dir(segments, annotations)
 
-        if d != 0:
-            weight = self.model.get_corpus_coding_weight()
-            if d > 0:
-                weight *= 1 + 2.0 / epochs
-            else:
-                weight *= 1.0 / (1 + 2.0 / epochs)
-            self.model.set_corpus_coding_weight(weight)
-            _logger.info("Corpus weight set to {}".format(weight))
-            return True
-        return False
+        return self.move_direction(model, d, epoch)
 
     @classmethod
     def _boundary_recall(cls, prediction, reference):
@@ -1006,8 +1065,7 @@ class AnnotationsModelUpdate:
         f = 2.0 * pre * rec / (pre + rec)
         return pre, rec, f
 
-    @classmethod
-    def _estimate_segmentation_dir(cls, segments, annotations, threshold=0.01):
+    def _estimate_segmentation_dir(self, segments, annotations):
         """Estimate if the given compounds are under- or oversegmented.
 
         The decision is based on the difference between boundary precision
@@ -1016,24 +1074,76 @@ class AnnotationsModelUpdate:
         Arguments:
           segments: list of predicted segmentations
           annotations: list of reference segmentations
-          threshold: maximum threshold for the difference between
-                       predictions and reference
 
         Return 1 in the case of oversegmentation, -1 in the case of
         undersegmentation, and 0 if no changes are required.
 
         """
-        pre, rec, f = cls._bpr_evaluation([[x] for x in segments],
-                                          annotations)
+        pre, rec, f = self._bpr_evaluation([[x] for x in segments],
+                                           annotations)
         _logger.info("Boundary evaluation: precision %.4f; recall %.4f" %
                      (pre, rec))
-        if abs(pre - rec) < threshold:
+        if abs(pre - rec) < self.threshold:
             return 0
         elif rec > pre:
             return 1
         else:
             return -1
 
+
+class MorphLengthCorpusWeight(CorpusWeight):
+    def __init__(self, morph_lenght, threshold=0.01):
+        self.morph_length = morph_lenght
+        self.threshold = threshold
+
+    def update(self, model, epoch):
+        if epoch < 1:
+            return False
+        cur_length = self.calc_morph_length(model)
+
+        _logger.info("Current morph-length: {}".format(cur_length))
+
+        if (abs(self.morph_length - cur_length) / self.morph_length >
+                self.threshold):
+            d = abs(self.morph_length - cur_length) / (self.morph_length
+                                                       - cur_length)
+            return self.move_direction(model, d, epoch)
+        return False
+
+    @classmethod
+    def calc_morph_length(cls, model):
+        total_constructions = 0
+        total_atoms = 0
+        for compound in model.get_compounds():
+            constructions = model.segment(compound)
+            for construction in constructions:
+                total_constructions += 1
+                total_atoms += len(construction)
+        if total_constructions > 0:
+            return float(total_atoms) / total_constructions
+        else:
+            return 0.0
+
+
+class NumMorphCorpusWeight(CorpusWeight):
+    def __init__(self, num_morph_types, threshold=0.01):
+        self.num_morph_types = num_morph_types
+        self.threshold = threshold
+
+    def update(self, model, epoch):
+        if epoch < 1:
+            return False
+        cur_morph_types = model._lexicon_coding.boundaries
+
+        _logger.info("Number of morph types: {}".format(cur_morph_types))
+
+
+        if (abs(self.num_morph_types - cur_morph_types) / self.num_morph_types
+                > self.threshold):
+            d = (abs(self.num_morph_types - cur_morph_types) /
+                 (self.num_morph_types - cur_morph_types))
+            return self.move_direction(model, d, epoch)
+        return False
 
 class Encoding(object):
     """Base class for calculating the entropy (encoding length) of a corpus
