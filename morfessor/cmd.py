@@ -1,3 +1,4 @@
+import locale
 import logging
 import math
 import random
@@ -17,6 +18,11 @@ from .evaluation import MorfessorEvaluation, EvaluationConfig, \
 PY3 = sys.version_info.major == 3
 
 _logger = logging.getLogger(__name__)
+
+# Decodes commandline input in locale
+_preferred_encoding = locale.getpreferredencoding()
+def _locale_decoder(s):
+    return unicode(s.decode(_preferred_encoding))
 
 
 def get_default_argparser():
@@ -486,8 +492,8 @@ def main(args):
         outformat = args.outputformat
         csep = args.outputformatseparator
         if not PY3:
-            outformat = unicode(outformat)
-            csep = unicode(csep)
+            outformat = _locale_decoder(outformat)
+            csep = _locale_decoder(csep)
         outformat = outformat.replace(r"\n", "\n")
         outformat = outformat.replace(r"\t", "\t")
         keywords = [x[1] for x in string.Formatter().parse(outformat)]
