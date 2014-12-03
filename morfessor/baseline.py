@@ -238,7 +238,7 @@ class BaselineModel(object):
                 j = i + 1
         if j < clen:
             parts.append(compound[j:])
-        return parts
+        return [p for p in parts if len(p) > 0]
 
     def _test_skip(self, construction):
         """Return true if construction should be skipped."""
