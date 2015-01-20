@@ -41,6 +41,7 @@ class MorfessorIO(object):
         if atom_separator is not None:
             self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
         self.lowercase = lowercase
+        self._version = get_version()
 
     def read_segmentation_file(self, file_name, has_counts=True, **kwargs):
         """Read segmentation file.
@@ -69,7 +70,7 @@ class MorfessorIO(object):
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
-                           (get_version(), d))
+                           (self._version, d))
             for count, segmentation in segmentations:
                 if self.atom_separator is None:
                     s = self.construction_separator.join(segmentation)
@@ -200,7 +201,7 @@ class MorfessorIO(object):
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write(
                 '# Parameters for Morfessor {}, {}\n'.format(
-                    get_version(), d))
+                    self._version, d))
             for (key, val) in params.items():
                 file_obj.write('{}:\t{}\n'.format(key, val))
 
