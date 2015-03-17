@@ -1010,6 +1010,31 @@ class FixedCorpusWeight(CorpusWeight):
         return False
 
 
+class AlignedTokenCountCorpusWeight(CorpusWeight):
+    """Class for using a sentence-aligned parallel bilingual corpus
+    to set the corpus weight in such a way that the number of
+    morphs in corpus of the language to be segmented
+    is as similar as possible to the number of tokens on the reference side.
+    """
+
+    def __init__(self, segment_dev, reference_dev):
+        self.segment_dev = segment_dev
+        self.reference_dev = reference_dev
+        self.previous_weight = None
+        self.previous_cost = None
+
+    def update(self, model, epoch):
+        weight = model.get_corpus_coding_weight()
+        (cost, d) = self.evaluation()
+        if self.previous_weight is None or cost < self.previous_cost:
+            # accept the previous step
+            self.previous_weight = weight
+            self.previous_cost = cost
+        else:
+            # revert the previous step
+            weight = self.previous_weight
+            cost = self.previous_cost
+
 class AnnotationCorpusWeight(CorpusWeight):
     """Class for using development annotations to update the corpus weight
     during batch training
