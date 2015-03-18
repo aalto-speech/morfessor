@@ -1026,6 +1026,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         self.segment_dev = list(self.tokenize(segment_dev))
         self.reference_counts = list(len(x) for x
                                      in self.tokenize(reference_dev))
+        _logger.info('Total reference tokens {}'.format(
+            sum(self.reference_counts)))
         self.threshold = 1.0 - threshold
         if loss is None:
             self.loss = lambda x: x**2
@@ -1037,6 +1039,9 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         self.previous_d = None
 
     def update(self, model, epoch):
+        if epoch < 1:
+            # Can't use viterbi_segment before first epoch
+            return False
         weight = model.get_corpus_coding_weight()
         (cost, d) = self.evaluation(model)
         if (self.previous_cost is not None and
@@ -1066,14 +1071,18 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     def evaluation(self, model):
         cost = 0.0
         d = 0
+        tot = 0
         for (tokens, ref) in zip(self.segment_dev, self.reference_counts):
             segcount = sum(len(model.viterbi_segment(w)[0]) for w in tokens)
+            tot += segcount
             diff = segcount - ref
             cost += self.loss(diff)
             if diff > 0:
                 d += 1
             elif diff < 0:
                 d -= 1
+        _logger.info('Align cost {}, direction {}, total tokens {}'.format(
+            cost, d, tot))
         return (cost, d)
 
 
