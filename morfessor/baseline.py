@@ -1016,10 +1016,12 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     morphs in corpus of the language to be segmented
     is as similar as possible to the number of tokens on the reference side.
     """
+    re_token_sep = re.compile(r'\s+', re.UNICODE)
 
     def __init__(self, segment_dev, reference_dev, loss=None):
-        self.segment_dev = list(segment_dev)
-        self.reference_counts = list(self.count_tokens(reference_dev))
+        self.segment_dev = list(self.tokenize(segment_dev))
+        self.reference_counts = list(len(x) for x
+                                     in self.tokenize(reference_dev))
         if loss is None:
             self.loss = lambda x: x**2
         else:
@@ -1028,7 +1030,6 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         self.previous_weight = None
         self.previous_cost = None
         self.previous_d = None
-        self.re_token_sep = re.compile(r'\s+', re.UNICODE)
 
     def update(self, model, epoch):
         weight = model.get_corpus_coding_weight()
@@ -1041,6 +1042,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         else:
             # revert the previous step
             weight = self.previous_weight
+            _logger.info("Reverting weight to {}".format(weight))
             model.set_corpus_coding_weight(weight)
             cost = self.previous_cost
             d = self.previous_d
@@ -1048,13 +1050,23 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         return self.move_direction(model, d, epoch)
 
     @classmethod
-    def count_tokens(cls, lines):
+    def tokenize(cls, lines):
         for line in lines:
             line = line.strip()
-            yield sum(1 for _ in self.re_token_sep.split(line))
+            yield cls.re_token_sep.split(line)
 
     def evaluation(self, model):
-        pass
+        cost = 0.0
+        d = 0
+        for (tokens, ref) in zip(self.segment_dev, self.reference_counts):
+            segcount = sum(len(model.viterbi_segment(w)[0]) for w in tokens)
+            diff = segcount - ref
+            cost += self.loss(diff)
+            if diff > 0:
+                d += 1
+            elif diff < 0:
+                d -= 1
+        return (cost, d)
 
 
 class AnnotationCorpusWeight(CorpusWeight):
