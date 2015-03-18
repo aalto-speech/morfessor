@@ -1072,8 +1072,13 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         cost = 0.0
         d = 0
         tot = 0
-        for (tokens, ref) in zip(self.segment_dev, self.reference_counts):
-            segcount = sum(len(model.viterbi_segment(w)[0]) for w in tokens)
+        cache = {}
+        _logger.info('Segmenting aligned parallel corpus for weight learning')
+        for (tokens, ref) in _progress(
+                zip(self.segment_dev, self.reference_counts)):
+            segcount = sum(
+                len(self._cached_seg(model, cache, w))
+                for w in tokens)
             tot += segcount
             diff = segcount - ref
             cost += self.loss(diff)
@@ -1084,6 +1089,14 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         _logger.info('Align cost {}, direction {}, total tokens {}'.format(
             cost, d, tot))
         return (cost, d)
+
+    def _cached_seg(self, model, cache, word):
+        if word not in cache:
+            try:
+                cache[word] = model.segment(word)
+            except KeyError:
+                cache[word] = model.viterbi_segment(word)[0]
+        return cache[word]
 
 
 class AnnotationCorpusWeight(CorpusWeight):
