@@ -1028,7 +1028,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
                                      in self.tokenize(reference_dev))
         _logger.info('Total reference tokens {}'.format(
             sum(self.reference_counts)))
-        self.threshold = 1.0 - threshold
+        self.threshold = threshold
         if loss is None:
             self.loss = lambda x: x**2
         else:
@@ -1044,9 +1044,11 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             return False
         weight = model.get_corpus_coding_weight()
         (cost, d) = self.evaluation(model)
-        if (self.previous_cost is not None and
-                cost > (self.previous_cost * self.threshold)):
-            return False
+        if self.previous_cost is not None:
+            absdiff = abs(cost - self.previous_cost)
+            absthresh = self.previous_cost * self.threshold
+            if absdiff < absthresh:
+                return False
         if self.previous_weight is None or cost < self.previous_cost:
             # accept the previous step
             self.previous_weight = weight
