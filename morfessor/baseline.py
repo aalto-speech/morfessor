@@ -1017,23 +1017,45 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     is as similar as possible to the number of tokens on the reference side.
     """
 
-    def __init__(self, segment_dev, reference_dev):
-        self.segment_dev = segment_dev
-        self.reference_dev = reference_dev
+    def __init__(self, segment_dev, reference_dev, loss=None):
+        self.segment_dev = list(segment_dev)
+        self.reference_counts = list(self.count_tokens(reference_dev))
+        if loss is None:
+            self.loss = lambda x: x**2
+        else:
+            self.loss = loss
+        assert len(self.segment_dev) == len(self.reference_counts)
         self.previous_weight = None
         self.previous_cost = None
+        self.previous_d = None
+        self.re_token_sep = re.compile(r'\s+', re.UNICODE)
 
     def update(self, model, epoch):
         weight = model.get_corpus_coding_weight()
-        (cost, d) = self.evaluation()
+        (cost, d) = self.evaluation(model)
         if self.previous_weight is None or cost < self.previous_cost:
             # accept the previous step
             self.previous_weight = weight
             self.previous_cost = cost
+            self.previous_d = d
         else:
             # revert the previous step
             weight = self.previous_weight
+            model.set_corpus_coding_weight(weight)
             cost = self.previous_cost
+            d = self.previous_d
+        # new step
+        return self.move_direction(model, d, epoch)
+
+    @classmethod
+    def count_tokens(cls, lines):
+        for line in lines:
+            line = line.strip()
+            yield sum(1 for _ in self.re_token_sep.split(line))
+
+    def evaluation(self, model):
+        pass
+
 
 class AnnotationCorpusWeight(CorpusWeight):
     """Class for using development annotations to update the corpus weight
