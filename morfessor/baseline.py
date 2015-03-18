@@ -1018,10 +1018,15 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     """
     re_token_sep = re.compile(r'\s+', re.UNICODE)
 
-    def __init__(self, segment_dev, reference_dev, loss=None):
+    def __init__(self,
+                 segment_dev,
+                 reference_dev,
+                 threshold=0.01,
+                 loss=None):
         self.segment_dev = list(self.tokenize(segment_dev))
         self.reference_counts = list(len(x) for x
                                      in self.tokenize(reference_dev))
+        self.threshold = 1.0 - threshold
         if loss is None:
             self.loss = lambda x: x**2
         else:
@@ -1034,6 +1039,9 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     def update(self, model, epoch):
         weight = model.get_corpus_coding_weight()
         (cost, d) = self.evaluation(model)
+        if (self.previous_cost is not None and
+                cost > (self.previous_cost * self.threshold)):
+            return False
         if self.previous_weight is None or cost < self.previous_cost:
             # accept the previous step
             self.previous_weight = weight
