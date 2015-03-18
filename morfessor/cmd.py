@@ -9,7 +9,8 @@ import string
 
 from . import get_version
 from .baseline import BaselineModel, AnnotationCorpusWeight, \
-    MorphLengthCorpusWeight, NumMorphCorpusWeight, FixedCorpusWeight
+    MorphLengthCorpusWeight, NumMorphCorpusWeight, FixedCorpusWeight, \
+    AlignedTokenCountCorpusWeight
 from .exception import ArgumentException
 from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
@@ -232,6 +233,15 @@ Interactive use (read corpus from user):
             help="tune the corpusweight to obtain the desired number of morph "
                  "types")
 
+    add_arg = parser.add_argument_group(
+        'Non-exlusive corpusweight tuning options').add_argument
+    add_arg('--aligned-reference', dest='alignref', default=None,
+            metavar='<file>',
+            help='FIXME')
+    add_arg('--aligned-to-segment', dest='alignseg', default=None,
+            metavar='<file>',
+            help='FIXME')
+
     # Options for semi-supervised model training
     add_arg = parser.add_argument_group(
         'semi-supervised training options').add_argument
@@ -373,6 +383,17 @@ def main(args):
 
     if args.morphtypes is not None:
         updater = NumMorphCorpusWeight(args.morphtypes, args.threshold)
+        model.set_corpus_weight_updater(updater)
+
+    if args.alignref is not None:
+        if args.alignseg is None:
+            raise ArgumentException(
+                'If --aligned-reference is specified, '
+                'you must also specify --aligned-to-segment')
+        updater = AlignedTokenCountCorpusWeight(
+            io._read_text_file(args.alignseg),
+            io._read_text_file(args.alignref),
+            args.threshold)
         model.set_corpus_weight_updater(updater)
 
     start_corpus_weight = model.get_corpus_coding_weight()
