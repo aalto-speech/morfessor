@@ -241,6 +241,10 @@ Interactive use (read corpus from user):
     add_arg('--aligned-to-segment', dest='alignseg', default=None,
             metavar='<file>',
             help='FIXME')
+    add_arg('--aligned-loss', dest="alignloss", type=str, default='abs',
+            metavar='<type>', choices=['abs', 'square', 'zeroone'],
+            help="loss function for FIXME ('abs', 'square', or "
+                 "'zeroone'; default '%(default)s')")
 
     # Options for semi-supervised model training
     add_arg = parser.add_argument_group(
@@ -390,10 +394,19 @@ def main(args):
             raise ArgumentException(
                 'If --aligned-reference is specified, '
                 'you must also specify --aligned-to-segment')
+        if args.alignloss == 'abs':
+            lossfunc = lambda x: abs(x)
+        elif args.alignloss == 'square':
+            lossfunc = lambda x: x**2
+        elif args.alignloss == 'zeroone':
+            lossfunc = lambda x: 0 if x == 0 else 1
+        else:
+            raise ArgumentException("unknown alignloss type '%s'" % args.alignloss)
         updater = AlignedTokenCountCorpusWeight(
             io._read_text_file(args.alignseg),
             io._read_text_file(args.alignref),
-            args.threshold)
+            args.threshold,
+            lossfunc)
         model.set_corpus_weight_updater(updater)
 
     start_corpus_weight = model.get_corpus_coding_weight()
