@@ -1022,7 +1022,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
                  segment_dev,
                  reference_dev,
                  threshold=0.01,
-                 loss=None):
+                 loss=None,
+                 postfunc=None):
         self.segment_dev = list(self.tokenize(segment_dev))
         self.reference_counts = list(len(x) for x
                                      in self.tokenize(reference_dev))
@@ -1033,6 +1034,10 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             self.loss = lambda x: x**2
         else:
             self.loss = loss
+        if postfunc is None:
+            self.postfunc = lambda x: x
+        else:
+            self.postfunc = postfunc
         assert len(self.segment_dev) == len(self.reference_counts)
         self.previous_weight = None
         self.previous_cost = None
@@ -1088,6 +1093,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
                 d += 1
             elif diff < 0:
                 d -= 1
+        cost = self.postfunc(cost)
         _logger.info('Align cost {}, direction {}, total tokens {}'.format(
             cost, d, tot))
         return (cost, d)
