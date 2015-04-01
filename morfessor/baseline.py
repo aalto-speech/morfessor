@@ -1102,7 +1102,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         if word not in cache:
             try:
                 cache[word] = model.segment(word)
-            except KeyError:
+            except (KeyError, AttributeError):
                 cache[word] = model.viterbi_segment(word)[0]
         return cache[word]
 
