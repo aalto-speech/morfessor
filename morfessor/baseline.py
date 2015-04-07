@@ -1075,7 +1075,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             line = line.strip()
             yield cls.re_token_sep.split(line)
 
-    def evaluation(self, model):
+    def evaluation(self, model, distribution=None):
         cost = 0.0
         d = 0
         tot = 0
@@ -1088,6 +1088,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
                 for w in tokens)
             tot += segcount
             diff = segcount - ref
+            if distribution is not None:
+                distribution[diff] += 1
             cost += self.loss(diff)
             if diff > 0:
                 d += 1

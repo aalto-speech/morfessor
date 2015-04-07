@@ -506,6 +506,7 @@ def main(args):
                                     % args.trainmode)
         te = time.time()
         _logger.info("Final cost: %s" % c)
+        _logger.info("Final corpus weight: %s" % model.get_corpus_coding_weight())
         _logger.info("Training time: %.3fs" % (te - ts))
     else:
         _logger.warning("No training data files specified.")
