@@ -41,6 +41,7 @@ class MorfessorIO(object):
         if atom_separator is not None:
             self._atom_sep_re = re.compile(atom_separator, re.UNICODE)
         self.lowercase = lowercase
+        self._version = get_version()
 
     def read_segmentation_file(self, file_name, has_counts=True, **kwargs):
         """Read segmentation file.
@@ -69,7 +70,7 @@ class MorfessorIO(object):
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
-                           (get_version(), d))
+                           (self._version, d))
             for count, segmentation in segmentations:
                 if self.atom_separator is None:
                     s = self.construction_separator.join(segmentation)
@@ -107,7 +108,7 @@ class MorfessorIO(object):
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
-        for line in self._read_text_file(file_name):
+        for line in self._read_text_file(file_name, raw=True):
             for compound in self.compound_sep_re.split(line):
                 if len(compound) > 0:
                     yield 1, compound, self._split_atoms(compound)
@@ -200,7 +201,7 @@ class MorfessorIO(object):
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write(
                 '# Parameters for Morfessor {}, {}\n'.format(
-                    get_version(), d))
+                    self._version, d))
             for (key, val) in params.items():
                 file_obj.write('{}:\t{}\n'.format(key, val))
 
@@ -245,7 +246,7 @@ class MorfessorIO(object):
             return tuple(self._atom_sep_re.split(construction))
 
     def _open_text_file_write(self, file_name):
-        """Open a file with the appropriate compression and encoding"""
+        """Open a file for writing with the appropriate compression/encoding"""
         if file_name == '-':
             file_obj = sys.stdout
             if PY3:
@@ -261,19 +262,9 @@ class MorfessorIO(object):
             self.encoding = locale.getpreferredencoding()
         return codecs.getwriter(self.encoding)(file_obj)
 
-    def _read_text_file(self, file_name):
-        """Read a text file with the appropriate compression and encoding.
-
-        Comments and empty lines are skipped.
-
-        """
-        encoding = self.encoding
-        if encoding is None:
-            if file_name != '-':
-                encoding = self._find_encoding(file_name)
-
+    def _open_text_file_read(self, file_name):
+        """Open a file for reading with the appropriate compression/encoding"""
         if file_name == '-':
-
             if PY3:
                 inp = sys.stdin
             else:
@@ -291,7 +282,8 @@ class MorfessorIO(object):
                         if not l:
                             raise StopIteration()
                         return l.decode(self.encoding)
-                inp = StdinUnicodeReader(encoding)
+
+                inp = StdinUnicodeReader(self.encoding)
         else:
             if file_name.endswith('.gz'):
                 file_obj = gzip.open(file_name, 'rb')
@@ -299,20 +291,29 @@ class MorfessorIO(object):
                 file_obj = bz2.BZ2File(file_name, 'rb')
             else:
                 file_obj = open(file_name, 'rb')
-
             if self.encoding is None:
+                # Try to determine encoding if not set so far
                 self.encoding = self._find_encoding(file_name)
-
             inp = codecs.getreader(self.encoding)(file_obj)
+        return inp
 
+    def _read_text_file(self, file_name, raw=False):
+        """Read a text file with the appropriate compression and encoding.
+
+        Comments and empty lines are skipped unless raw is True.
+
+        """
+        inp = self._open_text_file_read(file_name)
         try:
             for line in inp:
                 line = line.rstrip()
-                if len(line) > 0 and not line.startswith(self.comment_start):
-                    if self.lowercase:
-                        yield line.lower()
-                    else:
-                        yield line
+                if not raw and \
+                   (len(line) == 0 or line.startswith(self.comment_start)):
+                    continue
+                if self.lowercase:
+                    yield line.lower()
+                else:
+                    yield line
         except KeyboardInterrupt:
             if file_name == '-':
                 _logger.info("Finished reading from stdin")

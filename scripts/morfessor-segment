@@ -21,8 +21,9 @@ Interactive use (read corpus from user):
 
 """
 
-    keep_options = ['encoding', 'loadfile', 'loadsegfile', 'outfile', 'help',
-                    'version']
+    keep_options = ['encoding', 'loadfile', 'loadsegfile', 'outfile']
+                    # FIXME Disabled to work around an argparse bug
+                    #'help', 'version']
     for action_group in parser._action_groups:
         for arg in action_group._group_actions:
             if arg.dest not in keep_options:
