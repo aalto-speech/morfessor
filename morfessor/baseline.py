@@ -1023,7 +1023,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
                  reference_dev,
                  threshold=0.01,
                  loss=None,
-                 postfunc=None):
+                 postfunc=None,
+                 manglefunc=None):
         self.segment_dev = list(self.tokenize(segment_dev))
         self.reference_counts = list(len(x) for x
                                      in self.tokenize(reference_dev))
@@ -1038,6 +1039,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             self.postfunc = lambda x: x
         else:
             self.postfunc = postfunc
+        self.manglefunc = manglefunc
         assert len(self.segment_dev) == len(self.reference_counts)
         self.previous_weight = None
         self.previous_cost = None
@@ -1089,7 +1091,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             tot += segcount
             diff = segcount - ref
             if distribution is not None:
-                distribution[diff] += 1
+                unsegcount = len(tokens)
+                distribution(ref, unsegcount, diff)
             cost += self.loss(diff)
             if diff > 0:
                 d += 1
@@ -1103,9 +1106,10 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     def _cached_seg(self, model, cache, word):
         if word not in cache:
             try:
-                cache[word] = model.segment(word)
+                seg = model.segment(word)
             except (KeyError, AttributeError):
-                cache[word] = model.viterbi_segment(word)[0]
+                seg = model.viterbi_segment(word, manglefunc=self.manglefunc)[0]
+            cache[word] = seg
         return cache[word]
 
 
