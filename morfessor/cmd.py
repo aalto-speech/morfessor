@@ -22,7 +22,12 @@ _logger = logging.getLogger(__name__)
 # Decodes commandline input in locale
 _preferred_encoding = locale.getpreferredencoding()
 def _locale_decoder(s):
-    return unicode(s.decode(_preferred_encoding))
+    try:
+        # Python 2
+        return unicode(s.decode(_preferred_encoding))
+    except NameError:
+        # Python 3
+        return bytes(s, _preferred_encoding).decode(_preferred_encoding)
 
 
 def get_default_argparser():
