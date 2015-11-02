@@ -215,3 +215,12 @@ def _generator_progress(generator):
         sys.stderr.write('\n')
 
     return _progress_wrapper(generator)
+
+
+def _is_string(obj):
+    try:
+        # Python 2
+        return isinstance(obj, basestring)
+    except NameError:
+        # Python 3
+        return isinstance(obj, str)
