@@ -520,7 +520,8 @@ def main(args):
                                                     args.viterbismooth,
                                                     args.viterbimaxlen)
                     for constructions, logp in nbestlist:
-                        analysis = csep.join(constructions)
+                        analysis = io.format_constructions(constructions,
+                                                           csep=csep)
                         fobj.write(outformat.format(analysis=analysis,
                                                     compound=compound,
                                                     count=count, logprob=logp,
@@ -528,7 +529,7 @@ def main(args):
                 else:
                     constructions, logp = model.viterbi_segment(
                         atoms, args.viterbismooth, args.viterbimaxlen)
-                    analysis = csep.join(constructions)
+                    analysis = io.format_constructions(constructions, csep=csep)
                     fobj.write(outformat.format(analysis=analysis,
                                                 compound=compound,
                                                 count=count, logprob=logp,
