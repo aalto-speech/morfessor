@@ -27,7 +27,7 @@ def _locale_decoder(s):
         return unicode(s.decode(_preferred_encoding))
     except NameError:
         # Python 3
-        return bytes(s, _preferred_encoding).decode(_preferred_encoding)
+        return s
 
 
 def get_default_argparser():
