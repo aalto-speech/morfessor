@@ -6,7 +6,7 @@ import numbers
 import random
 import re
 
-from .utils import _progress
+from .utils import _progress, _is_string
 from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
@@ -14,8 +14,7 @@ _logger = logging.getLogger(__name__)
 
 def _constructions_to_str(constructions):
     """Return a readable string for a list of constructions."""
-    if (isinstance(constructions[0], str) or
-            isinstance(constructions[0], unicode)):
+    if _is_string(constructions[0]):
         # Constructions are strings
         return ' + '.join(constructions)
     else:

@@ -17,12 +17,14 @@ from .evaluation import MorfessorEvaluation, EvaluationConfig, \
 
 PY3 = sys.version_info.major == 3
 
+# _str is used to convert command line arguments to the right type (str for PY3, unicode for PY2
+if PY3:
+    _str = str
+else:
+    _str = lambda x: unicode(x, encoding=locale.getpreferredencoding())
+
 _logger = logging.getLogger(__name__)
 
-# Decodes commandline input in locale
-_preferred_encoding = locale.getpreferredencoding()
-def _locale_decoder(s):
-    return unicode(s.decode(_preferred_encoding))
 
 
 def get_default_argparser():
@@ -129,17 +131,17 @@ Interactive use (read corpus from user):
             action='store_true',
             help="input file(s) for batch training are lists "
                  "(one compound per line, optionally count as a prefix)")
-    add_arg('--atom-separator', dest="separator", type=str, default=None,
+    add_arg('--atom-separator', dest="separator", type=_str, default=None,
             metavar='<regexp>',
             help="atom separator regexp (default %(default)s)")
-    add_arg('--compound-separator', dest="cseparator", type=str, default='\s+',
+    add_arg('--compound-separator', dest="cseparator", type=_str, default='\s+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
-    add_arg('--analysis-separator', dest='analysisseparator', type=str,
+    add_arg('--analysis-separator', dest='analysisseparator', type=_str,
             default=',', metavar='<str>',
             help="separator for different analyses in an annotation file. Use"
                  "  NONE for only allowing one analysis per line")
-    add_arg('--output-format', dest='outputformat', type=str,
+    add_arg('--output-format', dest='outputformat', type=_str,
             default=r'{analysis}\n', metavar='<format>',
             help="format string for --output file (default: '%(default)s'). "
             "Valid keywords are: "
@@ -150,7 +152,7 @@ Interactive use (read corpus from user):
             "{clogprob} = log-probability of the compound. Valid escape "
             "sequences are '\\n' (newline) and '\\t' (tabular)")
     add_arg('--output-format-separator', dest='outputformatseparator',
-            type=str, default=' ', metavar='<str>',
+            type=_str, default=' ', metavar='<str>',
             help="construction separator for analysis in --output file "
             "(default: '%(default)s')")
     add_arg('--output-newlines', dest='outputnewlines', default=False,
@@ -171,7 +173,7 @@ Interactive use (read corpus from user):
             metavar='<algorithm>', choices=['recursive', 'viterbi'],
             help="algorithm type ('recursive', 'viterbi'; default "
                  "'%(default)s')")
-    add_arg('-d', '--dampening', dest="dampening", type=str, default='ones',
+    add_arg('-d', '--dampening', dest="dampening", type=_str, default='ones',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
                  "'ones'; default '%(default)s')")
@@ -202,7 +204,7 @@ Interactive use (read corpus from user):
     add_arg('--max-epochs', dest='maxepochs', type=int, default=None,
             metavar='<int>',
             help='hard maximum of epochs in training')
-    add_arg('--nosplit-re', dest="nosplit", type=str, default=None,
+    add_arg('--nosplit-re', dest="nosplit", type=_str, default=None,
             metavar='<regexp>',
             help="if the expression matches the two surrounding characters, "
                  "do not allow splitting (default %(default)s)")
@@ -491,9 +493,6 @@ def main(args):
         _logger.info("Segmenting test data...")
         outformat = args.outputformat
         csep = args.outputformatseparator
-        if not PY3:
-            outformat = _locale_decoder(outformat)
-            csep = _locale_decoder(csep)
         outformat = outformat.replace(r"\n", "\n")
         outformat = outformat.replace(r"\t", "\t")
         keywords = [x[1] for x in string.Formatter().parse(outformat)]
@@ -515,7 +514,8 @@ def main(args):
                                                     args.viterbismooth,
                                                     args.viterbimaxlen)
                     for constructions, logp in nbestlist:
-                        analysis = csep.join(constructions)
+                        analysis = io.format_constructions(constructions,
+                                                           csep=csep)
                         fobj.write(outformat.format(analysis=analysis,
                                                     compound=compound,
                                                     count=count, logprob=logp,
@@ -523,7 +523,7 @@ def main(args):
                 else:
                     constructions, logp = model.viterbi_segment(
                         atoms, args.viterbismooth, args.viterbimaxlen)
-                    analysis = csep.join(constructions)
+                    analysis = io.format_constructions(constructions, csep=csep)
                     fobj.write(outformat.format(analysis=analysis,
                                                 compound=compound,
                                                 count=count, logprob=logp,
@@ -581,7 +581,7 @@ def get_evaluation_argparser():
                  'If format-string is defined this option is ignored')
 
     add_arg = parser.add_argument_group('file options').add_argument
-    add_arg('--construction-separator', dest="cseparator", type=str,
+    add_arg('--construction-separator', dest="cseparator", type=_str,
             default=' ', metavar='<regexp>',
             help="construction separator for test segmentation files"
                  " (default '%(default)s')")

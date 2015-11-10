@@ -8,6 +8,7 @@ import re
 import sys
 
 from . import get_version
+from . import utils
 
 try:
     # In Python2 import cPickle for better performance
@@ -237,6 +238,19 @@ class MorfessorIO(object):
         model.load_segmentations(self.read_segmentation_file(file_name))
         _logger.info("%s was read as a segmentation" % file_name)
         return model
+
+    def format_constructions(self, constructions, csep=None, atom_sep=None):
+        """Return a formatted string for a list of constructions."""
+        if csep is None:
+            csep = self.construction_separator
+        if atom_sep is None:
+            atom_sep = self.atom_separator
+        if utils._is_string(constructions[0]):
+            # Constructions are strings
+            return csep.join(constructions)
+        else:
+            # Constructions are not strings (should be tuples of strings)
+            return csep.join(map(lambda x: atom_sep.join(x), constructions))
 
     def _split_atoms(self, construction):
         """Split construction to its atoms."""
