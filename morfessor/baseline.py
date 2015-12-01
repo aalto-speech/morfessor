@@ -51,6 +51,8 @@ class BaselineModel(object):
             corpusweight: weight for the corpus cost
             use_skips: randomly skip frequently occurring constructions
                          to speed up training
+            nosplit_re: regular expression string for preventing splitting
+                          in certain contexts
 
         """
 
@@ -477,7 +479,6 @@ class BaselineModel(object):
 
         Arguments:
             data: iterator of (count, compound_atoms) tuples
-            corpus: corpus instance
             freqthreshold: discard compounds that occur less than
                              given times in the corpus (default 1)
             count_modifier: function for adjusting the counts of each
@@ -569,13 +570,10 @@ class BaselineModel(object):
             algorithm: string in ('recursive', 'viterbi') that indicates
                          the splitting algorithm used.
             algorithm_params: parameters passed to the splitting algorithm.
-            devel_annotations: an annotated dataset (iterator of
-                                 (compound, [analyses]) tuples) used for
-                                 controlling the weight of the corpus
-                                 encoding.
             finish_threshold: the stopping threshold. Training stops when
                                 the improvement of the last iteration is
                                 smaller then finish_threshold * #boundaries
+            max_epochs: maximum number of epochs to train
 
         """
         epochs = 0
@@ -652,6 +650,7 @@ class BaselineModel(object):
             init_rand_split: probability for random splitting a compound to
                                at any point for initializing the model. None
                                or 0 means no random splitting.
+            max_epochs: maximum number of epochs to train
 
         """
         self._check_segment_only()
@@ -864,6 +863,7 @@ class BaselineModel(object):
 
         Arguments:
           compound: compound to be segmented
+          n: how many segmentations to return
           addcount: constant for additive smoothing (0 = no smoothing)
           maxlen: maximum length for the constructions
 
