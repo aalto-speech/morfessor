@@ -54,10 +54,18 @@ class MorfessorIO(object):
         _logger.info("Reading segmentations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
             if has_counts:
-                count, compound = line.split(' ', 1)
+                count, compound_str = line.split(' ', 1)
             else:
-                count, compound = 1, line
-            yield int(count), compound.split(self.construction_separator)
+                count, compound_str = 1, line
+            constructions = tuple(
+                self._split_atoms(constr)
+                for constr in compound_str.split(self.construction_separator))
+            if self.atom_separator is None:
+                compound = "".join(constructions)
+            else:
+                compound = tuple(atom for constr in constructions
+                                 for atom in constr)
+            yield int(count), compound, constructions
         _logger.info("Done.")
 
     def write_segmentation_file(self, file_name, segmentations, **kwargs):
@@ -72,12 +80,13 @@ class MorfessorIO(object):
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
                            (self._version, d))
-            for count, segmentation in segmentations:
+            for count, _, segmentation in segmentations:
                 if self.atom_separator is None:
                     s = self.construction_separator.join(segmentation)
                 else:
                     s = self.construction_separator.join(
-                        map(lambda x: ' '.join(x), segmentation))
+                        (self.atom_separator.join(constr)
+                         for constr in segmentation))
                 file_obj.write("%d %s\n" % (count, s))
         _logger.info("Done.")
 

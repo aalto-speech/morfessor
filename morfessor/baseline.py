@@ -469,7 +469,7 @@ class BaselineModel(object):
         for w in sorted(self._analyses.keys()):
             c = self._analyses[w].rcount
             if c > 0:
-                yield c, self.segment(w)
+                yield c, w, self.segment(w)
 
     def load_data(self, data, freqthreshold=1, count_modifier=None,
                   init_rand_split=None):
@@ -513,15 +513,14 @@ class BaselineModel(object):
     def load_segmentations(self, segmentations):
         """Load model from existing segmentations.
 
-        The argument should be an iterator providing a count and a
-        segmentation.
+        The argument should be an iterator providing a count, a
+        compound, and its segmentation.
 
         """
         self._check_segment_only()
-        for count, segmentation in segmentations:
-            comp = "".join(segmentation)
-            self._add_compound(comp, count)
-            self._set_compound_analysis(comp, segmentation)
+        for count, compound, segmentation in segmentations:
+            self._add_compound(compound, count)
+            self._set_compound_analysis(compound, segmentation)
 
     def set_annotations(self, annotations, annotatedcorpusweight=None):
         """Prepare model for semi-supervised learning with given
