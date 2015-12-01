@@ -93,7 +93,7 @@ class MorfessorIO(object):
     def read_corpus_files(self, file_names):
         """Read one or more corpus files.
 
-        Yield for each compound found (1, compound, compound_atoms).
+        Yield for each compound found (1, compound_atoms).
 
         """
         for file_name in file_names:
@@ -103,7 +103,7 @@ class MorfessorIO(object):
     def read_corpus_list_files(self, file_names):
         """Read one or more corpus list files.
 
-        Yield for each compound found (count, compound, compound_atoms).
+        Yield for each compound found (count, compound_atoms).
 
         """
         for file_name in file_names:
@@ -113,16 +113,16 @@ class MorfessorIO(object):
     def read_corpus_file(self, file_name):
         """Read one corpus file.
 
-        For each compound, yield (1, compound, compound_atoms).
-        After each line, yield (0, \"\\n\", ()).
+        For each compound, yield (1, compound_atoms).
+        After each line, yield (0, ()).
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
         for line in self._read_text_file(file_name, raw=True):
             for compound in self.compound_sep_re.split(line):
                 if len(compound) > 0:
-                    yield 1, compound, self._split_atoms(compound)
-            yield 0, "\n", ()
+                    yield 1, self._split_atoms(compound)
+            yield 0, ()
         _logger.info("Done.")
 
     def read_corpus_list_file(self, file_name):
@@ -131,16 +131,16 @@ class MorfessorIO(object):
         Each line has the format:
         <count> <compound>
 
-        Yield tuples (count, compound, compound_atoms) for each compound.
+        Yield tuples (count, compound_atoms) for each compound.
 
         """
         _logger.info("Reading corpus from list '%s'..." % file_name)
         for line in self._read_text_file(file_name):
             try:
                 count, compound = line.split(None, 1)
-                yield int(count), compound, self._split_atoms(compound)
+                yield int(count), self._split_atoms(compound)
             except ValueError:
-                yield 1, line, self._split_atoms(line)
+                yield 1, self._split_atoms(line)
         _logger.info("Done.")
 
     def read_annotations_file(self, file_name, construction_separator=' ',

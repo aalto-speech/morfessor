@@ -476,7 +476,7 @@ class BaselineModel(object):
         """Load data to initialize the model for batch training.
 
         Arguments:
-            data: iterator/generator of (count, compound, atoms) tuples
+            data: iterator of (count, compound_atoms) tuples
             corpus: corpus instance
             freqthreshold: discard compounds that occur less than
                              given times in the corpus (default 1)
@@ -492,7 +492,7 @@ class BaselineModel(object):
         """
         self._check_segment_only()
         totalcount = collections.Counter()
-        for count, _, atoms in data:
+        for count, atoms in data:
             if len(atoms) > 0:
                 totalcount[atoms] += count
 
@@ -639,8 +639,8 @@ class BaselineModel(object):
         are recalculated if applicable.
 
         Arguments:
-            data: iterator/generator of (_, _, compound) tuples. The first
-                    two arguments are ignored, as every occurence of the
+            data: iterator of (_, compound_atoms) tuples. The first
+                    argument is ignored, as every occurence of the
                     compound is taken with count 1
             count_modifier: function for adjusting the counts of each
                               compound
@@ -670,7 +670,7 @@ class BaselineModel(object):
 
             for _ in _progress(range(epoch_interval)):
                 try:
-                    _, _, w = next(data)
+                    _, w = next(data)
                 except StopIteration:
                     more_tokens = False
                     break

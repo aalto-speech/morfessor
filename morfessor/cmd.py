@@ -499,7 +499,11 @@ def main(args):
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
-            for count, compound, atoms in testdata:
+            for count, atoms in testdata:
+                if io.atom_separator is None:
+                    compound = "".join(atoms)
+                else:
+                    compound = io.atom_separator.join(atoms)
                 if len(atoms) == 0:
                     # Newline in corpus
                     if args.outputnewlines:
