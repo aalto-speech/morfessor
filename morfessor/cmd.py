@@ -255,6 +255,9 @@ Interactive use (read corpus from user):
             help="corpus weight parameter for annotated data (if unset, the "
                  "weight is set to balance the number of tokens in annotated "
                  "and unannotated data sets)")
+    add_arg('--restricted-segmentation', dest="restannofile", default=None,
+            metavar='<file>',
+            help="load annotated data for restricted segmentation")
 
     # Options for evaluation
     add_arg = parser.add_argument_group('Evaluation options').add_argument
@@ -362,6 +365,11 @@ def main(args):
         annotations = io.read_annotations_file(args.annofile,
                                                analysis_sep=analysis_sep)
         model.set_annotations(annotations, args.annotationweight)
+
+    if args.restannofile is not None:
+        annotations = io.read_annotations_file(args.restannofile,
+                                               analysis_sep=analysis_sep)
+        model.set_restrictions(annotations)
 
     if args.develfile is not None:
         develannots = io.read_annotations_file(args.develfile,

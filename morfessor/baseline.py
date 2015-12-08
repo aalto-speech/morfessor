@@ -75,6 +75,7 @@ class BaselineModel(object):
         # Configuration variables
         self._use_skips = use_skips  # Random skips for frequent constructions
         self._supervised = False
+        self._restricted = False
 
         # Counter for random skipping
         self._counter = collections.Counter()
@@ -287,6 +288,14 @@ class BaselineModel(object):
             return [compound]
         if self._use_skips and self._test_skip(compound):
             return self.segment(compound)
+
+        if self._restricted:
+            if compound in self.allowed_boundaries:
+                allowed = self.allowed_boundaries[compound]
+            else:
+                allowed = None # Everything is allowed
+            return self._recursive_split(compound, allowed)
+
         # Collect forced subsegments
         parts = self._force_split(compound)
         if len(parts) == 1:
@@ -299,12 +308,17 @@ class BaselineModel(object):
             constructions += self._recursive_split(part)
         return constructions
 
-    def _recursive_split(self, construction):
+    def _recursive_split(self, construction, allowed_boundaries=None):
         """Optimize segmentation of the construction by recursive splitting.
 
         Returns list of segments.
 
         """
+        if allowed_boundaries is not None:
+            _logger.debug("restricted: %s %s", construction,
+                          allowed_boundaries)
+            if len(allowed_boundaries) == 0:  # No options
+                return [construction]
         if len(construction) == 1:  # Single atom
             return [construction]
         if self._use_skips and self._test_skip(construction):
@@ -317,6 +331,9 @@ class BaselineModel(object):
         self._modify_construction_count(construction, -count)
         splitloc = 0
         for i in range(1, len(construction)):
+            if (allowed_boundaries is not None and
+                i not in allowed_boundaries):
+                continue
             if (self.nosplit_re and
                     self.nosplit_re.match(construction[(i - 1):(i + 1)])):
                 continue
@@ -339,11 +356,20 @@ class BaselineModel(object):
             suffix = construction[splitloc:]
             self._modify_construction_count(prefix, count)
             self._modify_construction_count(suffix, count)
-            lp = self._recursive_split(prefix)
-            if suffix != prefix:
-                return lp + self._recursive_split(suffix)
+            if allowed_boundaries is None:
+                lp = self._recursive_split(prefix)
+                if suffix != prefix:
+                    return lp + self._recursive_split(suffix)
+                else:
+                    return lp + lp
             else:
-                return lp + lp
+                lp = self._recursive_split(
+                    prefix,
+                    [x for x in allowed_boundaries if x < splitloc])
+                ls = self._recursive_split(
+                    suffix,
+                    [x-splitloc for x in allowed_boundaries if x > splitloc])
+                return lp + ls
         else:
             # Real construction
             self._analyses[construction] = ConstrNode(rcount, 0, tuple())
@@ -535,6 +561,20 @@ class BaselineModel(object):
                                                      weight=
                                                      annotatedcorpusweight)
         self._annot_coding.boundaries = len(self.annotations)
+
+    def set_restrictions(self, annotations):
+        """Set segmentation restrictions from annotations
+
+        """
+        self._check_segment_only()
+        self._restricted = True
+        self.allowed_boundaries = {}
+        for compound in annotations:
+            allowed_positions = set()
+            for analysis in annotations[compound]:
+                for idx in self._segmentation_to_splitloc(analysis):
+                    allowed_positions.add(idx)
+            self.allowed_boundaries[compound] = sorted(allowed_positions)
 
     def segment(self, compound):
         """Segment the compound by looking it up in the model analyses.
