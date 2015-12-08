@@ -317,8 +317,6 @@ class BaselineModel(object):
         if allowed_boundaries is not None:
             _logger.debug("restricted: %s %s", construction,
                           allowed_boundaries)
-            if len(allowed_boundaries) == 0:  # No options
-                return [construction]
         if len(construction) == 1:  # Single atom
             return [construction]
         if self._use_skips and self._test_skip(construction):
@@ -330,10 +328,9 @@ class BaselineModel(object):
         mincost = self.get_cost()
         self._modify_construction_count(construction, -count)
         splitloc = 0
-        for i in range(1, len(construction)):
-            if (allowed_boundaries is not None and
-                i not in allowed_boundaries):
-                continue
+        indices = range(1, len(construction)) \
+                  if allowed_boundaries is None else allowed_boundaries
+        for i in indices:
             if (self.nosplit_re and
                     self.nosplit_re.match(construction[(i - 1):(i + 1)])):
                 continue
