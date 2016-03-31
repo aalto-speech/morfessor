@@ -136,6 +136,9 @@ class BaselineModel(object):
         """
         splitloc = tuple(i for i in range(1, len(compound))
                          if random.random() < threshold)
+        if self._restricted and compound in self.allowed_boundaries:
+            allowed = self.allowed_boundaries[compound]
+            splitloc = tuple(i for i in splitloc if i in allowed)
         return self._splitloc_to_segmentation(compound, splitloc)
 
     def _set_compound_analysis(self, compound, parts, ptype='rbranch'):
@@ -231,9 +234,13 @@ class BaselineModel(object):
         if len(self.forcesplit_list) == 0:
             return [compound]
         clen = len(compound)
+        if self._restricted and compound in self.allowed_boundaries:
+            indices = self.allowed_boundaries[compound]
+        else:
+            indices = range(1, clen)
         j = 0
         parts = []
-        for i in range(1, clen):
+        for i in indices:
             if compound[i] in self.forcesplit_list:
                 if len(compound[j:i]) > 0:
                     parts.append(compound[j:i])
@@ -268,14 +275,72 @@ class BaselineModel(object):
             return [compound]
         if self._use_skips and self._test_skip(compound):
             return self.segment(compound)
+
+        _logger.debug("Viterbi for '%s'", compound)
+        _logger.debug("Old: %s", self._analyses)
+        _logger.debug("Old: %s %s", self._lexicon_coding.tokens,
+                      self._corpus_coding.tokens)
+
+        # Store and remove current analysis
+        old_cost = self.get_cost()
+        rcount, count, old_splitloc = self._analyses[compound]
+        self._modify_construction_count(compound, -rcount)
+
+        # Restricted boundaries
+        if self._restricted and compound in self.allowed_boundaries:
+            allowed = self.allowed_boundaries[compound]
+        else:
+            allowed = None # Everything is allowed
+
         # Collect forced subsegments
         parts = self._force_split(compound)
-        # Use Viterbi algorithm to optimize the subsegments
-        constructions = []
-        for part in parts:
-            constructions += self.viterbi_segment(part, addcount=addcount,
-                                                  maxlen=maxlen)[0]
-        self._set_compound_analysis(compound, constructions, ptype='flat')
+        if len(parts) > 1:
+            constructions = []
+            pos = 0
+            for part in parts:
+                if allowed is None:
+                    constructions += self.viterbi_segment(
+                        part, addcount=addcount, maxlen=maxlen)[0]
+                else:
+                    allowed_in_part = [x-pos for x in allowed
+                                       if (x > pos and x < pos+len(part))]
+                    constructions += self.viterbi_segment(
+                        part, addcount=addcount, maxlen=maxlen,
+                        allowed_boundaries=allowed_in_part)[0]
+                pos += len(part)
+        else:
+            constructions = self.viterbi_segment(
+                compound, addcount=addcount, maxlen=maxlen,
+                allowed_boundaries=allowed)[0]
+
+        splitloc = self._segmentation_to_splitloc(constructions)
+        self._analyses[compound] = ConstrNode(
+            rcount, count-rcount, splitloc)
+        self._modify_construction_count(compound, rcount)
+
+        assert(self._lexicon_coding.tokens > 0)
+        assert(self._corpus_coding.tokens > 0)
+        assert(self._corpus_coding.boundaries > 0)
+
+        cost = self.get_cost()
+        _logger.debug("New: %s", self._analyses)
+        _logger.debug("New: %s %s", self._lexicon_coding.tokens,
+                      self._corpus_coding.tokens)
+
+        if (old_cost < cost and (splitloc or old_splitloc) and
+            splitloc != old_splitloc):
+            _logger.debug("CANCEL (new: %s %.2f) (old: %s %.2f)",
+                          splitloc, cost, old_splitloc, old_cost)
+
+            self._modify_construction_count(compound, -rcount)
+            self._analyses[compound] = ConstrNode(
+                rcount, count-rcount, old_splitloc)
+            self._modify_construction_count(compound, rcount)
+
+            assert(self._lexicon_coding.tokens > 0)
+            assert(self._corpus_coding.tokens > 0)
+            assert(self._corpus_coding.boundaries > 0)
+
         return constructions
 
     def _recursive_optimize(self, compound):
@@ -289,23 +354,31 @@ class BaselineModel(object):
         if self._use_skips and self._test_skip(compound):
             return self.segment(compound)
 
-        if self._restricted:
-            if compound in self.allowed_boundaries:
-                allowed = self.allowed_boundaries[compound]
-            else:
-                allowed = None # Everything is allowed
-            return self._recursive_split(compound, allowed)
+        # Restricted boundaries
+        if self._restricted and compound in self.allowed_boundaries:
+            allowed = self.allowed_boundaries[compound]
+        else:
+            allowed = None # Everything is allowed
 
         # Collect forced subsegments
         parts = self._force_split(compound)
-        if len(parts) == 1:
-            # just one part
-            return self._recursive_split(compound)
-        self._set_compound_analysis(compound, parts)
-        # Use recursive algorithm to optimize the subsegments
-        constructions = []
-        for part in parts:
-            constructions += self._recursive_split(part)
+        if len(parts) > 1:
+            self._set_compound_analysis(compound, parts)
+            # Use recursive algorithm to optimize the subsegments
+            constructions = []
+            pos = 0
+            for part in parts:
+                if allowed is None:
+                    constructions += self._recursive_split(part)
+                else:
+                    allowed_in_part = [x-pos for x in allowed
+                                       if (x > pos and x < pos+len(part))]
+                    constructions += self._recursive_split(
+                        part, allowed_in_part)
+                pos += len(part)
+        else:
+            constructions = self._recursive_split(compound, allowed)
+
         return constructions
 
     def _recursive_split(self, construction, allowed_boundaries=None):
@@ -331,6 +404,7 @@ class BaselineModel(object):
         indices = range(1, len(construction)) \
                   if allowed_boundaries is None else allowed_boundaries
         for i in indices:
+            assert(i < len(construction))
             if (self.nosplit_re and
                     self.nosplit_re.match(construction[(i - 1):(i + 1)])):
                 continue
@@ -398,13 +472,16 @@ class BaselineModel(object):
                 self._modify_construction_count(child, dcount)
         else:
             # Real construction
+            #_logger.debug("Updating corpus count: %s -> %s", count, newcount)
             self._corpus_coding.update_count(construction, count, newcount)
             if self._supervised:
                 self._annot_coding.update_count(construction, count, newcount)
 
             if count == 0 and newcount > 0:
+                #_logger.debug("Adding to lex: %s", construction)
                 self._lexicon_coding.add(construction)
             elif count > 0 and newcount == 0:
+                #_logger.debug("Removing from lex: %s", construction)
                 self._lexicon_coding.remove(construction)
 
     def _epoch_update(self, epoch_num):
@@ -570,6 +647,7 @@ class BaselineModel(object):
             allowed_positions = set()
             for analysis in annotations[compound]:
                 for idx in self._segmentation_to_splitloc(analysis):
+                    assert(idx < len(compound))
                     allowed_positions.add(idx)
             self.allowed_boundaries[compound] = sorted(allowed_positions)
 
@@ -752,7 +830,8 @@ class BaselineModel(object):
         _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
         return epochs, newcost
 
-    def viterbi_segment(self, compound, addcount=1.0, maxlen=30):
+    def viterbi_segment(self, compound, addcount=1.0, maxlen=30,
+                        allowed_boundaries=None):
         """Find optimal segmentation using the Viterbi algorithm.
 
         Arguments:
@@ -768,6 +847,8 @@ class BaselineModel(object):
 
         """
         clen = len(compound)
+        indices = range(1, clen+1) if allowed_boundaries is None \
+                  else allowed_boundaries+[clen]
         grid = [(0.0, None)]
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
                 addcount > 0:
@@ -782,8 +863,9 @@ class BaselineModel(object):
             # Note that we can come from any node in history.
             bestpath = None
             bestcost = None
-            if self.nosplit_re and t < clen and \
-                    self.nosplit_re.match(compound[(t-1):(t+1)]):
+            if ((self.nosplit_re and t < clen and
+                 self.nosplit_re.match(compound[(t-1):(t+1)])) or
+                (t < clen and not t in indices)):
                 grid.append((clen*badlikelihood, t-1))
                 continue
             for pt in range(max(0, t - maxlen), t):
@@ -827,6 +909,7 @@ class BaselineModel(object):
                     cost += len(construction) * badlikelihood
                 else:
                     continue
+                #_logger.debug("cost(%s)=%.2f", construction, cost)
                 if bestcost is None or cost < bestcost:
                     bestcost = cost
                     bestpath = pt
@@ -844,6 +927,9 @@ class BaselineModel(object):
         cost += (math.log(self._corpus_coding.tokens +
                           self._corpus_coding.boundaries) -
                  math.log(self._corpus_coding.boundaries))
+        if allowed_boundaries is not None:
+            _logger.debug("%s %s %s %s", compound, allowed_boundaries,
+                          constructions, cost)
         return constructions, cost
 
     def forward_logprob(self, compound):
@@ -1441,7 +1527,7 @@ class LexiconEncoding(Encoding):
         cost -= math.log(self.boundaries + 1)
         for atom in construction:
             if atom in self.atoms:
-                c = self.atoms[atom]
+                c = max(1, self.atoms[atom])
             else:
                 c = 1
             cost -= math.log(c)
