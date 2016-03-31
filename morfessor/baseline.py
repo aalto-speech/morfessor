@@ -102,6 +102,46 @@ class BaselineModel(object):
         if self._segment_only:
             raise SegmentOnlyModelException()
 
+    def _check_integrity(self):
+        failed = False
+        parents = collections.defaultdict(list)
+        for construction in self._analyses.keys():
+            node = self._analyses[construction]
+            if node.count < 1:
+                _logger.critical("Non-positive count %s for construction %s",
+                                 node.count, construction)
+                failed = True
+            if node.splitloc:
+                for part in self._splitloc_to_segmentation(construction,
+                                                           node.splitloc):
+                    if not part in self._analyses:
+                        _logger.critical(
+                            "Subconstruction '%s' of '%s' not found",
+                            part, construction)
+                        failed = True
+                    elif self._analyses[part].count < node.count:
+                        _logger.critical(
+                            ("Subconstruction '%s' has lower "
+                             "count than parent '%s': %s < %s"),
+                            part, construction, self._analyses[part].count,
+                            node.count)
+                        failed = True
+                    parents[part].append(construction)
+        for construction in parents.keys():
+            node = self._analyses[construction]
+            psum = sum([self._analyses[x].count
+                        for x in parents[construction]])
+            if psum != (node.count - node.rcount):
+                _logger.critical(
+                    ("Counts (%s, %s) of construction '%s' does not "
+                     "match counts of parents %s"),
+                    node.count, node.rcount, construction,
+                    parents[construction])
+                failed = True
+
+        if failed:
+            raise MorfessorException("Corrupted model")
+
     @property
     def tokens(self):
         """Return the number of construction tokens."""
@@ -134,8 +174,9 @@ class BaselineModel(object):
             threshold: probability of splitting at each position
 
         """
+        forced = self._segmentation_to_splitloc(self._force_split(compound))
         splitloc = tuple(i for i in range(1, len(compound))
-                         if random.random() < threshold)
+                         if (i in forced or random.random() < threshold))
         if self._restricted and compound in self.allowed_boundaries:
             allowed = self.allowed_boundaries[compound]
             splitloc = tuple(i for i in splitloc if i in allowed)
@@ -276,15 +317,18 @@ class BaselineModel(object):
         if self._use_skips and self._test_skip(compound):
             return self.segment(compound)
 
-        _logger.debug("Viterbi for '%s'", compound)
-        _logger.debug("Old: %s", self._analyses)
-        _logger.debug("Old: %s %s", self._lexicon_coding.tokens,
-                      self._corpus_coding.tokens)
+        #_logger.debug("Viterbi for '%s'", compound)
+        #_logger.debug("Old: %s", self._analyses)
+        #_logger.debug("Old: %s %s", self._lexicon_coding.tokens,
+        #              self._corpus_coding.tokens)
+        #self._check_integrity()
 
-        # Store and remove current analysis
-        old_cost = self.get_cost()
+        # Store current analysis and decrease by real count
+        #old_cost = self.get_cost()
         rcount, count, old_splitloc = self._analyses[compound]
         self._modify_construction_count(compound, -rcount)
+
+        #_logger.debug("Cleaned: %s", self._analyses)
 
         # Restricted boundaries
         if self._restricted and compound in self.allowed_boundaries:
@@ -313,33 +357,20 @@ class BaselineModel(object):
                 compound, addcount=addcount, maxlen=maxlen,
                 allowed_boundaries=allowed)[0]
 
+        #_logger.debug("Viterbi result: %s", constructions)
+
         splitloc = self._segmentation_to_splitloc(constructions)
-        self._analyses[compound] = ConstrNode(
-            rcount, count-rcount, splitloc)
-        self._modify_construction_count(compound, rcount)
+        if count > rcount:
+            # Remove old analysis if remaining
+            self._modify_construction_count(compound, rcount-count)
+        self._analyses[compound] = ConstrNode(rcount, 0, splitloc)
+        self._modify_construction_count(compound, count)
 
-        assert(self._lexicon_coding.tokens > 0)
-        assert(self._corpus_coding.tokens > 0)
-        assert(self._corpus_coding.boundaries > 0)
-
-        cost = self.get_cost()
-        _logger.debug("New: %s", self._analyses)
-        _logger.debug("New: %s %s", self._lexicon_coding.tokens,
-                      self._corpus_coding.tokens)
-
-        if (old_cost < cost and (splitloc or old_splitloc) and
-            splitloc != old_splitloc):
-            _logger.debug("CANCEL (new: %s %.2f) (old: %s %.2f)",
-                          splitloc, cost, old_splitloc, old_cost)
-
-            self._modify_construction_count(compound, -rcount)
-            self._analyses[compound] = ConstrNode(
-                rcount, count-rcount, old_splitloc)
-            self._modify_construction_count(compound, rcount)
-
-            assert(self._lexicon_coding.tokens > 0)
-            assert(self._corpus_coding.tokens > 0)
-            assert(self._corpus_coding.boundaries > 0)
+        #cost = self.get_cost()
+        #_logger.debug("New: %s", self._analyses)
+        #_logger.debug("New: %s %s", self._lexicon_coding.tokens,
+        #              self._corpus_coding.tokens)
+        #self._check_integrity()
 
         return constructions
 
@@ -363,7 +394,7 @@ class BaselineModel(object):
         # Collect forced subsegments
         parts = self._force_split(compound)
         if len(parts) > 1:
-            self._set_compound_analysis(compound, parts)
+            self._set_compound_analysis(compound, parts, ptype='rbranch')
             # Use recursive algorithm to optimize the subsegments
             constructions = []
             pos = 0
@@ -607,7 +638,7 @@ class BaselineModel(object):
 
             if init_rand_split is not None and init_rand_split > 0:
                 parts = self._random_split(atoms, init_rand_split)
-                self._set_compound_analysis(atoms, parts)
+                self._set_compound_analysis(atoms, parts, ptype='flat')
 
         return self.get_cost()
 
@@ -621,7 +652,7 @@ class BaselineModel(object):
         self._check_segment_only()
         for count, compound, segmentation in segmentations:
             self._add_compound(compound, count)
-            self._set_compound_analysis(compound, segmentation)
+            self._set_compound_analysis(compound, segmentation, ptype='flat')
 
     def set_annotations(self, annotations, annotatedcorpusweight=None):
         """Prepare model for semi-supervised learning with given
@@ -808,7 +839,7 @@ class BaselineModel(object):
                     self._add_compound(w, 1)
                 if init_rand_split is not None and init_rand_split > 0:
                     parts = self._random_split(w, init_rand_split)
-                    self._set_compound_analysis(w, parts)
+                    self._set_compound_analysis(w, parts, ptype='flat')
                 if algorithm == 'recursive':
                     segments = self._recursive_optimize(w, *algorithm_params)
                 elif algorithm == 'viterbi':
@@ -927,9 +958,6 @@ class BaselineModel(object):
         cost += (math.log(self._corpus_coding.tokens +
                           self._corpus_coding.boundaries) -
                  math.log(self._corpus_coding.boundaries))
-        if allowed_boundaries is not None:
-            _logger.debug("%s %s %s %s", compound, allowed_boundaries,
-                          constructions, cost)
         return constructions, cost
 
     def forward_logprob(self, compound):
