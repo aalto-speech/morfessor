@@ -8,6 +8,7 @@ import time
 import string
 
 from . import get_version
+from . import utils
 from .baseline import BaselineModel, AnnotationCorpusWeight, \
     MorphLengthCorpusWeight, NumMorphCorpusWeight, FixedCorpusWeight
 from .exception import ArgumentException
@@ -289,7 +290,9 @@ Interactive use (read corpus from user):
     return parser
 
 
-def main(args):
+def configure_logger(logger, args):
+    """Configure logger based on parsed arguments"""
+
     if args.verbose >= 2:
         loglevel = logging.DEBUG
     elif args.verbose >= 1:
@@ -297,39 +300,43 @@ def main(args):
     else:
         loglevel = logging.WARNING
 
-    logging_format = '%(asctime)s - %(message)s'
+    logging_format = '%(asctime)s %(levelname)8s: %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
     default_formatter = logging.Formatter(logging_format, date_format)
     plain_formatter = logging.Formatter('%(message)s')
-    logging.basicConfig(level=loglevel)
-    _logger.propagate = False  # do not forward messages to the root logger
 
     # Basic settings for logging to the error stream
     ch = logging.StreamHandler()
     ch.setLevel(loglevel)
     ch.setFormatter(plain_formatter)
-    _logger.addHandler(ch)
+    loghandlers = [ch]
 
     # Settings for when log_file is present
     if args.log_file is not None:
         fh = logging.FileHandler(args.log_file, 'w')
         fh.setLevel(loglevel)
         fh.setFormatter(default_formatter)
-        _logger.addHandler(fh)
+        loghandlers.append(fh)
         # If logging to a file, make INFO the highest level for the
         # error stream
         ch.setLevel(max(loglevel, logging.INFO))
 
     # If debug messages are printed to screen or if stderr is not a tty (but
     # a pipe or a file), don't show the progressbar
-    global show_progress_bar
-    if (ch.level > logging.INFO or
-            (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
-        show_progress_bar = False
+    if (ch.level < logging.INFO or
+        (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
+        utils.show_progress_bar = False
 
     if args.progress:
-        show_progress_bar = True
-        ch.setLevel(min(ch.level, logging.INFO))
+        utils.show_progress_bar = True
+        ch.setLevel(max(ch.level, logging.INFO))
+
+    logger.setLevel(loglevel)
+    for handler in loghandlers:
+        logger.addHandler(handler)
+
+
+def main(args):
 
     if (args.loadfile is None and
             args.loadsegfile is None and
@@ -635,37 +642,6 @@ def main_evaluation(args):
     """ Separate main for running evaluation and statistical significance
     testing. Takes as argument the results of an get_evaluation_argparser()
     """
-    #TODO refactor out redundancies with main()
-    if args.verbose >= 2:
-        loglevel = logging.DEBUG
-    elif args.verbose >= 1:
-        loglevel = logging.INFO
-    else:
-        loglevel = logging.WARNING
-
-    logging_format = '%(asctime)s - %(message)s'
-    date_format = '%Y-%m-%d %H:%M:%S'
-    default_formatter = logging.Formatter(logging_format, date_format)
-    plain_formatter = logging.Formatter('%(message)s')
-    logging.basicConfig(level=loglevel)
-    _logger.propagate = False  # do not forward messages to the root logger
-
-    # Basic settings for logging to the error stream
-    ch = logging.StreamHandler()
-    ch.setLevel(loglevel)
-    ch.setFormatter(plain_formatter)
-    _logger.addHandler(ch)
-
-    # Settings for when log_file is present
-    if args.log_file is not None:
-        fh = logging.FileHandler(args.log_file, 'w')
-        fh.setLevel(loglevel)
-        fh.setFormatter(default_formatter)
-        _logger.addHandler(fh)
-        # If logging to a file, make INFO the highest level for the
-        # error stream
-        ch.setLevel(max(loglevel, logging.INFO))
-
     io = MorfessorIO(encoding=args.encoding)
 
     ev = MorfessorEvaluation(io.read_annotations_file(args.goldstandard[0]))
