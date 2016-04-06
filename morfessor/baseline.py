@@ -1200,7 +1200,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             self.postfunc = lambda x: x
         else:
             self.postfunc = postfunc
-        self.manglefunc = manglefunc
+        assert manglefunc is None, 'No longer supported'
         assert len(self.segment_dev) == len(self.reference_counts)
         self.previous_weight = None
         self.previous_cost = None
@@ -1269,7 +1269,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             try:
                 seg = model.segment(word)
             except (KeyError, AttributeError):
-                seg = model.viterbi_segment(word, manglefunc=self.manglefunc)[0]
+                seg = model.viterbi_segment(word)[0]
             cache[word] = seg
         return cache[word]
 
