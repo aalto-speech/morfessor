@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
 import argparse
+import logging
 import sys
 
 import morfessor
-from morfessor import _logger
-
 
 def main(argv):
     parser = morfessor.get_default_argparser()
@@ -35,11 +34,12 @@ Interactive use (read corpus from user):
 
     try:
         args = parser.parse_args(argv)
+        morfessor.configure_logger(logging.getLogger(), args)
         morfessor.main(args)
     except morfessor.ArgumentException as e:
         parser.error(e)
     except Exception as e:
-        _logger.error("Fatal Error {} {}".format(type(e), e))
+        logging.error("Fatal Error {} {}".format(type(e), e))
         raise
 
 
