@@ -142,6 +142,17 @@ class BaselineModel(object):
         if failed:
             raise MorfessorException("Corrupted model")
 
+    def _check_restrictions(self):
+        if not self._restricted:
+            return
+        violations = 0
+        for _, compound, segmentation in self.get_segmentations():
+            if compound in self.allowed_boundaries:
+                for idx in self._segmentation_to_splitloc(segmentation):
+                    if idx not in self.allowed_boundaries[compound]:
+                        violations += 1
+        _logger.info("Number of violated restrictions: %s", violations)
+
     @property
     def tokens(self):
         """Return the number of construction tokens."""
@@ -753,6 +764,7 @@ class BaselineModel(object):
             oldcost = newcost
             newcost = self.get_cost()
 
+            self._check_restrictions()
             _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
             if (forced_epochs == 0 and
                     newcost >= oldcost - finish_threshold *
