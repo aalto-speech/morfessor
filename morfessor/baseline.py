@@ -1216,12 +1216,15 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             absdiff = abs(cost - self.previous_cost)
             absthresh = self.previous_cost * self.threshold
             if absdiff < absthresh:
+                _logger.info("Cost delta {} is below threshold {}. "
+                    "Learning stopped".format(absdiff, absthresh))
                 return False
         if self.previous_weight is None or cost < self.previous_cost:
             # accept the previous step
             self.previous_weight = weight
             self.previous_cost = cost
             self.previous_d = d
+            _logger.info("Accepting step to {}".format(weight))
         else:
             # revert the previous step
             weight = self.previous_weight
