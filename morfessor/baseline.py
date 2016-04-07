@@ -1216,8 +1216,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             absdiff = abs(cost - self.previous_cost)
             absthresh = self.previous_cost * self.threshold
             if absdiff < absthresh:
-                _logger.info("Cost delta {} is below threshold {}. "
-                    "Learning stopped".format(absdiff, absthresh))
+                _logger.info("Align cost delta {} is below threshold {}. "
+                    "Weight learning stopped".format(absdiff, absthresh))
                 return False
         if self.previous_weight is None or cost < self.previous_cost:
             # accept the previous step
