@@ -259,8 +259,11 @@ class BaselineModel(object):
             not self._analyses[construction].splitloc):
             count = self._analyses[construction].count
             if count <= 0:
-                raise MorfessorException("Construction count of '%s' is %s"
-                                         % (construction, count))
+                #raise MorfessorException("Construction count of '%s' is %s"
+                #                         % (construction, count))
+               _logger.warn("Construction count of '%s' is %s"
+                            % (construction, count))
+               return 0
             return count
         return 0
 
