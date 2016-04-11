@@ -190,7 +190,10 @@ class BaselineModel(object):
     def _add_compound(self, compound, count):
         """Add compound with count to data."""
         if compound in self._compounds:
-            oldc = self._analyses[compound].count
+            if compound in self._analyses:
+                oldc = self._analyses[compound].count
+            else:
+                oldc = 0
             self._compounds[compound] = \
                 self._compounds[compound]._replace(count=oldc+count)
         else:
