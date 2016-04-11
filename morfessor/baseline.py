@@ -510,7 +510,7 @@ class BaselineModel(object):
         else:
             count, splitloc = 0, tuple()
         newcount = count + dcount
-        if newcount == 0:
+        if newcount == 0 and construction in self._analyses:
             del self._analyses[construction]
         else:
             self._analyses[construction] = ConstrNode(newcount, splitloc)
