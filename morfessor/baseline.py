@@ -170,11 +170,12 @@ class BaselineModel(object):
         total = 0
         for _, compound, segmentation in self.get_segmentations():
             if compound in self.allowed_boundaries:
-                total += len(self.allowed_boundaries[compound])
+                total += len(compound) - 1 - \
+                         len(self.allowed_boundaries[compound])
                 for idx in self._segmentation_to_splitloc(segmentation):
                     if idx not in self.allowed_boundaries[compound]:
                         violations += 1
-        _logger.info("Number of violated restrictions: %s (%.2f%%)",
+        _logger.info("Number of violated restrictions: %s (%.3f%%)",
                      violations, 100*violations/total)
 
     @property
@@ -922,7 +923,9 @@ class BaselineModel(object):
                                  self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
-        badlikelihood = clen * logtokens + 1.0
+        badlikelihood = 1.0 + clen * logtokens + \
+                        self._lexicon_coding.get_codelength(compound) / \
+                        self._corpus_coding.weight
         # Viterbi main loop
         for t in range(1, clen + 1):
             # Select the best path to current node.
@@ -962,7 +965,7 @@ class BaselineModel(object):
                                  / self._corpus_coding.weight)
                 elif len(construction) == 1:
                     cost += badlikelihood
-                elif self.nosplit_re:
+                elif self.nosplit_re or allowed_boundaries is not None:
                     # Some splits are forbidden, so longer unknown
                     # constructions have to be allowed
                     cost += len(construction) * badlikelihood
@@ -1056,7 +1059,9 @@ class BaselineModel(object):
                                  self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
-        badlikelihood = clen * logtokens + 1.0
+        badlikelihood = 1.0 + clen * logtokens + \
+                        self._lexicon_coding.get_codelength(compound) / \
+                        self._corpus_coding.weight
         # Viterbi main loop
         for t in range(1, clen + 1):
             # Select the best path to current node.
