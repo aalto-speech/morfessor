@@ -195,7 +195,7 @@ class BaselineModel(object):
             self._compounds[compound] = \
                 self._compounds[compound]._replace(count=oldc+count)
         else:
-            self._compounds[compound] = ConstrNode(count, tuple()) 
+            self._compounds[compound] = ConstrNode(count, tuple())
         self._corpus_coding.boundaries += count
         self._modify_construction_count(compound, count)
 
@@ -923,7 +923,16 @@ class BaselineModel(object):
                                  self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
-        badlikelihood = 1.0 + clen * logtokens + \
+        if addcount > 0:
+            newboundcost = (self._lexicon_coding.boundaries + addcount) * \
+                           math.log(self._lexicon_coding.boundaries + addcount)
+            if self._lexicon_coding.boundaries > 0:
+                newboundcost -= self._lexicon_coding.boundaries * \
+                                math.log(self._lexicon_coding.boundaries)
+            newboundcost /= self._corpus_coding.weight
+        else:
+            newboundcost = 0
+        badlikelihood = 1.0 + clen * logtokens + newboundcost + \
                         self._lexicon_coding.get_codelength(compound) / \
                         self._corpus_coding.weight
         # Viterbi main loop
@@ -948,21 +957,16 @@ class BaselineModel(object):
                 elif addcount > 0:
                     if self._corpus_coding.tokens == 0:
                         cost += (addcount * math.log(addcount) +
+                                 newboundcost +
                                  self._lexicon_coding.get_codelength(
-                                     construction)
-                                 / self._corpus_coding.weight)
+                                     construction) /
+                                 self._corpus_coding.weight)
                     else:
                         cost += (logtokens - math.log(addcount) +
-                                 (((self._lexicon_coding.boundaries +
-                                    addcount) *
-                                   math.log(self._lexicon_coding.boundaries
-                                            + addcount))
-                                  - (self._lexicon_coding.boundaries
-                                     * math.log(self._lexicon_coding.boundaries
-                                                ))
-                                  + self._lexicon_coding.get_codelength(
-                                      construction))
-                                 / self._corpus_coding.weight)
+                                 newboundcost +
+                                 self._lexicon_coding.get_codelength(
+                                     construction) /
+                                 self._corpus_coding.weight)
                 elif len(construction) == 1:
                     cost += badlikelihood
                 elif self.nosplit_re or allowed_boundaries is not None:
@@ -1059,7 +1063,16 @@ class BaselineModel(object):
                                  self._corpus_coding.boundaries + addcount)
         else:
             logtokens = 0
-        badlikelihood = 1.0 + clen * logtokens + \
+        if addcount > 0:
+            newboundcost = (self._lexicon_coding.boundaries + addcount) * \
+                           math.log(self._lexicon_coding.boundaries + addcount)
+            if self._lexicon_coding.boundaries > 0:
+                newboundcost -= self._lexicon_coding.boundaries * \
+                                math.log(self._lexicon_coding.boundaries)
+            newboundcost /= self._corpus_coding.weight
+        else:
+            newboundcost = 0
+        badlikelihood = 1.0 + clen * logtokens + newboundcost + \
                         self._lexicon_coding.get_codelength(compound) / \
                         self._corpus_coding.weight
         # Viterbi main loop
@@ -1083,20 +1096,15 @@ class BaselineModel(object):
                     elif addcount > 0:
                         if self._corpus_coding.tokens == 0:
                             cost -= (addcount * math.log(addcount) +
+                                     newboundcost +
                                      self._lexicon_coding.get_codelength(
                                          construction)
                                      / self._corpus_coding.weight)
                         else:
                             cost -= (logtokens - math.log(addcount) +
-                                     (((self._lexicon_coding.boundaries +
-                                        addcount) *
-                                       math.log(self._lexicon_coding.boundaries
-                                                + addcount))
-                                      - (self._lexicon_coding.boundaries
-                                         * math.log(self._lexicon_coding.
-                                                    boundaries))
-                                      + self._lexicon_coding.get_codelength(
-                                          construction))
+                                     newboundcost +
+                                     self._lexicon_coding.get_codelength(
+                                         construction)
                                      / self._corpus_coding.weight)
                     elif len(construction) == 1:
                         cost -= badlikelihood
