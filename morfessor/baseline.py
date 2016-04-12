@@ -158,7 +158,8 @@ class BaselineModel(object):
                 _logger.critical(
                     ("Counts %s of construction '%s' does not "
                      "match counts of parents %s"),
-                    node.count, construction, parents[construction])
+                    node.count, construction, parents[construction]
+                    if len(parents[construction]) < 20 else "")
                 failed = True
         if failed:
             raise MorfessorException("Corrupted model")
@@ -197,7 +198,13 @@ class BaselineModel(object):
         else:
             self._compounds[compound] = ConstrNode(count, tuple())
         self._corpus_coding.boundaries += count
-        self._modify_construction_count(compound, count)
+        if self._compounds[compound].splitloc:
+            constructions = self._splitloc_to_segmentation(
+                compound, self._compounds[compound].splitloc)
+        else:
+            constructions = [compound]
+        for construction in constructions:
+            self._modify_construction_count(construction, count)
 
     def _remove(self, construction):
         """Remove construction from model."""
@@ -282,7 +289,7 @@ class BaselineModel(object):
         # and add missing compounds also to the unannotated data
         constructions = collections.Counter()
         for compound, alternatives in self.annotations.items():
-            if not compound in self._analyses:
+            if not compound in self._compounds:
                 self._add_compound(compound, 1)
 
             analysis, cost = self._best_analysis(alternatives)
