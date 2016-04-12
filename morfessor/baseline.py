@@ -279,7 +279,7 @@ class BaselineModel(object):
         # and add missing compounds also to the unannotated data
         constructions = collections.Counter()
         for compound, alternatives in self.annotations.items():
-            if not compound in self._analyses:
+            if not compound in self._compounds:
                 self._add_compound(compound, 1)
 
             analysis, cost = self._best_analysis(alternatives)
