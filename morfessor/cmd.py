@@ -170,10 +170,12 @@ Interactive use (read corpus from user):
                      'online+batch'],
             help="training mode ('none', 'init', 'batch', 'init+batch', "
                  "'online', or 'online+batch'; default '%(default)s')")
-    add_arg('-a', '--algorithm', dest="algorithm", default='recursive',
-            metavar='<algorithm>', choices=['recursive', 'viterbi'],
-            help="algorithm type ('recursive', 'viterbi'; default "
-                 "'%(default)s')")
+    add_arg('-a', '--algorithm', dest="algorithms", default=[],
+            metavar='<algorithm>', choices=['recursive', 'viterbi', 'flatten'],
+            action="append", help=
+            ("algorithm type (%(choices)s); "
+             "repeat for sequential training with "
+             "multiple algorithms (default 'recursive')"))
     add_arg('-d', '--dampening', dest="dampening", type=_str, default='ones',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
@@ -212,10 +214,10 @@ Interactive use (read corpus from user):
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
-    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
+    add_arg('--viterbi-smoothing', dest="viterbismooth", default=1.0,
             type=float, metavar='<float>',
-            help="additive smoothing parameter for Viterbi training "
-                 "and segmentation (default %(default)s)")
+            help=("additive smoothing parameter for Viterbi training "
+                  "and segmentation (default %(default)s)"))
     add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
             type=int, metavar='<int>',
             help="maximum construction length in Viterbi training "
@@ -247,7 +249,8 @@ Interactive use (read corpus from user):
             help='percentual stopping threshold for corpusweight updaters')
     add_arg('--full-retrain', dest='fullretrain', action='store_true',
             default=False,
-            help='do a full retrain after any weights have converged')
+            help=('do a full retrain after any weights have converged '
+                  '(only init+batch training supported)'))
     add_arg('-A', '--annotations', dest="annofile", default=None,
             metavar='<file>',
             help="load annotated data for semi-supervised learning")
@@ -405,10 +408,14 @@ def main(args):
         raise ArgumentException("unknown dampening type '%s'" % args.dampening)
 
     # Set algorithm parameters
-    if args.algorithm == 'viterbi':
-        algparams = (args.viterbismooth, args.viterbimaxlen)
-    else:
-        algparams = ()
+    if len(args.algorithms) == 0:
+        args.algorithms.append('recursive')
+    algparams = []
+    for alg in args.algorithms:
+        if alg == 'viterbi':
+            algparams.append((args.viterbismooth, args.viterbimaxlen))
+        else:
+            algparams.append(())
 
     # Train model
     if args.trainmode == 'none':
@@ -423,12 +430,14 @@ def main(args):
                                 "files. Use 'init+batch' or 'online' to "
                                 "add new compounds.")
             ts = time.time()
-            e, c = model.train_batch(args.algorithm, algparams,
-                                     args.finish_threshold, args.maxepochs)
+            for alg, algp in zip(args.algorithms, algparams):
+                _logger.info("Batch training with %s algorithm", alg)
+                e, c = model.train_batch(
+                    alg, algp, args.finish_threshold, args.maxepochs)
+                _logger.info("Epochs: %s", e)
+                _logger.info("Current cost: %s", c)
             te = time.time()
-            _logger.info("Epochs: %s" % e)
-            _logger.info("Final cost: %s" % c)
-            _logger.info("Training time: %.3fs" % (te - ts))
+            _logger.info("Training time: %.3fs", (te - ts))
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.trainmode == 'init':
@@ -445,46 +454,62 @@ def main(args):
                 data = io.read_corpus_files(args.trainfiles)
             c = model.load_data(data, args.freqthreshold, dampfunc,
                                 args.splitprob)
-            e, c = model.train_batch(args.algorithm, algparams,
-                                     args.finish_threshold, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
+            for alg, algp in zip(args.algorithms, algparams):
+                _logger.info("Batch training with %s algorithm", alg)
+                e, c = model.train_batch(
+                    alg, algp, args.finish_threshold, args.maxepochs)
+                _logger.info("Epochs: %s", e)
+                _logger.info("Current cost: %s", c)
             if args.fullretrain:
-                if abs(model.get_corpus_coding_weight() - start_corpus_weight) > 0.1:
+                if abs(model.get_corpus_coding_weight() -
+                       start_corpus_weight) > 0.1:
                     model.set_corpus_weight_updater(
                         FixedCorpusWeight(model.get_corpus_coding_weight()))
                     model.clear_segmentation()
-                    e, c = model.train_batch(args.algorithm, algparams,
-                                             args.finish_threshold,
-                                             args.maxepochs)
-                    _logger.info("Retrain Epochs: %s" % e)
+                    for alg, algp in zip(args.algorithms, algparams):
+                        _logger.info("Batch retraining with %s algorithm", alg)
+                        e, c = model.train_batch(
+                            alg, algp, args.finish_threshold, args.maxepochs)
+                        _logger.info("Retrain Epochs: %s", e)
+                        _logger.info("Current cost: %s", c)
         elif args.trainmode == 'online':
+            if len(args.algorithms) > 1:
+                _logger.warning("On-line training does not support "
+                                "multiple algorithms, consider using "
+                                "'online+batch'")
+            alg, algp = args.algorithms[0], algparams[0]
+            _logger.info("On-line training with %s algorithm", alg)
             data = io.read_corpus_files(args.trainfiles)
-            e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams,
-                                      args.splitprob, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
+            e, c = model.train_online(
+                data, dampfunc, args.epochinterval, alg, algp,
+                args.splitprob, args.maxepochs)
+            _logger.info("Epochs: %s", e)
+            _logger.info("Current cost: %s", c)
         elif args.trainmode == 'online+batch':
-            data = io.read_corpus_files(args.trainfiles)
-            e, c = model.train_online(data, dampfunc, args.epochinterval,
-                                      args.algorithm, algparams,
-                                      args.splitprob, args.maxepochs)
-            e, c = model.train_batch(args.algorithm, algparams,
-                                     args.finish_threshold, args.maxepochs - e)
-            _logger.info("Epochs: %s" % e)
-            if args.fullretrain:
-                if abs(model.get_corpus_coding_weight() -
-                        start_corpus_weight) > 0.1:
-                    model.clear_segmentation()
-                    e, c = model.train_batch(args.algorithm, algparams,
-                                             args.finish_threshold,
-                                             args.maxepochs)
-                    _logger.info("Retrain Epochs: %s" % e)
+            first = True
+            for alg, algp in zip(args.algorithms, algparams):
+                if first:
+                    data = io.read_corpus_files(args.trainfiles)
+                    _logger.info("On-line training with %s algorithm", alg)
+                    e, c = model.train_online(
+                        data, dampfunc, args.epochinterval, alg, algp,
+                        args.splitprob, args.maxepochs)
+                    _logger.info("Epochs: %s", e)
+                    _logger.info("Current cost: %s", c)
+                    first = False
+                else:
+                    _logger.info("Batch training with %s algorithm", alg)
+                    e, c = model.train_batch(
+                        alg, algp, args.finish_threshold,
+                        (args.maxepochs - e) if args.maxepochs else None)
+                    _logger.info("Epochs: %s", e)
+                    _logger.info("Current cost: %s", c)
         else:
             raise ArgumentException("unknown training mode '%s'"
                                     % args.trainmode)
         te = time.time()
-        _logger.info("Final cost: %s" % c)
-        _logger.info("Training time: %.3fs" % (te - ts))
+        _logger.info("Final cost: %s", c)
+        _logger.info("Training time: %.3fs", (te - ts))
     else:
         _logger.warning("No training data files specified.")
 
