@@ -755,8 +755,8 @@ class BaselineModel(object):
         each iteration.
 
         Arguments:
-            algorithm: string in ('recursive', 'viterbi') that indicates
-                         the splitting algorithm used.
+            algorithm: string in ('recursive', 'viterbi', 'flatten')
+                         that indicates the splitting algorithm used.
             algorithm_params: parameters passed to the splitting algorithm.
             finish_threshold: the stopping threshold. Training stops when
                                 the improvement of the last iteration is
@@ -770,6 +770,15 @@ class BaselineModel(object):
         compounds = list(self.get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
                      (len(compounds), self._corpus_coding.boundaries))
+
+        if algorithm == 'flatten':
+            _logger.info("Flattening analysis tree")
+            for compound in _progress(compounds):
+                parts = self.segment(compound)
+                self._clear_compound_analysis(compound)
+                self._set_compound_analysis(compound, parts)
+            _logger.info("Done.")
+            return 1, self.get_cost()
 
         _logger.info("Starting batch training")
         _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
@@ -824,9 +833,9 @@ class BaselineModel(object):
         All compounds from data are only optimized once. After online
         training, batch training could be used for further optimization.
 
-        Epochs are defined as a fixed number of compounds. After each epoch (
-        like in batch training), the annotation cost, and random split counters
-        are recalculated if applicable.
+        Epochs are defined as a fixed number of compounds. After each
+        epoch (like in batch training), the annotation cost, and
+        random split counters are recalculated if applicable.
 
         Arguments:
             data: iterator of (_, compound_atoms) tuples. The first
