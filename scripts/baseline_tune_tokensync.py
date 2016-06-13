@@ -77,8 +77,8 @@ def main(args):
                 best_models[label] = name
         sys.stdout.flush()
     for label in ALIGN_LOSSES:
-        selected = '(selected)' if label == args.alignloss else ''
-        print('best model for loss {} {}: {} {}'.format(
+        selected = '(selected)' if label == args.alignloss else '\t'
+        print('best model for loss {}: {}\t{} {}'.format(
             label, selected, name, best_costs[label]))
 
 
