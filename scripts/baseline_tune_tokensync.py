@@ -23,14 +23,23 @@ def get_argparser():
 
     add_arg('--aligned-reference', dest='alignref', default=None,
             metavar='<file>',
-            help='FIXME')
+            help='Reference corpus '
+                 '(the side of the parallel corpus with low '
+                 'morphological complexity)')
     add_arg('--aligned-to-segment', dest='alignseg', default=None,
             metavar='<file>',
-            help='FIXME')
+            help='Corpus to segment, as unsegmented tokens '
+                 '(the side of the parallel corpus with high '
+                 'morphological complexity)')
+    add_arg('--aligned-linguistic', dest='aligngold', default=None,
+            metavar='<file>',
+            help='Corpus to segment, as linguistic gold standard tokens '
+                 '(Same text as --aligned-to-segment). Optional.')
     add_arg('--aligned-loss', dest="alignloss", type=str, default='abs',
             metavar='<type>',
             choices=ALIGN_LOSSES,
-            help="loss function for FIXME ('abs', 'square', 'zeroone' or"
+            help="loss function for token count tuning "
+                 "('abs', 'square', 'zeroone' or"
                  "'tot'; default '%(default)s')")
     return parser
 
@@ -43,11 +52,16 @@ def main(args):
     if args.alignloss not in ALIGN_LOSSES:
         raise ArgumentException(
             "unknown alignloss type '{}'".format(args.alignloss))
+    if args.aligngold is not None:
+        aligngold = io._read_text_file(args.aligngold)
+    else:
+        aligngold = None
     updater = morfessor.baseline.AlignedTokenCountCorpusWeight(
         io._read_text_file(args.alignseg),
         io._read_text_file(args.alignref),
         0,
-        loss=args.alignloss)
+        loss=args.alignloss,
+        linguistic_dev=aligngold)
 
     best_costs = collections.defaultdict(lambda: None)
     best_models = {}

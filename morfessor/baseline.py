@@ -1210,21 +1210,28 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     align_losses = ('abs', 'square', 'zeroone', 'tot')
 
     def __init__(self,
-                 segment_dev,
+                 unsegmented_dev,
                  reference_dev,
                  threshold=0.01,
-                 loss='abs'):
-        self.segment_dev = list(self.tokenize(segment_dev))
+                 loss='abs',
+                 linguistic_dev=None):
+        self.unsegmented_dev = list(self.tokenize(unsegmented_dev))
         self.reference_counts = list(len(x) for x
                                      in self.tokenize(reference_dev))
         _logger.info('Total reference tokens {}'.format(
             sum(self.reference_counts)))
         self.threshold = threshold
-        self.align_loss_idx = align_losses.index(loss)
-        assert len(self.segment_dev) == len(self.reference_counts)
+        self.align_loss_idx = self.align_losses.index(loss)
+        assert len(self.unsegmented_dev) == len(self.reference_counts)
         self.previous_weight = None
         self.previous_cost = None
         self.previous_d = None
+        if linguistic_dev is not None:
+            self.linguistic_dev = list(self.tokenize(linguistic_dev))
+            assert len(self.linguistic_dev) == len(self.reference_counts)
+        else:
+            self.linguistic_dev = None
+
 
     def update(self, model, epoch):
         if epoch < 1:
@@ -1274,9 +1281,13 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         d = 0
         tot_tokens = 0
         cache = {}
+        if self.linguistic_dev is not None:
+            self.morph_totals = collections.Counter()
+            self.morph_scores = collections.Counter()
+            linguistic_dev_iter = iter(self.linguistic_dev)
         _logger.info('Segmenting aligned parallel corpus for weight learning')
         for (tokens, ref) in _progress(
-                zip(self.segment_dev, self.reference_counts)):
+                zip(self.unsegmented_dev, self.reference_counts)):
             segcount = sum(
                 len(self._cached_seg(model, cache, w))
                 for w in tokens)
@@ -1291,6 +1302,11 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             if diff != 0:
                 zeroone_cost += 1
             tot_cost += diff
+            if self.linguistic_dev is not None:
+                # also count morph-type-level scores
+                for morph in next(linguistic_dev_iter):
+                    self.morph_totals[morph] += 1
+                    self.morph_scores[morph] += d    # or diff?
         tot_cost = abs(tot_cost)
         costs = (abs_cost, sq_cost, zeroone_cost, tot_cost)
         _logger.info('Align costs {}, direction {}, total tokens {}'.format(
