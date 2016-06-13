@@ -414,24 +414,13 @@ def main(args):
             raise ArgumentException(
                 'If --aligned-reference is specified, '
                 'you must also specify --aligned-to-segment')
-        postfunc = None
-        if args.alignloss == 'abs':
-            lossfunc = abs
-        elif args.alignloss == 'square':
-            lossfunc = lambda x: x**2
-        elif args.alignloss == 'zeroone':
-            lossfunc = lambda x: 0 if x == 0 else 1
-        elif args.alignloss == 'tot':
-            lossfunc = lambda x: x
-            postfunc = abs
-        else:
+        if args.alignloss not in AlignedTokenCountCorpusWeight.align_losses:
             raise ArgumentException("unknown alignloss type '%s'" % args.alignloss)
         updater = AlignedTokenCountCorpusWeight(
             io._read_text_file(args.alignseg),
             io._read_text_file(args.alignref),
             args.threshold,
-            lossfunc,
-            postfunc)
+            args.alignloss)
         model.set_corpus_weight_updater(updater)
 
     start_corpus_weight = model.get_corpus_coding_weight()
