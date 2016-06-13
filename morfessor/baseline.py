@@ -1207,29 +1207,20 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
     is as similar as possible to the number of tokens on the reference side.
     """
     re_token_sep = re.compile(r'\s+', re.UNICODE)
+    align_losses = ('abs', 'square', 'zeroone', 'tot')
 
     def __init__(self,
                  segment_dev,
                  reference_dev,
                  threshold=0.01,
-                 loss=None,
-                 postfunc=None,
-                 manglefunc=None):
+                 loss='abs'):
         self.segment_dev = list(self.tokenize(segment_dev))
         self.reference_counts = list(len(x) for x
                                      in self.tokenize(reference_dev))
         _logger.info('Total reference tokens {}'.format(
             sum(self.reference_counts)))
         self.threshold = threshold
-        if loss is None:
-            self.loss = lambda x: x**2
-        else:
-            self.loss = loss
-        if postfunc is None:
-            self.postfunc = lambda x: x
-        else:
-            self.postfunc = postfunc
-        assert manglefunc is None, 'No longer supported'
+        self.align_loss_idx = align_losses.index(loss)
         assert len(self.segment_dev) == len(self.reference_counts)
         self.previous_weight = None
         self.previous_cost = None
@@ -1270,10 +1261,18 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             line = line.strip()
             yield cls.re_token_sep.split(line)
 
-    def evaluation(self, model, distribution=None):
-        cost = 0.0
+    def evaluation(self, model):
+        costs, d, _ = self.calculate_costs(model)
+        cost = costs[self.align_loss_idx]
+        return (cost, d)
+
+    def calculate_costs(self, model):
+        abs_cost = 0.0
+        sq_cost = 0.0
+        zeroone_cost = 0.0
+        tot_cost = 0.0
         d = 0
-        tot = 0
+        tot_tokens = 0
         cache = {}
         _logger.info('Segmenting aligned parallel corpus for weight learning')
         for (tokens, ref) in _progress(
@@ -1281,20 +1280,22 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             segcount = sum(
                 len(self._cached_seg(model, cache, w))
                 for w in tokens)
-            tot += segcount
+            tot_tokens += segcount
             diff = segcount - ref
-            if distribution is not None:
-                unsegcount = len(tokens)
-                distribution(ref, unsegcount, diff)
-            cost += self.loss(diff)
             if diff > 0:
                 d += 1
             elif diff < 0:
                 d -= 1
-        cost = self.postfunc(cost)
-        _logger.info('Align cost {}, direction {}, total tokens {}'.format(
-            cost, d, tot))
-        return (cost, d)
+            abs_cost += abs(diff)
+            sq_cost += diff**2
+            if diff != 0:
+                zeroone_cost += 1
+            tot_cost += diff
+        tot_cost = abs(tot_cost)
+        costs = (abs_cost, sq_cost, zeroone_cost, tot_cost)
+        _logger.info('Align costs {}, direction {}, total tokens {}'.format(
+            costs, d, tot_tokens))
+        return (costs, d, tot_tokens)
 
     def _cached_seg(self, model, cache, word):
         if word not in cache:
