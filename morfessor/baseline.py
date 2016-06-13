@@ -705,7 +705,11 @@ class BaselineModel(object):
             allowed_positions = set()
             for analysis in annotations[compound]:
                 for idx in self._segmentation_to_splitloc(analysis):
-                    assert(idx < len(compound))
+                    if idx >= len(compound):
+                        raise Exception('Restriction {} -> {} '
+                            'has split index {} past end of compound {}. '
+                            'Your annotations may be broken. '.format(
+                                compound, analysis, idx, len(compound)))
                     allowed_positions.add(idx)
             self.allowed_boundaries[compound] = sorted(allowed_positions)
 
