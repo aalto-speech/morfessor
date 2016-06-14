@@ -17,6 +17,7 @@ def get_argparser():
     add_arg('modelfile', metavar='<modelfile>')
     add_arg('infile', metavar='<infile>')
     add_arg('outfile', metavar='<outfile>')
+    add_arg('roundedoutfile', metavar='<roundedoutfile>')
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help='Encoding of input and output files (if none is given, '
                  'both the local encoding and UTF-8 are tried).')
@@ -75,23 +76,32 @@ def main(args):
     #   both input and output (with current count updated)
     # also output: current count (rounded), word
 
-    for line in io._read_text_file(args.infile):
-        line = line.strip()
-        try:
-            count, word, morphstr = line.split('\t')
-            count = float(count)
-            morphs = morphstr.split()
-            scores = [rel_morph_scores[morph] for morph in morphs]
-            score = sum(scores) / len(scores)
-            # positive score: oversegmented,  needs higher corpus weight
-            # negative score: undersegmented, needs lower corpus weight
-            count *= (1. + (score * args.rate))
-            print('{}\t{}\t{}'.format(count, word, morphstr)) # FIXME
-            rounded = max(1, int(round(count)))
-            print('{}\t{}'.format(rounded, word)) # FIXME
-        except ValueError:
-            print('cant parse line {}'.format(line))
-            raise
+    total_in = 0.
+    total_out = 0.
+    with io._open_text_file_write(args.outfile) as outfobj:
+        with io._open_text_file_write(args.roundedoutfile) as roundfobj:
+            for line in io._read_text_file(args.infile):
+                line = line.strip()
+                try:
+                    count, word, morphstr = line.split('\t')
+                    count = float(count)
+                    total_in += count
+                    morphs = morphstr.split()
+                    scores = [rel_morph_scores[morph] for morph in morphs]
+                    score = sum(scores) / len(scores)
+                    # positive score: oversegmented,  needs higher corpus weight
+                    # negative score: undersegmented, needs lower corpus weight
+                    count *= (1. + (score * args.rate))
+                    total_out += count
+                    outfobj.write('{}\t{}\t{}\n'.format(count, word, morphstr))
+
+                    rounded = max(1, int(round(count)))
+                    roundfobj.write('{}\t{}\n'.format(rounded, word))
+                except ValueError:
+                    print('cant parse line {}'.format(line))
+                    raise
+    print('total in: {}, total out: {}, ratio: {}'.format(
+        total_in, total_out, total_out / total_in))
 
 
 if __name__ == "__main__":
