@@ -15,6 +15,8 @@ def get_argparser():
     parser = argparse.ArgumentParser()
     add_arg = parser.add_argument
     add_arg('modelfile', metavar='<modelfile>')
+    add_arg('infile', metavar='<infile>')
+    add_arg('outfile', metavar='<outfile>')
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help='Encoding of input and output files (if none is given, '
                  'both the local encoding and UTF-8 are tried).')
@@ -33,6 +35,7 @@ def get_argparser():
             metavar='<file>',
             help='Corpus to segment, as linguistic gold standard tokens '
                  '(Same text as --aligned-to-segment). Optional.')
+    add_arg('--learning-rate', dest='rate', type=float, default=0.5)
     return parser
 
 def main(args):
@@ -55,15 +58,40 @@ def main(args):
     costs, direction, tot_tokens = updater.calculate_costs(model)
     morph_totals = updater.morph_totals
     morph_scores = updater.morph_scores
+    rel_morph_scores = collections.Counter()
 
-    ranked_morphs = []
+    #ranked_morphs = []
     for (morph, score) in morph_scores.items():
         total = morph_totals[morph]
-        ranked_morphs.append((abs(float(score))/total, score, total, morph))
-    ranked_morphs.sort(reverse=True)
-    print('Top morphs:')
-    for tpl in ranked_morphs[:20]:
-        print('rel {}\tscore {}\ttotal {}\tmorph "{}"'.format(*tpl))
+        rel_morph_scores[morph] = float(score) / total
+        #ranked_morphs.append((abs(float(score))/total, score, total, morph))
+    #ranked_morphs.sort(reverse=True)
+    #print('Top morphs:')
+    #for tpl in ranked_morphs[:20]:
+    #    print('rel {}\tscore {}\ttotal {}\tmorph "{}"'.format(*tpl))
+
+    # file format: current count (float), word, linguistic morphs
+    #   created by initializer, which optionally applies log and/or multiplier to true counts
+    #   both input and output (with current count updated)
+    # also output: current count (rounded), word
+
+    for line in io._read_text_file(args.infile):
+        line = line.strip()
+        try:
+            count, word, morphstr = line.split('\t')
+            count = float(count)
+            morphs = morphstr.split()
+            scores = [rel_morph_scores[morph] for morph in morphs]
+            score = sum(scores) / len(scores)
+            # positive score: oversegmented,  needs higher corpus weight
+            # negative score: undersegmented, needs lower corpus weight
+            count *= (1. + (score * args.rate))
+            print('{}\t{}\t{}'.format(count, word, morphstr)) # FIXME
+            rounded = max(1, int(round(count)))
+            print('{}\t{}'.format(rounded, word)) # FIXME
+        except ValueError:
+            print('cant parse line {}'.format(line))
+            raise
 
 
 if __name__ == "__main__":

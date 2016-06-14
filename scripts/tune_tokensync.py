@@ -75,7 +75,6 @@ def main(args):
             if best_costs[label] is None or best_costs[label] > cost:
                 best_costs[label] = cost
                 best_models[label] = name
-            else:
         sys.stdout.flush()
     for label in ALIGN_LOSSES:
         selected = '(selected)' if label == args.alignloss else '\t'
