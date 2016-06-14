@@ -1292,7 +1292,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         sq_cost = 0.0
         zeroone_cost = 0.0
         tot_cost = 0.0
-        d = 0
+        direction = 0
         tot_tokens = 0
         cache = {}
         if self.linguistic_dev is not None:
@@ -1308,9 +1308,12 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             tot_tokens += segcount
             diff = segcount - ref
             if diff > 0:
-                d += 1
+                d = 1
             elif diff < 0:
-                d -= 1
+                d = -1
+            else:
+                d = 0
+            direction += d
             abs_cost += abs(diff)
             sq_cost += diff**2
             if diff != 0:
@@ -1324,8 +1327,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         tot_cost = abs(tot_cost)
         costs = (abs_cost, sq_cost, zeroone_cost, tot_cost)
         _logger.info('Align costs {}, direction {}, total tokens {}'.format(
-            costs, d, tot_tokens))
-        return (costs, d, tot_tokens)
+            costs, direction, tot_tokens))
+        return (costs, direction, tot_tokens)
 
     def _cached_seg(self, model, cache, word):
         if word not in cache:
