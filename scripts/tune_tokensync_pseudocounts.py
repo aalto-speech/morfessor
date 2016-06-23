@@ -37,6 +37,7 @@ def get_argparser():
             help='Corpus to segment, as linguistic gold standard tokens '
                  '(Same text as --aligned-to-segment). Optional.')
     add_arg('--learning-rate', dest='rate', type=float, default=0.5)
+    add_arg('--smooth', dest='smooth', type=float, default=1.0)
     return parser
 
 def main(args):
@@ -66,7 +67,7 @@ def main(args):
     for (morph, total) in morph_totals.items():
         pos = float(max(0, morph_scores_pos[morph]))
         neg = float(max(0, morph_scores_neg[morph]))
-        score = (pos - neg) / total
+        score = (pos - neg) / (total + args.smooth)
         rel_morph_scores[morph] = score
         ranked_morphs.append((abs(score),
                              pos, morph_scores_pos[morph],
