@@ -519,6 +519,8 @@ class BaselineModel(object):
         else:
             count, splitloc = 0, tuple()
         newcount = count + dcount
+        # observe that this comparison will not work correctly if counts
+        # are floats rather than ints
         if newcount == 0:
             if construction in self._analyses:
                 del self._analyses[construction]

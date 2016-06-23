@@ -61,15 +61,15 @@ def main(args):
     morph_scores = updater.morph_scores
     rel_morph_scores = collections.Counter()
 
-    #ranked_morphs = []
+    ranked_morphs = []
     for (morph, score) in morph_scores.items():
         total = morph_totals[morph]
         rel_morph_scores[morph] = float(score) / total
-        #ranked_morphs.append((abs(float(score))/total, score, total, morph))
-    #ranked_morphs.sort(reverse=True)
-    #print('Top morphs:')
-    #for tpl in ranked_morphs[:20]:
-    #    print('rel {}\tscore {}\ttotal {}\tmorph "{}"'.format(*tpl))
+        ranked_morphs.append((abs(float(score))/total, score, total, morph))
+    ranked_morphs.sort(reverse=True)
+    print('Top morphs:')
+    for tpl in ranked_morphs: # [:20]:
+        print('rel {}\tscore {}\ttotal {}\tmorph "{}"'.format(*tpl))
 
     # file format: current count (float), word, linguistic morphs
     #   created by initializer, which optionally applies log and/or multiplier to true counts
