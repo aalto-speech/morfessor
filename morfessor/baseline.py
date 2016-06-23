@@ -1334,7 +1334,7 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
                 if diff > 0:
                     # oversegmented
                     for morph in ling_morphs:
-                        self.morph_scores_pos[morph] -= segments[morph]
+                        self.morph_scores_pos[morph] += segments[morph]
                 elif diff < 0:
                     # undersegmented
                     for morph in ling_morphs:
@@ -1350,7 +1350,10 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             try:
                 seg = model.segment(word)
             except (KeyError, AttributeError):
-                seg = model.viterbi_segment(word)[0]
+                # don't use viterbi_segment: the only unseen words should be
+                # unanalyzable words, which are not split anyhow
+                #seg = model.viterbi_segment(word)[0]
+                seg = [word]
             cache[word] = seg
         return cache[word]
 
