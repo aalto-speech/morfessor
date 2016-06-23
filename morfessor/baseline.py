@@ -1299,14 +1299,16 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
         cache = {}
         if self.linguistic_dev is not None:
             self.morph_totals = collections.Counter()
-            self.morph_scores = collections.Counter()
+            self.morph_scores_pos = collections.Counter()
+            self.morph_scores_neg = collections.Counter()
             linguistic_dev_iter = iter(self.linguistic_dev)
         _logger.info('Segmenting aligned parallel corpus for weight learning')
-        for (tokens, ref) in _progress(
-                zip(self.unsegmented_dev, self.reference_counts)):
-            segcount = sum(
-                len(self._cached_seg(model, cache, w))
-                for w in tokens)
+        for (tokens, ref) in _progress(zip(self.unsegmented_dev,
+                                           self.reference_counts)):
+            segments = collections.Counter()
+            for w in tokens:
+                segments.update(self._cached_seg(model, cache, w))
+            segcount = sum(segments.values())
             tot_tokens += segcount
             diff = segcount - ref
             if diff > 0:
@@ -1323,9 +1325,20 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             tot_cost += diff
             if self.linguistic_dev is not None:
                 # also count morph-type-level scores
-                for morph in next(linguistic_dev_iter):
-                    self.morph_totals[morph] += 1
-                    self.morph_scores[morph] += d    # or diff?
+                ling_morphs = collections.Counter(next(linguistic_dev_iter))
+                self.morph_totals.update(ling_morphs)
+                # Negative: was not segmented, positive: a morph compound
+                # Observe: must use subtract, because - operator will not
+                #   result in negative counts.
+                segments.subtract(ling_morphs)
+                if diff > 0:
+                    # oversegmented
+                    for morph in ling_morphs:
+                        self.morph_scores_pos[morph] -= segments[morph]
+                elif diff < 0:
+                    # undersegmented
+                    for morph in ling_morphs:
+                        self.morph_scores_neg[morph] -= segments[morph]
         tot_cost = abs(tot_cost)
         costs = (abs_cost, sq_cost, zeroone_cost, tot_cost)
         _logger.info('Align costs {}, direction {}, total tokens {}'.format(

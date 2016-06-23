@@ -58,18 +58,24 @@ def main(args):
     model = io.read_any_model(name)
     costs, direction, tot_tokens = updater.calculate_costs(model)
     morph_totals = updater.morph_totals
-    morph_scores = updater.morph_scores
+    morph_scores_pos = updater.morph_scores_pos
+    morph_scores_neg = updater.morph_scores_neg
     rel_morph_scores = collections.Counter()
 
     ranked_morphs = []
-    for (morph, score) in morph_scores.items():
-        total = morph_totals[morph]
-        rel_morph_scores[morph] = float(score) / total
-        ranked_morphs.append((abs(float(score))/total, score, total, morph))
+    for (morph, total) in morph_totals.items():
+        pos = float(max(0, morph_scores_pos[morph]))
+        neg = float(max(0, morph_scores_neg[morph]))
+        score = (pos - neg) / total
+        rel_morph_scores[morph] = score
+        ranked_morphs.append((abs(score),
+                             pos, morph_scores_pos[morph],
+                             neg, morph_scores_neg[morph],
+                             total, morph))
     ranked_morphs.sort(reverse=True)
     print('Top morphs:')
     for tpl in ranked_morphs: # [:20]:
-        print('rel {}\tscore {}\ttotal {}\tmorph "{}"'.format(*tpl))
+        print('absrel {}\tpos {} ({})\tneg {} ({})\ttotal {}\tmorph "{}"'.format(*tpl))
 
     # file format: current count (float), word, linguistic morphs
     #   created by initializer, which optionally applies log and/or multiplier to true counts
