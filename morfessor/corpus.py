@@ -389,8 +389,8 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
             self.morph_scores_neg = collections.Counter()
             linguistic_dev_iter = iter(self.linguistic_dev)
         _logger.info('Segmenting aligned parallel corpus for weight learning')
-        for (tokens, ref) in _progress(zip(self.unsegmented_dev,
-                                           self.reference_counts)):
+        for (tokens, ref) in zip(_progress(self.unsegmented_dev),
+                                 self.reference_counts):
             segments = collections.Counter()
             for w in tokens:
                 segments.update(self._cached_seg(model, cache, w))
