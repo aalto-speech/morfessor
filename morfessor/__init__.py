@@ -10,7 +10,7 @@ __all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
            'get_evaluation_argparser']
 
 __version__ = '2.0.2alpha3'
-__author__ = 'Sami Virpioja, Peter Smit'
+__author__ = 'Sami Virpioja, Peter Smit, Stig-Arne Gronroos'
 __author_email__ = "morfessor@cis.hut.fi"
 
 show_progress_bar = True
@@ -26,7 +26,8 @@ def get_version():
 # when they are imported.
 
 from .corpus import FixedCorpusWeight, AnnotationCorpusWeight, \
-    NumMorphCorpusWeight, MorphLengthCorpusWeight
+    NumMorphCorpusWeight, MorphLengthCorpusWeight, \
+    AlignedTokenCountCorpusWeight
 from .baseline import BaselineModel
 from .cmd import main, get_default_argparser, configure_logger, \
     main_evaluation, get_evaluation_argparser

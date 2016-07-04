@@ -13,7 +13,7 @@ RE_MARKERS = re.compile(r'[+@]')
 
 from morfessor import ArgumentException
 
-ALIGN_LOSSES = morfessor.baseline.AlignedTokenCountCorpusWeight.align_losses
+ALIGN_LOSSES = morfessor.AlignedTokenCountCorpusWeight.align_losses
 
 def get_argparser():
     parser = argparse.ArgumentParser()

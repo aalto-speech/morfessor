@@ -9,7 +9,7 @@ import sys
 
 from morfessor import ArgumentException
 
-ALIGN_LOSSES = morfessor.baseline.AlignedTokenCountCorpusWeight.align_losses
+ALIGN_LOSSES = morfessor.AlignedTokenCountCorpusWeight.align_losses
 
 def get_argparser():
     parser = argparse.ArgumentParser()
@@ -56,7 +56,7 @@ def main(args):
         aligngold = io._read_text_file(args.aligngold)
     else:
         aligngold = None
-    updater = morfessor.baseline.AlignedTokenCountCorpusWeight(
+    updater = morfessor.AlignedTokenCountCorpusWeight(
         io._read_text_file(args.alignseg),
         io._read_text_file(args.alignref),
         0,
