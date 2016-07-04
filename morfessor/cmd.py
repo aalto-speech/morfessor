@@ -9,9 +9,9 @@ import string
 
 from . import get_version
 from . import utils
-from .baseline import BaselineModel, AnnotationCorpusWeight, \
-    MorphLengthCorpusWeight, NumMorphCorpusWeight, FixedCorpusWeight, \
-    AlignedTokenCountCorpusWeight
+from .corpus import AnnotationCorpusWeight, MorphLengthCorpusWeight, \
+    NumMorphCorpusWeight, FixedCorpusWeight, AlignedTokenCountCorpusWeight
+from .baseline import BaselineModel
 from .exception import ArgumentException
 from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
@@ -276,6 +276,10 @@ Interactive use (read corpus from user):
     add_arg('--restricted-segmentation', dest="restannofile", default=None,
             metavar='<file>',
             help="load annotated data for restricted segmentation")
+    add_arg('--restricted-relaxed', dest="relaxed", default=None,
+            metavar='<file>',
+            help=("relaxed restrictions with given context window lengths "
+                  "(<left>,<right>,<begin>,<end>)"))
 
     # Options for evaluation
     add_arg = parser.add_argument_group('Evaluation options').add_argument
@@ -393,7 +397,11 @@ def main(args):
     if args.restannofile is not None:
         annotations = io.read_annotations_file(args.restannofile,
                                                analysis_sep=analysis_sep)
-        model.set_restrictions(annotations)
+        if args.relaxed:
+            relaxed = tuple(int(x) for x in args.relaxed.split(","))
+        else:
+            relaxed = None
+        model.set_restrictions(annotations, relaxed)
 
     if args.develfile is not None:
         develannots = io.read_annotations_file(args.develfile,

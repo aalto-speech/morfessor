@@ -25,7 +25,9 @@ def get_version():
 # so that the package global names are available to the modules
 # when they are imported.
 
-from .baseline import BaselineModel, FixedCorpusWeight, AnnotationCorpusWeight, NumMorphCorpusWeight, MorphLengthCorpusWeight
+from .corpus import FixedCorpusWeight, AnnotationCorpusWeight, \
+    NumMorphCorpusWeight, MorphLengthCorpusWeight
+from .baseline import BaselineModel
 from .cmd import main, get_default_argparser, configure_logger, \
     main_evaluation, get_evaluation_argparser
 from .exception import MorfessorException, ArgumentException
