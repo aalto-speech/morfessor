@@ -413,18 +413,25 @@ class AlignedTokenCountCorpusWeight(CorpusWeight):
                 # also count morph-type-level scores
                 ling_morphs = collections.Counter(next(linguistic_dev_iter))
                 self.morph_totals.update(ling_morphs)
-                # Negative: was not segmented, positive: a morph compound
-                # Observe: must use subtract, because - operator will not
-                #   result in negative counts.
-                segments.subtract(ling_morphs)
+                # Observe: - operator (as opposed to .subtract)
+                #   uses multiset semantics, 
+                #   and will not result in negative counts.
+                not_in_seg = ling_morphs - segments
+                in_seg = ling_morphs - not_in_seg
                 if diff > 0:
                     # oversegmented
                     for morph in ling_morphs:
-                        self.morph_scores_pos[morph] += segments[morph]
+                        # strong plus if split in an overseg sentence
+                        self.morph_scores_pos[morph] += in_seg[morph]
+                        # weak plus if joined in an overseg sentence
+                        self.morph_scores_neg[morph] -= not_in_seg[morph]
                 elif diff < 0:
                     # undersegmented
                     for morph in ling_morphs:
-                        self.morph_scores_neg[morph] -= segments[morph]
+                        # strong minus if joined in an underseg sentence
+                        self.morph_scores_neg[morph] += not_in_seg[morph]
+                        # weak minus if split in an underseg sentence
+                        self.morph_scores_pos[morph] -= in_seg[morph]
         tot_cost = abs(tot_cost)
         costs = (abs_cost, sq_cost, zeroone_cost, tot_cost)
         _logger.info('Align costs {}, direction {}, total tokens {}'.format(
