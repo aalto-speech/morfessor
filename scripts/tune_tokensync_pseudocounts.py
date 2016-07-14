@@ -63,8 +63,22 @@ def main(args):
     morph_scores_neg = updater.morph_scores_neg
     rel_morph_scores = collections.Counter()
 
+    ling_morphs = set()
+    for line in io._read_text_file(args.infile):
+        line = line.strip()
+        try:
+            count, word, morphstr = line.split('\t')
+            morphs = morphstr.split()
+            ling_morphs.update(morphs)
+        except ValueError:
+            print('cant parse line {}'.format(line))
+            raise
+
     ranked_morphs = []
     for (morph, total) in morph_totals.items():
+        if morph not in ling_morphs:
+            print('skipping unsegmentable {} ({})'.format(morph, total))
+            continue
         pos = float(max(0, morph_scores_pos[morph]))
         neg = float(max(0, morph_scores_neg[morph]))
         score = (pos - neg) / (total + args.smooth)
