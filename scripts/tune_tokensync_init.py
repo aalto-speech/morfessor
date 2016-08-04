@@ -9,6 +9,7 @@ import sys
 import re
 import math
 
+# Markers used for indicating intra-word boundaries
 RE_MARKERS = re.compile(r'[+@]')
 
 from morfessor import ArgumentException
@@ -18,17 +19,23 @@ ALIGN_LOSSES = morfessor.AlignedTokenCountCorpusWeight.align_losses
 def get_argparser():
     parser = argparse.ArgumentParser()
     add_arg = parser.add_argument
-    add_arg('infile', metavar='<infile>')
-    add_arg('outfile', metavar='<outfile>')
-    add_arg('roundedoutfile', metavar='<roundedoutfile>')
+    add_arg('infile', metavar='<infile>',
+            help='Segmentation lexicon of the format: '
+                 '<true count> TAB <word> TAB <space separated morphs>')
+    add_arg('outfile', metavar='<outfile>',
+            help='Segmentation lexicon of the format: '
+                 '<float pseudocount> TAB <word> TAB <space separated morphs>')
+    add_arg('roundedoutfile', metavar='<roundedoutfile>',
+            help='Segmentation lexicon of the format: '
+                 '<int pseudocount> TAB <word> TAB <space separated morphs>')
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help='Encoding of input and output files (if none is given, '
                  'both the local encoding and UTF-8 are tried).')
-    add_arg('-d', '--dampening', dest="dampening", type=str, default='none',
+    add_arg('-d', '--dampening', dest="dampening", type=str, default='log',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
                  "'ones'; default '%(default)s')")
-    add_arg('-m', '--multiplier', dest='multiplier', type=float, default=1.,
+    add_arg('-m', '--multiplier', dest='multiplier', type=float, default=100.,
             metavar='<float>',
             help="multiply dampened frequency before rounding. "
                  "Affects the granularity available for adjustments. "

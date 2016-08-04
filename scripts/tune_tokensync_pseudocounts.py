@@ -14,10 +14,17 @@ ALIGN_LOSSES = morfessor.AlignedTokenCountCorpusWeight.align_losses
 def get_argparser():
     parser = argparse.ArgumentParser()
     add_arg = parser.add_argument
-    add_arg('modelfile', metavar='<modelfile>')
-    add_arg('infile', metavar='<infile>')
-    add_arg('outfile', metavar='<outfile>')
-    add_arg('roundedoutfile', metavar='<roundedoutfile>')
+    add_arg('modelfile', metavar='<modelfile>',
+            help='Restricted Morfessor model')
+    add_arg('infile', metavar='<infile>',
+            help='Segmentation lexicon of the format: '
+                 '<float pseudocount> TAB <word> TAB <space separated morphs>')
+    add_arg('outfile', metavar='<outfile>',
+            help='Segmentation lexicon of the format: '
+                 '<float pseudocount> TAB <word> TAB <space separated morphs>')
+    add_arg('roundedoutfile', metavar='<roundedoutfile>',
+            help='Segmentation lexicon of the format: '
+                 '<int pseudocount> TAB <word> TAB <space separated morphs>')
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help='Encoding of input and output files (if none is given, '
                  'both the local encoding and UTF-8 are tried).')
@@ -36,8 +43,11 @@ def get_argparser():
             metavar='<file>',
             help='Corpus to segment, as linguistic gold standard tokens '
                  '(Same text as --aligned-to-segment). Optional.')
-    add_arg('--learning-rate', dest='rate', type=float, default=0.5)
-    add_arg('--smooth', dest='smooth', type=float, default=1.0)
+    add_arg('--learning-rate', dest='rate', type=float, default=0.5,
+            help='Scale adjustments by this factor.')
+    add_arg('--smooth', dest='smooth', type=float, default=100.,
+            help='Additive smoothing of estimates: '
+                 'add this number of neutral occurrences to each morph.')
     return parser
 
 def main(args):

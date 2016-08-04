@@ -16,7 +16,8 @@ def get_argparser():
     add_arg = parser.add_argument
     add_arg('modelfiles',
         metavar='<modelfile>',
-        nargs='+')
+        nargs='+',
+        help='Restricted Morfessor models to evaluate')
     add_arg('-e', '--encoding', dest='encoding', metavar='<encoding>',
             help='Encoding of input and output files (if none is given, '
                  'both the local encoding and UTF-8 are tried).')
