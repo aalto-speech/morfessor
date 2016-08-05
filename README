@@ -39,16 +39,17 @@ http://urn.fi/URN:ISBN:978-952-60-5501-5
 Restricted Morfessor
 --------------------
 
-This branch includes the modifications to Morfessor that enable restricting segmentation points
-using a linguistic gold standard.
-Morfessor may then join some of the linguistic morphs, but can not split linguistic morphs into smaller parts.
+This branch includes the modifications to Morfessor that enable
+restricting segmentation points using a linguistic gold standard.
+Morfessor may then join some of the linguistic morphs,
+but can not split linguistic morphs into smaller parts.
 
 The modifications have an impact on memory consumption.
 For this reason, we have not included them in the main branch at this time.
 
 To use the Restricted Morfessor,
 give the linguistic restrictions using ``--restricted-segmentation <file>``.
-The restrictions should be in the same format as Morfessor annotated data files, e.g.
+The restrictions should be in the same format as Morfessor annotated data files:
 
 Example: ::
 
@@ -57,7 +58,8 @@ Example: ::
 
 It is recommended to first train using the recursive training algorithm,
 but switch over to Viterbi training after a few iterations.
-This can be done using ``--algorithm recursive --algorithm flatten --algorithm viterbi``
+This can be done using the command line argument sequence
+``--algorithm recursive --algorithm flatten --algorithm viterbi``
 
 An example command using omorfi-derived segmentation: ::
 
