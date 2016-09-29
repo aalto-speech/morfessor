@@ -691,7 +691,7 @@ def main_evaluation(args):
         results.append(result)
         print(result.format(f_string))
 
-    if len(results) > 1:
+    if len(results) > 1 and num_samples > 1:
         wsr = WilcoxonSignedRank()
         r = wsr.significance_test(results)
         WilcoxonSignedRank.print_table(r)
