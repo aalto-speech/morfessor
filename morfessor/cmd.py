@@ -15,7 +15,7 @@ from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
     WilcoxonSignedRank, FORMAT_STRINGS
 
-PY3 = sys.version_info.major == 3
+PY3 = sys.version_info[0] == 3
 
 # _str is used to convert command line arguments to the right type (str for PY3, unicode for PY2
 if PY3:

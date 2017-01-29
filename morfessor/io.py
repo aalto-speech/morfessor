@@ -16,7 +16,7 @@ try:
 except ImportError:
     import pickle
 
-PY3 = sys.version_info.major == 3
+PY3 = sys.version_info[0] == 3
 
 _logger = logging.getLogger(__name__)
 
