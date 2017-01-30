@@ -16,7 +16,7 @@ try:
 except ImportError:
     import pickle
 
-PY3 = sys.version_info.major == 3
+PY3 = sys.version_info[0] == 3
 
 _logger = logging.getLogger(__name__)
 
@@ -54,10 +54,18 @@ class MorfessorIO(object):
         _logger.info("Reading segmentations from '%s'..." % file_name)
         for line in self._read_text_file(file_name):
             if has_counts:
-                count, compound = line.split(' ', 1)
+                count, compound_str = line.split(' ', 1)
             else:
-                count, compound = 1, line
-            yield int(count), compound.split(self.construction_separator)
+                count, compound_str = 1, line
+            constructions = tuple(
+                self._split_atoms(constr)
+                for constr in compound_str.split(self.construction_separator))
+            if self.atom_separator is None:
+                compound = "".join(constructions)
+            else:
+                compound = tuple(atom for constr in constructions
+                                 for atom in constr)
+            yield int(count), compound, constructions
         _logger.info("Done.")
 
     def write_segmentation_file(self, file_name, segmentations, **kwargs):
@@ -72,19 +80,20 @@ class MorfessorIO(object):
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
                            (self._version, d))
-            for count, segmentation in segmentations:
+            for count, _, segmentation in segmentations:
                 if self.atom_separator is None:
                     s = self.construction_separator.join(segmentation)
                 else:
                     s = self.construction_separator.join(
-                        map(lambda x: ' '.join(x), segmentation))
+                        (self.atom_separator.join(constr)
+                         for constr in segmentation))
                 file_obj.write("%d %s\n" % (count, s))
         _logger.info("Done.")
 
     def read_corpus_files(self, file_names):
         """Read one or more corpus files.
 
-        Yield for each compound found (1, compound, compound_atoms).
+        Yield for each compound found (1, compound_atoms).
 
         """
         for file_name in file_names:
@@ -94,7 +103,7 @@ class MorfessorIO(object):
     def read_corpus_list_files(self, file_names):
         """Read one or more corpus list files.
 
-        Yield for each compound found (count, compound, compound_atoms).
+        Yield for each compound found (count, compound_atoms).
 
         """
         for file_name in file_names:
@@ -104,16 +113,16 @@ class MorfessorIO(object):
     def read_corpus_file(self, file_name):
         """Read one corpus file.
 
-        For each compound, yield (1, compound, compound_atoms).
-        After each line, yield (0, \"\\n\", ()).
+        For each compound, yield (1, compound_atoms).
+        After each line, yield (0, ()).
 
         """
         _logger.info("Reading corpus from '%s'..." % file_name)
         for line in self._read_text_file(file_name, raw=True):
             for compound in self.compound_sep_re.split(line):
                 if len(compound) > 0:
-                    yield 1, compound, self._split_atoms(compound)
-            yield 0, "\n", ()
+                    yield 1, self._split_atoms(compound)
+            yield 0, ()
         _logger.info("Done.")
 
     def read_corpus_list_file(self, file_name):
@@ -122,16 +131,16 @@ class MorfessorIO(object):
         Each line has the format:
         <count> <compound>
 
-        Yield tuples (count, compound, compound_atoms) for each compound.
+        Yield tuples (count, compound_atoms) for each compound.
 
         """
         _logger.info("Reading corpus from list '%s'..." % file_name)
         for line in self._read_text_file(file_name):
             try:
                 count, compound = line.split(None, 1)
-                yield int(count), compound, self._split_atoms(compound)
+                yield int(count), self._split_atoms(compound)
             except ValueError:
-                yield 1, line, self._split_atoms(line)
+                yield 1, self._split_atoms(line)
         _logger.info("Done.")
 
     def read_annotations_file(self, file_name, construction_separator=' ',

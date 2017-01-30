@@ -51,6 +51,8 @@ class BaselineModel(object):
             corpusweight: weight for the corpus cost
             use_skips: randomly skip frequently occurring constructions
                          to speed up training
+            nosplit_re: regular expression string for preventing splitting
+                          in certain contexts
 
         """
 
@@ -469,15 +471,14 @@ class BaselineModel(object):
         for w in sorted(self._analyses.keys()):
             c = self._analyses[w].rcount
             if c > 0:
-                yield c, self.segment(w)
+                yield c, w, self.segment(w)
 
     def load_data(self, data, freqthreshold=1, count_modifier=None,
                   init_rand_split=None):
         """Load data to initialize the model for batch training.
 
         Arguments:
-            data: iterator/generator of (count, compound, atoms) tuples
-            corpus: corpus instance
+            data: iterator of (count, compound_atoms) tuples
             freqthreshold: discard compounds that occur less than
                              given times in the corpus (default 1)
             count_modifier: function for adjusting the counts of each
@@ -492,7 +493,7 @@ class BaselineModel(object):
         """
         self._check_segment_only()
         totalcount = collections.Counter()
-        for count, _, atoms in data:
+        for count, atoms in data:
             if len(atoms) > 0:
                 totalcount[atoms] += count
 
@@ -513,15 +514,14 @@ class BaselineModel(object):
     def load_segmentations(self, segmentations):
         """Load model from existing segmentations.
 
-        The argument should be an iterator providing a count and a
-        segmentation.
+        The argument should be an iterator providing a count, a
+        compound, and its segmentation.
 
         """
         self._check_segment_only()
-        for count, segmentation in segmentations:
-            comp = "".join(segmentation)
-            self._add_compound(comp, count)
-            self._set_compound_analysis(comp, segmentation)
+        for count, compound, segmentation in segmentations:
+            self._add_compound(compound, count)
+            self._set_compound_analysis(compound, segmentation)
 
     def set_annotations(self, annotations, annotatedcorpusweight=None):
         """Prepare model for semi-supervised learning with given
@@ -570,13 +570,10 @@ class BaselineModel(object):
             algorithm: string in ('recursive', 'viterbi') that indicates
                          the splitting algorithm used.
             algorithm_params: parameters passed to the splitting algorithm.
-            devel_annotations: an annotated dataset (iterator of
-                                 (compound, [analyses]) tuples) used for
-                                 controlling the weight of the corpus
-                                 encoding.
             finish_threshold: the stopping threshold. Training stops when
                                 the improvement of the last iteration is
                                 smaller then finish_threshold * #boundaries
+            max_epochs: maximum number of epochs to train
 
         """
         epochs = 0
@@ -640,8 +637,8 @@ class BaselineModel(object):
         are recalculated if applicable.
 
         Arguments:
-            data: iterator/generator of (_, _, compound) tuples. The first
-                    two arguments are ignored, as every occurence of the
+            data: iterator of (_, compound_atoms) tuples. The first
+                    argument is ignored, as every occurence of the
                     compound is taken with count 1
             count_modifier: function for adjusting the counts of each
                               compound
@@ -653,6 +650,7 @@ class BaselineModel(object):
             init_rand_split: probability for random splitting a compound to
                                at any point for initializing the model. None
                                or 0 means no random splitting.
+            max_epochs: maximum number of epochs to train
 
         """
         self._check_segment_only()
@@ -671,7 +669,7 @@ class BaselineModel(object):
 
             for _ in _progress(range(epoch_interval)):
                 try:
-                    _, _, w = next(data)
+                    _, w = next(data)
                 except StopIteration:
                     more_tokens = False
                     break
@@ -865,6 +863,7 @@ class BaselineModel(object):
 
         Arguments:
           compound: compound to be segmented
+          n: how many segmentations to return
           addcount: constant for additive smoothing (0 = no smoothing)
           maxlen: maximum length for the constructions
 

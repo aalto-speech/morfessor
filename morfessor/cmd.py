@@ -15,7 +15,7 @@ from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
     WilcoxonSignedRank, FORMAT_STRINGS
 
-PY3 = sys.version_info.major == 3
+PY3 = sys.version_info[0] == 3
 
 # _str is used to convert command line arguments to the right type (str for PY3, unicode for PY2
 if PY3:
@@ -499,7 +499,11 @@ def main(args):
         with io._open_text_file_write(args.outfile) as fobj:
             testdata = io.read_corpus_files(args.testfiles)
             i = 0
-            for count, compound, atoms in testdata:
+            for count, atoms in testdata:
+                if io.atom_separator is None:
+                    compound = "".join(atoms)
+                else:
+                    compound = io.atom_separator.join(atoms)
                 if len(atoms) == 0:
                     # Newline in corpus
                     if args.outputnewlines:
@@ -687,7 +691,7 @@ def main_evaluation(args):
         results.append(result)
         print(result.format(f_string))
 
-    if len(results) > 1:
+    if len(results) > 1 and num_samples > 1:
         wsr = WilcoxonSignedRank()
         r = wsr.significance_test(results)
         WilcoxonSignedRank.print_table(r)
