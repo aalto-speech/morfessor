@@ -9,8 +9,8 @@ __all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
            'BaselineModel', 'main', 'get_default_argparser', 'main_evaluation',
            'get_evaluation_argparser']
 
-__version__ = '2.0.2alpha4'
-__author__ = 'Sami Virpioja, Peter Smit'
+__version__ = '2.0.2'
+__author__ = 'Sami Virpioja, Peter Smit, Stig-Arne Grönroos'
 __author_email__ = "morpho@aalto.fi"
 
 show_progress_bar = True
