@@ -50,6 +50,6 @@ or::
 To install the morfessor library and tools.
 
 
-.. _Morpho project homepage: http://www.cis.hut.fi/projects/morpho/
+.. _Morpho project homepage: http://morpho.aalto.fi
 .. _Morfessor Github page: https://github.com/aalto-speech/morfessor/releases
 .. _Python Package Index (PyPI): https://pypi.python.org/pypi/Morfessor

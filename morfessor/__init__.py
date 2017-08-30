@@ -11,7 +11,7 @@ __all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
 
 __version__ = '2.0.2alpha4'
 __author__ = 'Sami Virpioja, Peter Smit'
-__author_email__ = "morfessor@cis.hut.fi"
+__author_email__ = "morpho@aalto.fi"
 
 show_progress_bar = True
 
