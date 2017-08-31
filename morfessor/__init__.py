@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
