@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
+from codecs import open
 from ez_setup import use_setuptools
 use_setuptools()
 
 from setuptools import setup
 
 import re
-main_py = open('morfessor/__init__.py').read()
+main_py = open('morfessor/__init__.py', encoding='utf-8').read()
 metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
 
 requires = [
