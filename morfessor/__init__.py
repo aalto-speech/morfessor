@@ -14,8 +14,6 @@ __version__ = '2.0.3'
 __author__ = 'Sami Virpioja, Peter Smit, Stig-Arne Grönroos'
 __author_email__ = "morpho@aalto.fi"
 
-show_progress_bar = True
-
 _logger = logging.getLogger(__name__)
 
 

@@ -36,6 +36,7 @@ def _progress(iter_func):
 
     """
 
+    global show_progress_bar
     if not show_progress_bar:
         return iter_func
 
