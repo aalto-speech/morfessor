@@ -190,7 +190,7 @@ def weighted_sample(data, num_samples):
     ti = -1
     for sample_token_index in token_indices:
         while ti < sample_token_index:
-            (di, weight) = d.next()
+            (di, weight) = next(d)
             ti += weight
         data_indices.append(di)
     return data_indices
