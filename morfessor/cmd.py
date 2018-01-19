@@ -135,7 +135,7 @@ Interactive use (read corpus from user):
     add_arg('--atom-separator', dest="separator", type=_str, default=None,
             metavar='<regexp>',
             help="atom separator regexp (default %(default)s)")
-    add_arg('--compound-separator', dest="cseparator", type=_str, default='\s+',
+    add_arg('--compound-separator', dest="cseparator", type=_str, default=r'\s+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
     add_arg('--analysis-separator', dest='analysisseparator', type=_str,
@@ -423,9 +423,9 @@ def main(args):
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs)
             te = time.time()
-            _logger.info("Epochs: %s" % e)
-            _logger.info("Final cost: %s" % c)
-            _logger.info("Training time: %.3fs" % (te - ts))
+            _logger.info("Epochs: %s", e)
+            _logger.info("Final cost: %s", c)
+            _logger.info("Training time: %.3fs", (te - ts))
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.trainmode == 'init':
@@ -444,7 +444,7 @@ def main(args):
                                 args.splitprob)
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
+            _logger.info("Epochs: %s", e)
             if args.fullretrain:
                 if abs(model.get_corpus_coding_weight() - start_corpus_weight) > 0.1:
                     model.set_corpus_weight_updater(
@@ -453,13 +453,13 @@ def main(args):
                     e, c = model.train_batch(args.algorithm, algparams,
                                              args.finish_threshold,
                                              args.maxepochs)
-                    _logger.info("Retrain Epochs: %s" % e)
+                    _logger.info("Retrain Epochs: %s", e)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams,
                                       args.splitprob, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
+            _logger.info("Epochs: %s", e)
         elif args.trainmode == 'online+batch':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
@@ -467,21 +467,19 @@ def main(args):
                                       args.splitprob, args.maxepochs)
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs - e)
-            _logger.info("Epochs: %s" % e)
+            _logger.info("Epochs: %s", e)
             if args.fullretrain:
-                if abs(model.get_corpus_coding_weight() -
-                        start_corpus_weight) > 0.1:
+                if abs(model.get_corpus_coding_weight() - start_corpus_weight) > 0.1:
                     model.clear_segmentation()
                     e, c = model.train_batch(args.algorithm, algparams,
                                              args.finish_threshold,
                                              args.maxepochs)
-                    _logger.info("Retrain Epochs: %s" % e)
+                    _logger.info("Retrain Epochs: %s", e)
         else:
-            raise ArgumentException("unknown training mode '%s'"
-                                    % args.trainmode)
+            raise ArgumentException("unknown training mode '%s'", args.trainmode)
         te = time.time()
-        _logger.info("Final cost: %s" % c)
-        _logger.info("Training time: %.3fs" % (te - ts))
+        _logger.info("Final cost: %s", c)
+        _logger.info("Training time: %.3fs", (te - ts))
     else:
         _logger.warning("No training data files specified.")
 

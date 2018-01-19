@@ -87,6 +87,9 @@ class BaselineModel(object):
         else:
             self.nosplit_re = re.compile(nosplit_re, re.UNICODE)
 
+        # Used only for (semi-)supervised learning
+        self.annotations = None
+
     def set_corpus_weight_updater(self, corpus_weight):
         if corpus_weight is None:
             self._corpus_weight_updater = FixedCorpusWeight(1.0)
@@ -156,7 +159,7 @@ class BaselineModel(object):
             self._modify_construction_count(compound, count)
         elif ptype == 'flat':
             rcount, count = self._remove(compound)
-            splitloc = self._segmentation_to_splitloc(parts)
+            splitloc = self.segmentation_to_splitloc(parts)
             self._analyses[compound] = ConstrNode(rcount, count, splitloc)
             for constr in parts:
                 self._modify_construction_count(constr, count)
@@ -193,7 +196,7 @@ class BaselineModel(object):
         # and add missing compounds also to the unannotated data
         constructions = collections.Counter()
         for compound, alternatives in self.annotations.items():
-            if not compound in self._analyses:
+            if compound not in self._analyses:
                 self._add_compound(compound, 1)
 
             analysis, cost = self._best_analysis(alternatives)
@@ -413,7 +416,7 @@ class BaselineModel(object):
         return forced_epochs
 
     @staticmethod
-    def _segmentation_to_splitloc(constructions):
+    def segmentation_to_splitloc(constructions):
         """Return a list of split locations for a segmented compound."""
         splitloc = []
         i = 0
@@ -559,7 +562,7 @@ class BaselineModel(object):
         """Train the model in batch fashion.
 
         The model is trained with the data already loaded into the model (by
-        using an existing model or calling one of the load\_ methods).
+        using an existing model or calling one of the load_ methods).
 
         In each iteration (epoch) all compounds in the training data are
         optimized once, in a random order. If applicable, corpus weight,
@@ -580,11 +583,11 @@ class BaselineModel(object):
         forced_epochs = max(1, self._epoch_update(epochs))
         newcost = self.get_cost()
         compounds = list(self.get_compounds())
-        _logger.info("Compounds in training data: %s types / %s tokens" %
-                     (len(compounds), self._corpus_coding.boundaries))
+        _logger.info("Compounds in training data: %s types / %s tokens",
+                     len(compounds), self._corpus_coding.boundaries)
 
         _logger.info("Starting batch training")
-        _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
+        _logger.info("Epochs: %s\tCost: %s", epochs, newcost)
 
         while True:
             # One epoch
@@ -598,16 +601,15 @@ class BaselineModel(object):
                 else:
                     raise MorfessorException("unknown algorithm '%s'" %
                                              algorithm)
-                _logger.debug("#%s -> %s" %
-                              (w, _constructions_to_str(segments)))
+                _logger.debug("#%s -> %s", w, _constructions_to_str(segments))
             epochs += 1
 
-            _logger.debug("Cost before epoch update: %s" % self.get_cost())
+            _logger.debug("Cost before epoch update: %s", self.get_cost())
             forced_epochs = max(forced_epochs, self._epoch_update(epochs))
             oldcost = newcost
             newcost = self.get_cost()
 
-            _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
+            _logger.info("Epochs: %s\tCost: %s", epochs, newcost)
             if (forced_epochs == 0 and
                     newcost >= oldcost - finish_threshold *
                     self._corpus_coding.boundaries):
@@ -665,7 +667,7 @@ class BaselineModel(object):
         while more_tokens:
             self._epoch_update(epochs)
             newcost = self.get_cost()
-            _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
+            _logger.info("Tokens processed: %s\tCost: %s", i, newcost)
 
             for _ in _progress(range(epoch_interval)):
                 try:
@@ -679,7 +681,7 @@ class BaselineModel(object):
                     continue
 
                 if count_modifier is not None:
-                    if not w in counts:
+                    if w not in counts:
                         c = 0
                         counts[w] = 1
                         addc = 1
@@ -701,8 +703,7 @@ class BaselineModel(object):
                 else:
                     raise MorfessorException("unknown algorithm '%s'" %
                                              algorithm)
-                _logger.debug("#%s: %s -> %s" %
-                              (i, w, _constructions_to_str(segments)))
+                _logger.debug("#%s: %s -> %s", i, w, _constructions_to_str(segments))
                 i += 1
 
             epochs += 1
@@ -712,7 +713,7 @@ class BaselineModel(object):
 
         self._epoch_update(epochs)
         newcost = self.get_cost()
-        _logger.info("Tokens processed: %s\tCost: %s" % (i, newcost))
+        _logger.info("Tokens processed: %s\tCost: %s", i, newcost)
         return epochs, newcost
 
     def viterbi_segment(self, compound, addcount=1.0, maxlen=30):
@@ -777,8 +778,7 @@ class BaselineModel(object):
                                    math.log(self._lexicon_coding.boundaries
                                             + addcount))
                                   - (self._lexicon_coding.boundaries
-                                     * math.log(self._lexicon_coding.boundaries
-                                                ))
+                                     * math.log(self._lexicon_coding.boundaries))
                                   + self._lexicon_coding.get_codelength(
                                       construction))
                                  / self._corpus_coding.weight)
@@ -973,9 +973,7 @@ class BaselineModel(object):
         doing so would throw an exception.
 
         """
-        self._num_compounds = len(self.get_compounds())
         self._segment_only = True
-
         self._analyses = {k: v for (k, v) in self._analyses.items()
                           if not v.splitloc}
 
@@ -994,7 +992,7 @@ class CorpusWeight(object):
             else:
                 weight *= 1.0 / (1 + 2.0 / epoch)
             model.set_corpus_coding_weight(weight)
-            _logger.info("Corpus weight set to {}".format(weight))
+            _logger.info("Corpus weight set to %s", weight)
             return True
         return False
 
@@ -1039,12 +1037,12 @@ class AnnotationCorpusWeight(CorpusWeight):
             best = -1
             for ref in ref_list:
                 # list of internal boundary positions
-                ref_b = set(BaselineModel._segmentation_to_splitloc(ref))
+                ref_b = set(BaselineModel.segmentation_to_splitloc(ref))
                 if len(ref_b) == 0:
                     best = 1.0
                     break
                 for pre in pre_list:
-                    pre_b = set(BaselineModel._segmentation_to_splitloc(pre))
+                    pre_b = set(BaselineModel.segmentation_to_splitloc(pre))
                     r = len(ref_b.intersection(pre_b)) / float(len(ref_b))
                     if r > best:
                         best = r
@@ -1077,10 +1075,8 @@ class AnnotationCorpusWeight(CorpusWeight):
         undersegmentation, and 0 if no changes are required.
 
         """
-        pre, rec, f = self._bpr_evaluation([[x] for x in segments],
-                                           annotations)
-        _logger.info("Boundary evaluation: precision %.4f; recall %.4f" %
-                     (pre, rec))
+        pre, rec, f = self._bpr_evaluation([[x] for x in segments], annotations)
+        _logger.info("Boundary evaluation: precision %.4f; recall %.4f", pre, rec)
         if abs(pre - rec) < self.threshold:
             return 0
         elif rec > pre:
@@ -1099,7 +1095,7 @@ class MorphLengthCorpusWeight(CorpusWeight):
             return False
         cur_length = self.calc_morph_length(model)
 
-        _logger.info("Current morph-length: {}".format(cur_length))
+        _logger.info("Current morph-length: %s", cur_length)
 
         if (abs(self.morph_length - cur_length) / self.morph_length >
                 self.threshold):
@@ -1133,7 +1129,7 @@ class NumMorphCorpusWeight(CorpusWeight):
             return False
         cur_morph_types = model._lexicon_coding.boundaries
 
-        _logger.info("Number of morph types: {}".format(cur_morph_types))
+        _logger.info("Number of morph types: %s", cur_morph_types)
 
 
         if (abs(self.num_morph_types - cur_morph_types) / self.num_morph_types
@@ -1345,8 +1341,7 @@ class AnnotatedCorpusEncoding(Encoding):
         self.weight = (self.corpus_coding.weight *
                        float(self.corpus_coding.boundaries) / self.boundaries)
         if self.weight != old:
-            _logger.info("Corpus weight of annotated data set to %s"
-                         % self.weight)
+            _logger.info("Corpus weight of annotated data set to %s", self.weight)
 
     def get_cost(self):
         """Return the cost of the Annotation Corpus."""
