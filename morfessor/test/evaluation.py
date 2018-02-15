@@ -27,9 +27,9 @@ class TestWilcoxon(unittest.TestCase):
         x = [120, 114, 181, 188, 180, 146, 121, 191, 132, 113, 127, 112]
         y = [133, 143, 119, 189, 112, 199, 198, 113, 115, 121, 142, 187]
 
-        p = self.obj._wilcoxon([a-b for a, b in zip(x,y)])
+        p = self.obj._wilcoxon([(a - b) for a, b in zip(x, y)])
         self.assertAlmostEqual(p, 0.7240817)
-        p = self.obj._wilcoxon([a-b for a, b in zip(x,y)], correction=False)
+        p = self.obj._wilcoxon([(a - b) for a, b in zip(x, y)], correction=False)
         self.assertAlmostEqual(p, 0.6948866)
 
 

@@ -10,11 +10,9 @@ __all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
            'BaselineModel', 'main', 'get_default_argparser', 'main_evaluation',
            'get_evaluation_argparser']
 
-__version__ = '2.0.3'
+__version__ = '2.0.4'
 __author__ = 'Sami Virpioja, Peter Smit, Stig-Arne Grönroos'
 __author_email__ = "morpho@aalto.fi"
-
-show_progress_bar = True
 
 _logger = logging.getLogger(__name__)
 
@@ -26,7 +24,8 @@ def get_version():
 # so that the package global names are available to the modules
 # when they are imported.
 
-from .baseline import BaselineModel, FixedCorpusWeight, AnnotationCorpusWeight, NumMorphCorpusWeight, MorphLengthCorpusWeight
+from .baseline import BaselineModel, FixedCorpusWeight, AnnotationCorpusWeight, \
+    NumMorphCorpusWeight, MorphLengthCorpusWeight
 from .cmd import main, get_default_argparser, main_evaluation, \
     get_evaluation_argparser
 from .exception import MorfessorException, ArgumentException

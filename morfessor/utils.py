@@ -48,6 +48,11 @@ def _progress(iter_func):
             line, proportional to the progress """
             NUM_DOTS = 60
 
+            def __init__(self):
+                self.it = None
+                self.dotfreq = 100
+                self.i = 0
+
             def __call__(self, it):
                 self.it = iter(it)
                 self.i = 0
@@ -142,7 +147,7 @@ def ngrams(sequence, n=2):
             # trim back to size
             window = window[-n:]
         if len(window) == n:
-            yield(tuple(window))
+            yield tuple(window)
 
 
 def minargmin(sequence):
@@ -189,7 +194,7 @@ def weighted_sample(data, num_samples):
     ti = -1
     for sample_token_index in token_indices:
         while ti < sample_token_index:
-            (di, weight) = d.next()
+            (di, weight) = next(d)
             ti += weight
         data_indices.append(di)
     return data_indices

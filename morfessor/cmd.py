@@ -9,6 +9,7 @@ import time
 import string
 
 from . import get_version
+from . import utils
 from .baseline import BaselineModel, AnnotationCorpusWeight, \
     MorphLengthCorpusWeight, NumMorphCorpusWeight, FixedCorpusWeight
 from .exception import ArgumentException
@@ -27,7 +28,6 @@ else:
 _logger = logging.getLogger(__name__)
 
 
-
 def get_default_argparser():
     import argparse
 
@@ -36,7 +36,7 @@ def get_default_argparser():
         description="""
 Morfessor %s
 
-Copyright (c) 2012-2017, Sami Virpioja, Peter Smit, and Stig-Arne Grönroos.
+Copyright (c) 2012-2018, Sami Virpioja, Peter Smit, and Stig-Arne Grönroos.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -135,7 +135,7 @@ Interactive use (read corpus from user):
     add_arg('--atom-separator', dest="separator", type=_str, default=None,
             metavar='<regexp>',
             help="atom separator regexp (default %(default)s)")
-    add_arg('--compound-separator', dest="cseparator", type=_str, default='\s+',
+    add_arg('--compound-separator', dest="cseparator", type=_str, default=r'\s+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
     add_arg('--analysis-separator', dest='analysisseparator', type=_str,
@@ -287,7 +287,8 @@ Interactive use (read corpus from user):
     return parser
 
 
-def main(args):
+def initialize_logging(args):
+    """Initialize loggers based on command line args"""
     if args.verbose >= 2:
         loglevel = logging.DEBUG
     elif args.verbose >= 1:
@@ -295,39 +296,49 @@ def main(args):
     else:
         loglevel = logging.WARNING
 
-    logging_format = '%(asctime)s - %(message)s'
+    rootlogger = logging.getLogger()
+    rootlogger.setLevel(logging.DEBUG)
+
+    logfile_format = '%(asctime)s %(levelname)s:%(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
-    default_formatter = logging.Formatter(logging_format, date_format)
-    plain_formatter = logging.Formatter('%(message)s')
-    logging.basicConfig(level=loglevel)
-    _logger.propagate = False  # do not forward messages to the root logger
+    console_format = '%(message)s'
 
-    # Basic settings for logging to the error stream
+    console_level = loglevel
+    if args.log_file is not None or (hasattr(args, 'progress') and args.progress):
+        # If logging to a file or progress bar is forced, make INFO
+        # the highest level for the error stream
+        console_level = max(loglevel, logging.INFO)
+
+    # Console handler
     ch = logging.StreamHandler()
-    ch.setLevel(loglevel)
-    ch.setFormatter(plain_formatter)
-    _logger.addHandler(ch)
+    ch.setLevel(console_level)
+    ch.setFormatter(logging.Formatter(console_format))
+    rootlogger.addHandler(ch)
 
-    # Settings for when log_file is present
+    # FileHandler for log_file
     if args.log_file is not None:
         fh = logging.FileHandler(args.log_file, 'w')
         fh.setLevel(loglevel)
-        fh.setFormatter(default_formatter)
-        _logger.addHandler(fh)
-        # If logging to a file, make INFO the highest level for the
-        # error stream
-        ch.setLevel(max(loglevel, logging.INFO))
+        fh.setFormatter(logging.Formatter(logfile_format, date_format))
+        rootlogger.addHandler(fh)
 
-    # If debug messages are printed to screen or if stderr is not a tty (but
-    # a pipe or a file), don't show the progressbar
-    global show_progress_bar
-    if (ch.level > logging.INFO or
+    return console_level
+
+
+def main(args):
+
+    console_level = initialize_logging(args)
+
+    # If debug messages are printed to screen, only warning messages
+    # (or above) should be printed to screen, or if stderr is not a
+    # tty (but a pipe or a file), don't show the progressbar
+    if (console_level != logging.INFO or
             (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
-        show_progress_bar = False
+        utils.show_progress_bar = False
 
+    # Force progress bar
     if args.progress:
-        show_progress_bar = True
-        ch.setLevel(min(ch.level, logging.INFO))
+        utils.show_progress_bar = True
 
     if (args.loadfile is None and
             args.loadsegfile is None and
@@ -412,9 +423,9 @@ def main(args):
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs)
             te = time.time()
-            _logger.info("Epochs: %s" % e)
-            _logger.info("Final cost: %s" % c)
-            _logger.info("Training time: %.3fs" % (te - ts))
+            _logger.info("Epochs: %s", e)
+            _logger.info("Final cost: %s", c)
+            _logger.info("Training time: %.3fs", (te - ts))
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.trainmode == 'init':
@@ -433,7 +444,7 @@ def main(args):
                                 args.splitprob)
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
+            _logger.info("Epochs: %s", e)
             if args.fullretrain:
                 if abs(model.get_corpus_coding_weight() - start_corpus_weight) > 0.1:
                     model.set_corpus_weight_updater(
@@ -442,13 +453,13 @@ def main(args):
                     e, c = model.train_batch(args.algorithm, algparams,
                                              args.finish_threshold,
                                              args.maxepochs)
-                    _logger.info("Retrain Epochs: %s" % e)
+                    _logger.info("Retrain Epochs: %s", e)
         elif args.trainmode == 'online':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
                                       args.algorithm, algparams,
                                       args.splitprob, args.maxepochs)
-            _logger.info("Epochs: %s" % e)
+            _logger.info("Epochs: %s", e)
         elif args.trainmode == 'online+batch':
             data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(data, dampfunc, args.epochinterval,
@@ -456,21 +467,19 @@ def main(args):
                                       args.splitprob, args.maxepochs)
             e, c = model.train_batch(args.algorithm, algparams,
                                      args.finish_threshold, args.maxepochs - e)
-            _logger.info("Epochs: %s" % e)
+            _logger.info("Epochs: %s", e)
             if args.fullretrain:
-                if abs(model.get_corpus_coding_weight() -
-                        start_corpus_weight) > 0.1:
+                if abs(model.get_corpus_coding_weight() - start_corpus_weight) > 0.1:
                     model.clear_segmentation()
                     e, c = model.train_batch(args.algorithm, algparams,
                                              args.finish_threshold,
                                              args.maxepochs)
-                    _logger.info("Retrain Epochs: %s" % e)
+                    _logger.info("Retrain Epochs: %s", e)
         else:
-            raise ArgumentException("unknown training mode '%s'"
-                                    % args.trainmode)
+            raise ArgumentException("unknown training mode '%s'", args.trainmode)
         te = time.time()
-        _logger.info("Final cost: %s" % c)
-        _logger.info("Training time: %.3fs" % (te - ts))
+        _logger.info("Final cost: %s", c)
+        _logger.info("Training time: %.3fs", (te - ts))
     else:
         _logger.warning("No training data files specified.")
 
@@ -628,36 +637,7 @@ def main_evaluation(args):
     """ Separate main for running evaluation and statistical significance
     testing. Takes as argument the results of an get_evaluation_argparser()
     """
-    #TODO refactor out redundancies with main()
-    if args.verbose >= 2:
-        loglevel = logging.DEBUG
-    elif args.verbose >= 1:
-        loglevel = logging.INFO
-    else:
-        loglevel = logging.WARNING
-
-    logging_format = '%(asctime)s - %(message)s'
-    date_format = '%Y-%m-%d %H:%M:%S'
-    default_formatter = logging.Formatter(logging_format, date_format)
-    plain_formatter = logging.Formatter('%(message)s')
-    logging.basicConfig(level=loglevel)
-    _logger.propagate = False  # do not forward messages to the root logger
-
-    # Basic settings for logging to the error stream
-    ch = logging.StreamHandler()
-    ch.setLevel(loglevel)
-    ch.setFormatter(plain_formatter)
-    _logger.addHandler(ch)
-
-    # Settings for when log_file is present
-    if args.log_file is not None:
-        fh = logging.FileHandler(args.log_file, 'w')
-        fh.setLevel(loglevel)
-        fh.setFormatter(default_formatter)
-        _logger.addHandler(fh)
-        # If logging to a file, make INFO the highest level for the
-        # error stream
-        ch.setLevel(max(loglevel, logging.INFO))
+    initialize_logging(args)
 
     io = MorfessorIO(encoding=args.encoding)
 

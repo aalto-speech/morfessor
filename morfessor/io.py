@@ -32,7 +32,7 @@ class MorfessorIO(object):
     """
 
     def __init__(self, encoding=None, construction_separator=' + ',
-                 comment_start='#', compound_separator='\s+',
+                 comment_start='#', compound_separator=r'\s+',
                  atom_separator=None, lowercase=False):
         self.encoding = encoding
         self.construction_separator = construction_separator
@@ -51,7 +51,7 @@ class MorfessorIO(object):
         <count> <construction1><sep><construction2><sep>...<constructionN>
 
         """
-        _logger.info("Reading segmentations from '%s'..." % file_name)
+        _logger.info("Reading segmentations from '%s'...", file_name)
         for line in self._read_text_file(file_name):
             if has_counts:
                 count, compound_str = line.split(' ', 1)
@@ -75,7 +75,7 @@ class MorfessorIO(object):
         <count> <construction1><sep><construction2><sep>...<constructionN>
 
         """
-        _logger.info("Saving segmentations to '%s'..." % file_name)
+        _logger.info("Saving segmentations to '%s'...", file_name)
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %
@@ -117,7 +117,7 @@ class MorfessorIO(object):
         After each line, yield (0, ()).
 
         """
-        _logger.info("Reading corpus from '%s'..." % file_name)
+        _logger.info("Reading corpus from '%s'...", file_name)
         for line in self._read_text_file(file_name, raw=True):
             for compound in self.compound_sep_re.split(line):
                 if len(compound) > 0:
@@ -134,7 +134,7 @@ class MorfessorIO(object):
         Yield tuples (count, compound_atoms) for each compound.
 
         """
-        _logger.info("Reading corpus from list '%s'..." % file_name)
+        _logger.info("Reading corpus from list '%s'...", file_name)
         for line in self._read_text_file(file_name):
             try:
                 count, compound = line.split(None, 1)
@@ -154,7 +154,7 @@ class MorfessorIO(object):
 
         """
         annotations = {}
-        _logger.info("Reading annotations from '%s'..." % file_name)
+        _logger.info("Reading annotations from '%s'...", file_name)
         for line in self._read_text_file(file_name):
             compound, analyses_line = line.split(None, 1)
 
@@ -175,7 +175,7 @@ class MorfessorIO(object):
 
     def write_lexicon_file(self, file_name, lexicon):
         """Write to a Lexicon file all constructions and their counts."""
-        _logger.info("Saving model lexicon to '%s'..." % file_name)
+        _logger.info("Saving model lexicon to '%s'...", file_name)
         with self._open_text_file_write(file_name) as file_obj:
             for construction, count in lexicon:
                 file_obj.write("%d %s\n" % (count, construction))
@@ -183,12 +183,13 @@ class MorfessorIO(object):
 
     def read_binary_model_file(self, file_name):
         """Read a pickled model from file."""
-        _logger.info("Loading model from '%s'..." % file_name)
+        _logger.info("Loading model from '%s'...", file_name)
         model = self.read_binary_file(file_name)
         _logger.info("Done.")
         return model
 
-    def read_binary_file(self, file_name):
+    @staticmethod
+    def read_binary_file(file_name):
         """Read a pickled object from a file."""
         with open(file_name, 'rb') as fobj:
             obj = pickle.load(fobj)
@@ -196,11 +197,12 @@ class MorfessorIO(object):
 
     def write_binary_model_file(self, file_name, model):
         """Pickle a model to a file."""
-        _logger.info("Saving model to '%s'..." % file_name)
+        _logger.info("Saving model to '%s'...", file_name)
         self.write_binary_file(file_name, model)
         _logger.info("Done.")
 
-    def write_binary_file(self, file_name, obj):
+    @staticmethod
+    def write_binary_file(file_name, obj):
         """Pickle an object into a file."""
         with open(file_name, 'wb') as fobj:
             pickle.dump(obj, fobj, pickle.HIGHEST_PROTOCOL)
@@ -237,7 +239,7 @@ class MorfessorIO(object):
         data might need to be read multiple times"""
         try:
             model = self.read_binary_model_file(file_name)
-            _logger.info("%s was read as a binary model" % file_name)
+            _logger.info("%s was read as a binary model", file_name)
             return model
         except BaseException:
             pass
@@ -245,7 +247,7 @@ class MorfessorIO(object):
         from morfessor import BaselineModel
         model = BaselineModel()
         model.load_segmentations(self.read_segmentation_file(file_name))
-        _logger.info("%s was read as a segmentation" % file_name)
+        _logger.info("%s was read as a segmentation", file_name)
         return model
 
     def format_constructions(self, constructions, csep=None, atom_sep=None):
@@ -344,7 +346,8 @@ class MorfessorIO(object):
             else:
                 raise
 
-    def _find_encoding(self, *files):
+    @staticmethod
+    def _find_encoding(*files):
         """Test default encodings on reading files.
 
         If no encoding is given, this method can be used to test which
@@ -371,7 +374,7 @@ class MorfessorIO(object):
                     ok = False
                     break
             if ok:
-                _logger.info("Detected %s encoding" % encoding)
+                _logger.info("Detected %s encoding", encoding)
                 return encoding
 
         raise UnicodeError("Can not determine encoding of input files")

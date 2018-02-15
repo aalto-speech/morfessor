@@ -126,7 +126,7 @@ class MorfessorEvaluation(object):
         #TODO: What is a reasonable limit to warn about a too small testset?
         if len(self.reference) < (configuration.num_samples *
                                   configuration.sample_size):
-            _logger.warn("The test set is too small for this sample size")
+            _logger.warning("The test set is too small for this sample size")
 
         compound_list = sorted(self.reference.keys())
         self._samples[configuration] = [
@@ -141,7 +141,7 @@ class MorfessorEvaluation(object):
         method caches the samples in the _samples variable.
 
         """
-        if not configuration in self._samples:
+        if configuration not in self._samples:
             self._create_samples(configuration)
         return self._samples[configuration]
 
@@ -198,7 +198,7 @@ class MorfessorEvaluation(object):
         mer = MorfessorEvaluationResult(meta_data)
 
         for i, sample in enumerate(self.get_samples(configuration)):
-            _logger.debug("Evaluating sample {}".format(i))
+            _logger.debug("Evaluating sample %s", i)
             prediction = {}
             for compound in sample:
                 prediction[compound] = [tuple(self._segmentation_indices(
@@ -229,7 +229,7 @@ class MorfessorEvaluation(object):
         mer = MorfessorEvaluationResult(meta_data)
 
         for i, sample in enumerate(self.get_samples(configuration)):
-            _logger.debug("Evaluating sample {}".format(i))
+            _logger.debug("Evaluating sample %s", i)
 
             prediction = {k: v for k, v in segmentation.items() if k in sample}
             mer.add_data_point(*self._evaluate(prediction))
