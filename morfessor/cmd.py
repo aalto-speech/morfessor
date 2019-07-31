@@ -27,6 +27,8 @@ else:
 
 _logger = logging.getLogger(__name__)
 
+LRU_MAX_SIZE = 1000000
+
 
 def get_default_argparser():
     import argparse
@@ -325,6 +327,16 @@ def initialize_logging(args):
     return console_level
 
 
+@utils.lru_cache(maxsize=LRU_MAX_SIZE)
+def _viterbi_segment(model, atoms, smooth, maxlen):
+    return model.viterbi_segment(atoms, smooth, maxlen)
+
+
+@utils.lru_cache(maxsize=LRU_MAX_SIZE)
+def _viterbi_nbest(model, atoms, nbest, smooth, maxlen):
+    return model.viterbi_nbest(atoms, nbest, smooth,maxlen)
+
+
 def main(args):
 
     console_level = initialize_logging(args)
@@ -524,9 +536,9 @@ def main(args):
                 else:
                     clogprob = 0
                 if args.nbest > 1:
-                    nbestlist = model.viterbi_nbest(atoms, args.nbest,
-                                                    args.viterbismooth,
-                                                    args.viterbimaxlen)
+                    nbestlist = _viterbi_nbest(
+                        model, atoms, args.nbest, args.viterbismooth,
+                        args.viterbimaxlen)
                     for constructions, logp in nbestlist:
                         analysis = io.format_constructions(constructions,
                                                            csep=csep)
@@ -535,8 +547,8 @@ def main(args):
                                                     count=count, logprob=logp,
                                                     clogprob=clogprob))
                 else:
-                    constructions, logp = model.viterbi_segment(
-                        atoms, args.viterbismooth, args.viterbimaxlen)
+                    constructions, logp = _viterbi_segment(
+                        model, atoms, args.viterbismooth, args.viterbimaxlen)
                     analysis = io.format_constructions(constructions, csep=csep)
                     fobj.write(outformat.format(analysis=analysis,
                                                 compound=compound,

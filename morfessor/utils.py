@@ -9,6 +9,25 @@ import sys
 import types
 
 
+PY3 = sys.version_info[0] == 3
+
+
+def _dummy_lru_cache(*args, **kwargs):
+    return lambda func: func
+
+
+if PY3:
+    from functools import lru_cache
+else:
+    try:
+        # Backport for lru_cache
+        from backports.functools_lru_cache import lru_cache
+    except ImportError:
+        logging.warning(
+            "LRU cache disabled, install backports.functools_lru_cache to enable.")
+        lru_cache = _dummy_lru_cache
+
+
 LOGPROB_ZERO = 1000000
 
 
