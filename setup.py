@@ -19,7 +19,7 @@ setup(name='Morfessor',
       author=metadata['author'],
       author_email='morpho@aalto.fi',
       url='http://morpho.aalto.fi/projects/morpho/morfessor2.html',
-      description='Morfessor',
+      description='A tool for unsupervised and semi-supervised morphological segmentation',
       packages=['morfessor', 'morfessor.test'],
       classifiers=[
           'Development Status :: 4 - Beta',
